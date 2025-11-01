@@ -223,8 +223,10 @@ export default function IdeaTab() {
           let imagePrompt = clipData.imagePrompt || ''
           let videoPrompt = clipData.videoPrompt || ''
           
-          // If prompts are basic, enhance them with Story Boarding Expert
-          if (!imagePrompt || imagePrompt.length < 50) {
+          // Always enhance prompts with Story Boarding Expert for maximum quality
+          // Enhanced prompts are much more detailed and production-ready (150-250 words)
+          // Enhance if prompt is missing or too short
+          if (!imagePrompt || imagePrompt.length < 100) {
             try {
               const clipPromptResponse = await fetch('/api/generate-clip-prompts', {
                 method: 'POST',
@@ -360,54 +362,45 @@ export default function IdeaTab() {
           <label className="block text-sm font-medium text-gray-300 mb-3">
             Aspect Ratio
           </label>
-          <div className="flex gap-3">
+          <div className="flex gap-2">
             <button
               onClick={() => handleAspectRatioChange('16:9')}
               className={`
-                flex-1 flex flex-col items-center justify-center gap-2 p-4 rounded-xl border-2 transition-all
+                flex items-center gap-2 px-3 py-2 rounded-lg border-2 transition-all
                 ${aspectRatio === '16:9'
-                  ? 'border-[#00FFF0] bg-[#00FFF0]/10'
-                  : 'border-[#3AAFA9]/30 hover:border-[#3AAFA9] bg-[#0C0C0C]'
+                  ? 'border-[#00FFF0] bg-[#00FFF0]/10 text-[#00FFF0]'
+                  : 'border-[#3AAFA9]/30 hover:border-[#3AAFA9] bg-[#0C0C0C] text-gray-400 hover:text-white'
                 }
               `}
             >
-              <Monitor className={`w-6 h-6 ${aspectRatio === '16:9' ? 'text-[#00FFF0]' : 'text-gray-400'}`} />
-              <span className={`text-sm font-medium ${aspectRatio === '16:9' ? 'text-[#00FFF0]' : 'text-gray-400'}`}>
-                16:9
-              </span>
-              <span className="text-xs text-gray-500">Landscape</span>
+              <Monitor className="w-10 h-10" />
+              <span className="text-sm font-medium">16:9</span>
             </button>
             <button
               onClick={() => handleAspectRatioChange('9:16')}
               className={`
-                flex-1 flex flex-col items-center justify-center gap-2 p-4 rounded-xl border-2 transition-all
+                flex items-center gap-2 px-3 py-2 rounded-lg border-2 transition-all
                 ${aspectRatio === '9:16'
-                  ? 'border-[#00FFF0] bg-[#00FFF0]/10'
-                  : 'border-[#3AAFA9]/30 hover:border-[#3AAFA9] bg-[#0C0C0C]'
+                  ? 'border-[#00FFF0] bg-[#00FFF0]/10 text-[#00FFF0]'
+                  : 'border-[#3AAFA9]/30 hover:border-[#3AAFA9] bg-[#0C0C0C] text-gray-400 hover:text-white'
                 }
               `}
             >
-              <Smartphone className={`w-6 h-6 ${aspectRatio === '9:16' ? 'text-[#00FFF0]' : 'text-gray-400'}`} />
-              <span className={`text-sm font-medium ${aspectRatio === '9:16' ? 'text-[#00FFF0]' : 'text-gray-400'}`}>
-                9:16
-              </span>
-              <span className="text-xs text-gray-500">Portrait</span>
+              <Smartphone className="w-10 h-10" />
+              <span className="text-sm font-medium">9:16</span>
             </button>
             <button
               onClick={() => handleAspectRatioChange('1:1')}
               className={`
-                flex-1 flex flex-col items-center justify-center gap-2 p-4 rounded-xl border-2 transition-all
+                flex items-center gap-2 px-3 py-2 rounded-lg border-2 transition-all
                 ${aspectRatio === '1:1'
-                  ? 'border-[#00FFF0] bg-[#00FFF0]/10'
-                  : 'border-[#3AAFA9]/30 hover:border-[#3AAFA9] bg-[#0C0C0C]'
+                  ? 'border-[#00FFF0] bg-[#00FFF0]/10 text-[#00FFF0]'
+                  : 'border-[#3AAFA9]/30 hover:border-[#3AAFA9] bg-[#0C0C0C] text-gray-400 hover:text-white'
                 }
               `}
             >
-              <Square className={`w-6 h-6 ${aspectRatio === '1:1' ? 'text-[#00FFF0]' : 'text-gray-400'}`} />
-              <span className={`text-sm font-medium ${aspectRatio === '1:1' ? 'text-[#00FFF0]' : 'text-gray-400'}`}>
-                1:1
-              </span>
-              <span className="text-xs text-gray-500">Square</span>
+              <Square className="w-10 h-10" />
+              <span className="text-sm font-medium">1:1</span>
             </button>
           </div>
         </div>

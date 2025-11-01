@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useAppStore } from '@/lib/store'
 import { Button } from '@/components/ui/button'
-import { Plus, Play, Edit, Lock, Unlock, Loader2, Trash2, Maximize2 } from 'lucide-react'
+import { Plus, Play, Edit, Lock, Unlock, Loader2, Trash2, Maximize2, Clock } from 'lucide-react'
 import ImageModal from '../ImageModal'
 import { Scene, Clip } from '@/types'
 
@@ -18,7 +18,8 @@ export default function SequenceTab() {
     setDrawerOpen,
     isDrawerOpen,
     isGeneratingStory,
-    generationProgress
+    generationProgress,
+    clipGeneratingStatus
   } = useAppStore()
   const [isAddingScene, setIsAddingScene] = useState(false)
   const [isImageModalOpen, setIsImageModalOpen] = useState(false)
@@ -312,12 +313,42 @@ export default function SequenceTab() {
                           </div>
                         </div>
                         
+                        {/* Generation Status Chip */}
+                        {clipGeneratingStatus[clip.id] && (
+                          <div className="mb-2 flex items-center gap-1 px-2 py-0.5 bg-[#00FFF0]/10 border border-[#00FFF0]/30 rounded-full w-fit">
+                            <Clock className="w-2.5 h-2.5 text-[#00FFF0]" />
+                            <span className="text-[10px] text-[#00FFF0] font-medium">
+                              Generating {clipGeneratingStatus[clip.id]}
+                            </span>
+                          </div>
+                        )}
+                        
                         <div className="space-y-2">
                           <div 
                             className="h-20 bg-[#1E1F22] rounded-lg flex items-center justify-center cursor-pointer relative group"
                             onClick={() => handleEditClip(clip)}
                           >
-                            {clip.generatedImage ? (
+                            {clip.generatedVideo ? (
+                              <>
+                                <img 
+                                  src={clip.generatedImage || clip.generatedVideo} 
+                                  alt={clip.name}
+                                  className="w-full h-full object-cover rounded-lg"
+                                />
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    handleEditClip(clip)
+                                  }}
+                                  className="absolute inset-0 m-auto opacity-0 group-hover:opacity-100 transition-opacity bg-black/50 hover:bg-black/70 rounded-full border border-[#00FFF0]/50 backdrop-blur-sm"
+                                  aria-label="Play video"
+                                >
+                                  <Play className="w-5 h-5 text-[#00FFF0]" />
+                                </Button>
+                              </>
+                            ) : clip.generatedImage ? (
                               <>
                                 <img 
                                   src={clip.generatedImage} 

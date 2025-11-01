@@ -44,6 +44,11 @@ export default function MainApp() {
 
   return (
     <div className="min-h-screen bg-[#0C0C0C] text-white">
+      {/* Top Navbar with Profile Icon on Left */}
+      <div className="fixed top-4 left-4 z-50">
+        <UserMenu user={user} />
+      </div>
+
       {/* Center-Aligned Floating Navbar */}
       <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 w-full max-w-4xl px-4">
         <div className="bg-[#1E1F22]/95 backdrop-blur-md rounded-2xl border border-[#3AAFA9]/30 shadow-2xl">
@@ -58,11 +63,6 @@ export default function MainApp() {
                   {currentProject.description}
                 </span>
               )}
-            </div>
-
-            {/* User Menu - Right */}
-            <div className="ml-auto">
-              <UserMenu user={user} />
             </div>
           </div>
         </div>

@@ -25,6 +25,8 @@ interface AppState {
     totalClips: number
     completedClips: number
   }
+  // Per-clip generation status: { clipId: 'image' | 'video' | null }
+  clipGeneratingStatus: Record<string, 'image' | 'video' | null>
   
   // Actions
   setUser: (user: any) => void
@@ -43,6 +45,7 @@ interface AppState {
     totalClips: number
     completedClips: number
   }) => void
+  setClipGeneratingStatus: (clipId: string, status: 'image' | 'video' | null) => void
   
   // Project actions
   createProject: (project: Project) => void
@@ -83,6 +86,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     totalClips: 0,
     completedClips: 0
   },
+  clipGeneratingStatus: {},
   
   // User actions
   setUser: (user) => set({ user }),
@@ -285,4 +289,10 @@ export const useAppStore = create<AppState>((set, get) => ({
   setGeneratingStory: (isGenerating) => set({ isGeneratingStory: isGenerating }),
   setGenerationStatus: (status) => set({ generationStatus: status }),
   setGenerationProgress: (progress) => set({ generationProgress: progress }),
+  setClipGeneratingStatus: (clipId, status) => set((state) => ({
+    clipGeneratingStatus: {
+      ...state.clipGeneratingStatus,
+      [clipId]: status
+    }
+  })),
 }))

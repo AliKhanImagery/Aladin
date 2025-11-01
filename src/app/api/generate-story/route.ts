@@ -46,11 +46,11 @@ Generate a story structure with scenes. Return a JSON object with this exact for
         {
           "order": 1,
           "name": "Clip name",
-          "description": "What this clip shows",
-          "imagePrompt": "Detailed visual description for image generation",
-          "videoPrompt": "Detailed motion description for video generation",
-          "cameraAngle": "wide|medium|close|insert",
-          "framing": "Description of framing"
+          "description": "Detailed description of what this clip shows, including key visual elements, actions, and narrative purpose",
+          "imagePrompt": "Ultra-detailed visual description (100+ words) including: composition, lighting setup (key/fill/rim lights, color temperature), color palette, camera specs (lens, focal length, aperture), depth of field, atmospheric details, character appearance, environmental specifics, cinematic style, professional quality keywords",
+          "videoPrompt": "Ultra-detailed motion description (100+ words) including: camera movement type (dolly/crane/handheld/tracking), movement speed and easing, subject actions and gestures, shot transitions, dynamic elements, temporal pacing, visual effects, professional cinematography terminology",
+          "cameraAngle": "wide|medium|close|insert|extreme-wide|extreme-close",
+          "framing": "Detailed framing description with technical specs (e.g., 'Medium close-up at 85mm, f/1.8, eye level, shallow depth of field')"
         }
       ]
     }
@@ -64,7 +64,18 @@ Generate a story structure with scenes. Return a JSON object with this exact for
   ]
 }
 
-Generate 3-6 scenes based on the target runtime. Each scene should have 2-4 clips. Be creative and cinematic.`
+Generate 3-6 scenes based on the target runtime. Each scene should have 2-4 clips.
+
+CRITICAL: For each clip's imagePrompt and videoPrompt:
+- Make them EXTREMELY DETAILED (100+ words each)
+- Include specific technical camera details (lens, aperture, focal length)
+- Specify exact lighting setups (key light position, color temperature, shadows)
+- Describe precise color palettes and grading styles
+- Use professional cinematography terminology
+- Include quality keywords: "professional", "cinematic", "4K", "award-winning", "commercial quality"
+- Be production-ready and optimized for AI generation
+
+Be creative, cinematic, and extremely detailed in your prompts. Quality is paramount.`
 
     const completion = await openai.chat.completions.create({
       model: 'gpt-4-turbo-preview',
@@ -79,7 +90,7 @@ Generate 3-6 scenes based on the target runtime. Each scene should have 2-4 clip
         },
       ],
       response_format: { type: 'json_object' },
-      temperature: 0.8,
+      temperature: 0.85, // Higher temperature for more creative and detailed story generation
     })
 
     const content = completion.choices[0]?.message?.content
