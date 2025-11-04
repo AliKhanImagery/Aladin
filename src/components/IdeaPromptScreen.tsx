@@ -1,31 +1,70 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useAppStore } from '@/lib/store'
 import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
-import { Sparkles } from 'lucide-react'
+import { Sparkles, FolderOpen } from 'lucide-react'
 import { Project } from '@/types'
+import ProjectManager from './ProjectManager'
 
 export default function IdeaPromptScreen() {
-  const { createProject, setCurrentProject } = useAppStore()
+  const { 
+    createProject, 
+    setCurrentProject, 
+    setProjectManagerOpen,
+    isAuthenticated,
+    setShowAuthModal,
+    setPendingIdea,
+    pendingIdea
+  } = useAppStore()
   const [idea, setIdea] = useState('')
   const [isCreating, setIsCreating] = useState(false)
+  
+  // Restore idea from localStorage or pendingIdea on mount
+  useEffect(() => {
+    const savedIdea = localStorage.getItem('pendingIdea')
+    if (savedIdea) {
+      setIdea(savedIdea)
+      setPendingIdea(savedIdea)
+    } else if (pendingIdea) {
+      setIdea(pendingIdea)
+    }
+  }, [setPendingIdea, pendingIdea])
 
   const handleCreateFromIdea = async () => {
     if (!idea.trim()) return
 
+    // Check if user is authenticated
+    if (!isAuthenticated) {
+      // Save idea to localStorage and store
+      localStorage.setItem('pendingIdea', idea)
+      setPendingIdea(idea)
+      // Show auth modal
+      setShowAuthModal(true)
+      return
+    }
+
+    // User is authenticated, proceed with project creation
+    await createProjectFromIdea(idea)
+  }
+
+  const createProjectFromIdea = async (ideaToUse: string) => {
     setIsCreating(true)
 
+    // Clear pending idea from localStorage and store
+    localStorage.removeItem('pendingIdea')
+    setPendingIdea(null)
+
     // Auto-generate project name from idea (first 50 chars or first sentence)
-    const projectName = idea.length > 50 
-      ? idea.substring(0, 50).trim() + '...'
-      : idea.trim()
+    const projectName = ideaToUse.length > 50 
+      ? ideaToUse.substring(0, 50).trim() + '...'
+      : ideaToUse.trim()
 
     const newProject: Project = {
       id: crypto.randomUUID(),
       name: projectName,
-      description: idea.length > 100 ? idea.substring(0, 100) + '...' : idea,
+      description: ideaToUse.length > 100 ? ideaToUse.substring(0, 100) + '...' : ideaToUse,
       createdAt: new Date(),
       updatedAt: new Date(),
       createdBy: 'current-user',
@@ -39,7 +78,7 @@ export default function IdeaPromptScreen() {
       },
       story: {
         id: crypto.randomUUID(),
-        originalIdea: idea,
+        originalIdea: ideaToUse,
         generatedStory: '',
         targetRuntime: 60,
         actualRuntime: 0,
@@ -79,8 +118,31 @@ export default function IdeaPromptScreen() {
     setIsCreating(false)
   }
 
+  // Auto-continue project creation after successful auth
+  useEffect(() => {
+    if (isAuthenticated && pendingIdea && !isCreating) {
+      // User just authenticated and has a pending idea
+      const ideaToContinue = pendingIdea
+      createProjectFromIdea(ideaToContinue)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated, pendingIdea, isCreating])
+
   return (
-    <div className="min-h-screen bg-[#0C0C0C] text-white flex items-center justify-center p-4">
+    <div className="min-h-screen bg-[#0C0C0C] text-white flex items-center justify-center p-4 relative">
+      {/* Projects Button - Top Right */}
+      <div className="absolute top-4 right-4">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => setProjectManagerOpen(true)}
+          className="text-gray-400 hover:text-[#00FFF0] hover:bg-[#00FFF0]/10 flex items-center gap-2"
+        >
+          <FolderOpen className="w-4 h-4" />
+          <span className="hidden sm:inline">Projects</span>
+        </Button>
+      </div>
+      
       <div className="max-w-3xl w-full space-y-8">
         <div className="text-center">
           <div className="inline-flex items-center justify-center w-20 h-20 bg-[#00FFF0]/10 rounded-full mb-6">
@@ -132,6 +194,9 @@ export default function IdeaPromptScreen() {
           <p>Your project will be automatically saved with your idea</p>
         </div>
       </div>
+      
+      {/* Project Manager */}
+      <ProjectManager />
     </div>
   )
 }

@@ -6,8 +6,7 @@ import { getCurrentUser, onAuthStateChange } from '@/lib/auth'
 import AuthModal from './AuthModal'
 
 export default function AuthProvider({ children }: { children: React.ReactNode }) {
-  const { setUser, setAuthenticated, user } = useAppStore()
-  const [showAuthModal, setShowAuthModal] = useState(false)
+  const { setUser, setAuthenticated, user, showAuthModal, setShowAuthModal, pendingIdea } = useAppStore()
   const [isCheckingAuth, setIsCheckingAuth] = useState(true)
 
   useEffect(() => {
@@ -58,19 +57,18 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
     }
   }
 
-  // Show auth modal if not authenticated and not checking
-  if (!isCheckingAuth && !user) {
-    return (
-      <>
-        {children}
-        <AuthModal 
-          isOpen={showAuthModal} 
-          onClose={() => setShowAuthModal(false)}
-          onSuccess={handleAuthSuccess}
-        />
-      </>
-    )
-  }
-
-  return <>{children}</>
+  // Always render children (allow guest browsing)
+  // Auth modal is controlled by store state
+  return (
+    <>
+      {children}
+      <AuthModal 
+        isOpen={showAuthModal} 
+        onClose={() => setShowAuthModal(false)}
+        onSuccess={handleAuthSuccess}
+        context={pendingIdea ? 'project-creation' : 'general'}
+        message={pendingIdea ? 'Sign up to save your project and continue creating' : undefined}
+      />
+    </>
+  )
 }

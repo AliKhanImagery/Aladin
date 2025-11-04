@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Story Boarding Expert & AI Prompting Expert role
-    const prompt = `You are an elite Story Boarding Expert and AI Prompting Expert, visual storytelling, and AI image/video generation. Your task is to create ultra-detailed, cinematic, production-ready prompts that dilivery story continuty, scene and location details matching across clips and scenes based onstorry idea, generate stunning, professional-quality visuals.
+    const prompt = `You are an elite Story Boarding Expert and AI Prompting Expert. Your task is to create ultra-detailed, cinematic, production-ready prompts that dilivery story ,continuty, scene, characters detail and location inheriited and matching across clips and scenes based onstorry idea, generate stunning, professional-quality visuals.
 
 STORY CONTEXT:
 ${storyContext}
@@ -46,8 +46,7 @@ CRITICAL REQUIREMENTS FOR PROMPT QUALITY:
    - Depth of field and focus (what's in focus, what's blurred, bokeh quality)
    - Atmospheric details (time of day, weather, particle effects, lens flares, god rays)
    - Character/appearance details (facial expressions, body language, clothing texture, fabric details)
-   - Environmental specifics (architecture style, material textures, spatial relationships, scale)
-   - Cinematic style references (specific directors, films, or visual movements if applicable)
+   - Contextualy correct Scene or clip Environmental specifics (architecture style, material textures, spatial relationships, scale)
    - Professional terminology (establishing shot, medium shot, close-up, extreme close-up, over-the-shoulder, etc.)
    - Quality descriptors: "4K, 8K, ultra-high resolution, professional photography, cinematic quality, award-winning cinematography"
 
@@ -65,6 +64,7 @@ CRITICAL REQUIREMENTS FOR PROMPT QUALITY:
 
 
 3. Both prompts MUST:
+   - Character, Character motion, Character Expression, scene, scene details, sub scene an  gle details per clip.
    - Use professional cinematography and filmmaking terminology
    - Include specific technical camera details
    - Describe exact lighting scenarios with color temperatures

@@ -9,9 +9,11 @@ interface AuthModalProps {
   isOpen: boolean
   onClose: () => void
   onSuccess: () => void
+  context?: 'project-creation' | 'general'
+  message?: string
 }
 
-export default function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps) {
+export default function AuthModal({ isOpen, onClose, onSuccess, context = 'general', message }: AuthModalProps) {
   const [isSignUp, setIsSignUp] = useState(false)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -67,6 +69,22 @@ export default function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps
             <X className="w-5 h-5" />
           </Button>
         </div>
+
+        {/* Context-specific messaging */}
+        {context === 'project-creation' && (
+          <div className="px-6 pt-6 pb-0">
+            <div className="bg-[#00FFF0]/10 border border-[#00FFF0]/30 rounded-lg p-4 mb-4">
+              <p className="text-sm text-[#00FFF0] font-medium mb-2">
+                {message || 'Sign up to save your project and continue creating'}
+              </p>
+              <ul className="text-xs text-gray-400 space-y-1">
+                <li>✓ Save your work automatically</li>
+                <li>✓ Access from anywhere</li>
+                <li>✓ Generate unlimited stories</li>
+              </ul>
+            </div>
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           {isSignUp && (

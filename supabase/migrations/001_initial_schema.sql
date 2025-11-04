@@ -22,6 +22,12 @@ CREATE POLICY "Users can view own profile" ON users
 CREATE POLICY "Users can update own profile" ON users
   FOR UPDATE USING (auth.uid() = id);
 
+-- Users can insert their own profile (fallback if trigger doesn't work)
+-- Note: The trigger should create profiles automatically, but this policy
+-- allows manual insert if needed (e.g., when email confirmation delays trigger)
+CREATE POLICY "Users can insert own profile" ON users
+  FOR INSERT WITH CHECK (auth.uid() = id);
+
 -- Projects table
 CREATE TABLE IF NOT EXISTS projects (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),

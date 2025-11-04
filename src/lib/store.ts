@@ -15,6 +15,8 @@ interface AppState {
   selectedClip: Clip | null
   isDrawerOpen: boolean
   isProjectManagerOpen: boolean
+  showAuthModal: boolean
+  pendingIdea: string | null // Store idea when user needs to auth before creating
   
   // Generation state
   isGeneratingStory: boolean
@@ -37,6 +39,8 @@ interface AppState {
   setSelectedClip: (clip: Clip | null) => void
   setDrawerOpen: (open: boolean) => void
   setProjectManagerOpen: (open: boolean) => void
+  setShowAuthModal: (open: boolean) => void
+  setPendingIdea: (idea: string | null) => void
   setGeneratingStory: (isGenerating: boolean) => void
   setGenerationStatus: (status: string) => void
   setGenerationProgress: (progress: {
@@ -78,6 +82,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   selectedClip: null,
   isDrawerOpen: false,
   isProjectManagerOpen: false,
+  showAuthModal: false,
+  pendingIdea: null,
   isGeneratingStory: false,
   generationStatus: '',
   generationProgress: {
@@ -286,6 +292,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   setSelectedClip: (clip) => set({ selectedClip: clip }),
   setDrawerOpen: (open) => set({ isDrawerOpen: open }),
   setProjectManagerOpen: (open) => set({ isProjectManagerOpen: open }),
+  setShowAuthModal: (open) => set({ showAuthModal: open }),
+  setPendingIdea: (idea) => set({ pendingIdea: idea }),
   setGeneratingStory: (isGenerating) => set({ isGeneratingStory: isGenerating }),
   setGenerationStatus: (status) => set({ generationStatus: status }),
   setGenerationProgress: (progress) => set({ generationProgress: progress }),

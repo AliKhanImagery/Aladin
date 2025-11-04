@@ -2,13 +2,14 @@
 
 import { useAppStore } from '@/lib/store'
 import { Button } from '@/components/ui/button'
-import { ArrowLeft, Lightbulb, Grid3X3, Clock } from 'lucide-react'
+import { ArrowLeft, Lightbulb, Grid3X3, Clock, FolderOpen } from 'lucide-react'
 import IdeaTab from './tabs/IdeaTab'
 import SequenceTab from './tabs/SequenceTab'
 import TimelineTab from './tabs/TimelineTab'
 import ClipDetailDrawer from './ClipDetailDrawer'
 import GenerationStatusIndicator from './GenerationStatusIndicator'
 import UserMenu from './UserMenu'
+import ProjectManager from './ProjectManager'
 
 export default function MainApp() {
   const { 
@@ -52,7 +53,7 @@ export default function MainApp() {
       {/* Center-Aligned Floating Navbar */}
       <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 w-full max-w-4xl px-4">
         <div className="bg-[#1E1F22]/95 backdrop-blur-md rounded-2xl border border-[#3AAFA9]/30 shadow-2xl">
-          <div className="flex items-center justify-center px-6 py-3">
+          <div className="flex items-center justify-between px-6 py-3">
             {/* Project Info - Centered */}
             <div className="flex items-center gap-4 flex-1 justify-center">
               <h1 className="text-lg font-bold text-white truncate">
@@ -64,6 +65,16 @@ export default function MainApp() {
                 </span>
               )}
             </div>
+            {/* Projects Button */}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setProjectManagerOpen(true)}
+              className="text-gray-400 hover:text-[#00FFF0] hover:bg-[#00FFF0]/10 flex items-center gap-2"
+            >
+              <FolderOpen className="w-4 h-4" />
+              <span className="hidden sm:inline">Projects</span>
+            </Button>
           </div>
         </div>
       </div>
@@ -110,6 +121,9 @@ export default function MainApp() {
       
       {/* Clip Detail Drawer */}
       <ClipDetailDrawer />
+      
+      {/* Project Manager */}
+      <ProjectManager />
     </div>
   )
 }

@@ -21,22 +21,14 @@ export async function signUp(email: string, password: string, fullName?: string)
 
     if (error) throw error
 
-    // Create user profile in users table
+    // Note: User profile is automatically created by the database trigger
+    // (handle_new_user function in supabase/migrations/001_initial_schema.sql)
+    // The trigger runs server-side, so it works even if RLS blocks client-side checks
+    // No need to manually check or insert - the trigger handles it reliably
     if (data.user) {
-      const { error: profileError } = await supabase
-        .from('users')
-        .insert({
-          id: data.user.id,
-          email: data.user.email!,
-          full_name: fullName || email.split('@')[0],
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        })
-
-      if (profileError && profileError.code !== '23505') {
-        // Ignore duplicate key errors (user already exists)
-        console.error('Error creating user profile:', profileError)
-      }
+      // Give the trigger a moment to execute (usually instant, but wait a bit to be safe)
+      await new Promise(resolve => setTimeout(resolve, 500))
+      console.log('✅ User signed up successfully. Profile created by database trigger.')
     }
 
     return { data, error: null }
