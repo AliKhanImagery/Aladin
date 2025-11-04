@@ -15,6 +15,8 @@ interface AppState {
   selectedClip: Clip | null
   isDrawerOpen: boolean
   isProjectManagerOpen: boolean
+  showAuthModal: boolean
+  pendingIdea: string | null // Store idea when user needs to auth before creating
   
   // Generation state
   isGeneratingStory: boolean
@@ -25,6 +27,8 @@ interface AppState {
     totalClips: number
     completedClips: number
   }
+  // Per-clip generation status: { clipId: 'image' | 'video' | null }
+  clipGeneratingStatus: Record<string, 'image' | 'video' | null>
   
   // Actions
   setUser: (user: any) => void
@@ -35,6 +39,8 @@ interface AppState {
   setSelectedClip: (clip: Clip | null) => void
   setDrawerOpen: (open: boolean) => void
   setProjectManagerOpen: (open: boolean) => void
+  setShowAuthModal: (open: boolean) => void
+  setPendingIdea: (idea: string | null) => void
   setGeneratingStory: (isGenerating: boolean) => void
   setGenerationStatus: (status: string) => void
   setGenerationProgress: (progress: {
@@ -43,6 +49,7 @@ interface AppState {
     totalClips: number
     completedClips: number
   }) => void
+  setClipGeneratingStatus: (clipId: string, status: 'image' | 'video' | null) => void
   
   // Project actions
   createProject: (project: Project) => void
@@ -75,6 +82,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   selectedClip: null,
   isDrawerOpen: false,
   isProjectManagerOpen: false,
+  showAuthModal: false,
+  pendingIdea: null,
   isGeneratingStory: false,
   generationStatus: '',
   generationProgress: {
@@ -83,6 +92,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     totalClips: 0,
     completedClips: 0
   },
+  clipGeneratingStatus: {},
   
   // User actions
   setUser: (user) => set({ user }),
@@ -282,7 +292,15 @@ export const useAppStore = create<AppState>((set, get) => ({
   setSelectedClip: (clip) => set({ selectedClip: clip }),
   setDrawerOpen: (open) => set({ isDrawerOpen: open }),
   setProjectManagerOpen: (open) => set({ isProjectManagerOpen: open }),
+  setShowAuthModal: (open) => set({ showAuthModal: open }),
+  setPendingIdea: (idea) => set({ pendingIdea: idea }),
   setGeneratingStory: (isGenerating) => set({ isGeneratingStory: isGenerating }),
   setGenerationStatus: (status) => set({ generationStatus: status }),
   setGenerationProgress: (progress) => set({ generationProgress: progress }),
+  setClipGeneratingStatus: (clipId, status) => set((state) => ({
+    clipGeneratingStatus: {
+      ...state.clipGeneratingStatus,
+      [clipId]: status
+    }
+  })),
 }))

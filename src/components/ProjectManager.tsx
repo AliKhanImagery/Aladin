@@ -5,7 +5,7 @@ import { useAppStore } from '@/lib/store'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
-import { X, Plus, FolderOpen, Calendar, Clock } from 'lucide-react'
+import { X, Plus, FolderOpen, Calendar, Clock, Image, Video } from 'lucide-react'
 import { Project } from '@/types'
 
 export default function ProjectManager() {
@@ -20,6 +20,7 @@ export default function ProjectManager() {
   const [newProjectName, setNewProjectName] = useState('')
   const [newProjectDescription, setNewProjectDescription] = useState('')
   const [isCreating, setIsCreating] = useState(false)
+  const [activeView, setActiveView] = useState<'projects' | 'images' | 'videos'>('projects')
 
   // Auto-generate project name from current idea
   useEffect(() => {
@@ -61,7 +62,8 @@ export default function ProjectManager() {
         tone: '',
         brandCues: [],
         styleTokens: [],
-        rationale: ''
+        rationale: '',
+        aspectRatio: '16:9'
       },
       scenes: [],
       characters: [],
@@ -102,6 +104,41 @@ export default function ProjectManager() {
     setProjectManagerOpen(false)
   }
 
+  // Collect all generated images from all projects
+  const allImages = projects.flatMap(project => 
+    project.scenes.flatMap(scene => 
+      scene.clips
+        .filter(clip => clip.generatedImage)
+        .map(clip => ({
+          clip,
+          scene,
+          project,
+          url: clip.generatedImage!,
+          name: clip.name,
+          prompt: clip.imagePrompt,
+          createdAt: clip.createdAt
+        }))
+    )
+  )
+
+  // Collect all generated videos from all projects
+  const allVideos = projects.flatMap(project => 
+    project.scenes.flatMap(scene => 
+      scene.clips
+        .filter(clip => clip.generatedVideo)
+        .map(clip => ({
+          clip,
+          scene,
+          project,
+          url: clip.generatedVideo!,
+          name: clip.name,
+          prompt: clip.videoPrompt,
+          createdAt: clip.createdAt,
+          duration: clip.duration
+        }))
+    )
+  )
+
   if (!isProjectManagerOpen) return null
 
   return (
@@ -127,6 +164,46 @@ export default function ProjectManager() {
           </Button>
         </div>
 
+        {/* Navigation Tabs */}
+        <div className="flex gap-2 mb-6 border-b border-[#3AAFA9]/20">
+          <button
+            onClick={() => setActiveView('projects')}
+            className={`flex items-center gap-2 px-4 py-2 font-medium text-sm transition-colors border-b-2 ${
+              activeView === 'projects'
+                ? 'border-[#00FFF0] text-[#00FFF0]'
+                : 'border-transparent text-gray-400 hover:text-white'
+            }`}
+          >
+            <FolderOpen className="w-4 h-4" />
+            Projects
+          </button>
+          <button
+            onClick={() => setActiveView('images')}
+            className={`flex items-center gap-2 px-4 py-2 font-medium text-sm transition-colors border-b-2 ${
+              activeView === 'images'
+                ? 'border-[#00FFF0] text-[#00FFF0]'
+                : 'border-transparent text-gray-400 hover:text-white'
+            }`}
+          >
+            <Image className="w-4 h-4" />
+            My Images ({allImages.length})
+          </button>
+          <button
+            onClick={() => setActiveView('videos')}
+            className={`flex items-center gap-2 px-4 py-2 font-medium text-sm transition-colors border-b-2 ${
+              activeView === 'videos'
+                ? 'border-[#00FFF0] text-[#00FFF0]'
+                : 'border-transparent text-gray-400 hover:text-white'
+            }`}
+          >
+            <Video className="w-4 h-4" />
+            My Videos ({allVideos.length})
+          </button>
+        </div>
+
+        {/* Content based on active view */}
+        {activeView === 'projects' && (
+          <>
         {/* Create New Project */}
         <div className="mb-8 p-6 bg-[#0C0C0C] rounded-xl border border-[#3AAFA9]/20">
           <h3 className="text-xl font-semibold text-white mb-4 flex items-center gap-2">
@@ -224,6 +301,116 @@ export default function ProjectManager() {
             </div>
           )}
         </div>
+          </>
+        )}
+
+        {/* My Images View */}
+        {activeView === 'images' && (
+          <div>
+            <h3 className="text-xl font-semibold text-white mb-4 flex items-center gap-2">
+              <Image className="w-5 h-5 text-[#00FFF0]" />
+              My Images ({allImages.length})
+            </h3>
+            
+            {allImages.length === 0 ? (
+              <div className="text-center py-12 text-gray-400">
+                <Image className="w-16 h-16 mx-auto mb-4 opacity-50" />
+                <p>No images generated yet. Generate images in your projects to see them here!</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                {allImages.map((item) => (
+                  <div
+                    key={`${item.project.id}-${item.scene.id}-${item.clip.id}`}
+                    className="bg-[#0C0C0C] rounded-xl overflow-hidden border border-[#3AAFA9]/20 hover:border-[#00FFF0]/40 transition-colors group"
+                  >
+                    <div className="relative aspect-video bg-[#1E1F22]">
+                      <img
+                        src={item.url}
+                        alt={item.name}
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                    <div className="p-3">
+                      <h4 className="text-sm font-medium text-white mb-1 truncate">
+                        {item.name}
+                      </h4>
+                      <p className="text-xs text-gray-400 mb-2 truncate">
+                        {item.project.name}
+                      </p>
+                      <p className="text-xs text-gray-500 truncate">
+                        {item.prompt || 'No prompt'}
+                      </p>
+                      <div className="mt-2 text-xs text-gray-500">
+                        {item.createdAt.toLocaleDateString()}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* My Videos View */}
+        {activeView === 'videos' && (
+          <div>
+            <h3 className="text-xl font-semibold text-white mb-4 flex items-center gap-2">
+              <Video className="w-5 h-5 text-[#00FFF0]" />
+              My Videos ({allVideos.length})
+            </h3>
+            
+            {allVideos.length === 0 ? (
+              <div className="text-center py-12 text-gray-400">
+                <Video className="w-16 h-16 mx-auto mb-4 opacity-50" />
+                <p>No videos generated yet. Generate videos in your projects to see them here!</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {allVideos.map((item) => (
+                  <div
+                    key={`${item.project.id}-${item.scene.id}-${item.clip.id}`}
+                    className="bg-[#0C0C0C] rounded-xl overflow-hidden border border-[#3AAFA9]/20 hover:border-[#00FFF0]/40 transition-colors group"
+                  >
+                    <div className="relative aspect-video bg-[#1E1F22]">
+                      {item.clip.generatedImage ? (
+                        <img
+                          src={item.clip.generatedImage}
+                          alt={item.name}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center">
+                          <Video className="w-12 h-12 text-gray-500" />
+                        </div>
+                      )}
+                      <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Video className="w-8 h-8 text-[#00FFF0]" />
+                      </div>
+                      <div className="absolute bottom-2 right-2 bg-black/70 text-white text-xs px-2 py-1 rounded">
+                        {item.duration}s
+                      </div>
+                    </div>
+                    <div className="p-3">
+                      <h4 className="text-sm font-medium text-white mb-1 truncate">
+                        {item.name}
+                      </h4>
+                      <p className="text-xs text-gray-400 mb-2 truncate">
+                        {item.project.name}
+                      </p>
+                      <p className="text-xs text-gray-500 truncate">
+                        {item.prompt || 'No prompt'}
+                      </p>
+                      <div className="mt-2 text-xs text-gray-500">
+                        {item.createdAt.toLocaleDateString()}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   )

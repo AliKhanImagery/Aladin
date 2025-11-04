@@ -92,37 +92,51 @@ export async function POST(request: NextRequest) {
         )
       }
     } else if (mode === 'text-to-image') {
-      // Text-to-image mode requires only prompt
+      // Text-to-image mode: Uses fal-ai/reve/text-to-image endpoint
+      // This endpoint only requires a prompt (no reference images needed)
       if (!sanitizedPrompt) {
         return NextResponse.json(
           { error: 'Prompt is required for Text-to-Image mode', details: 'Please provide a text prompt' },
           { status: 400 }
         )
       }
-      // Note: Reve Remix might not support pure text-to-image, might need reference_image_urls
-      // We'll try without it first
+      // Note: text-to-image endpoint doesn't require reference images
     }
 
-    // Build Fal AI input object - DO NOT send 'mode' parameter to Fal AI
-    // Fal AI Reve Remix API infers behavior from provided parameters
-    const falInput: Record<string, any> = {
+    // Build Fal AI input object based on mode
+    // Different endpoints have different requirements
+    let falInput: Record<string, any> = {
       aspect_ratio: aspectRatioFormatted,
-      num_images: numImagesToUse,
     }
 
-    // Add prompt if provided (required for remix and text-to-image modes)
-    if (sanitizedPrompt) {
+    if (mode === 'text-to-image') {
+      // Text-to-image endpoint: only needs prompt and aspect_ratio
+      // Uses fal-ai/reve/text-to-image endpoint
       falInput.prompt = sanitizedPrompt
-    }
+      falInput.num_images = numImagesToUse
+      if (seedValid && seed !== undefined) {
+        falInput.seed = Math.floor(seed)
+      }
+    } else {
+      // Remix and Edit modes: use fal-ai/reve/remix endpoint
+      // Requires image_urls (and optionally prompt for remix)
+      falInput.num_images = numImagesToUse
+      
+      // Add prompt if provided (required for remix, optional for edit)
+      if (sanitizedPrompt) {
+        falInput.prompt = sanitizedPrompt
+      }
 
-    // Add reference images if provided (required for edit and remix modes)
-    if (sanitizedReferenceUrls.length > 0) {
-      falInput.reference_image_urls = sanitizedReferenceUrls
-    }
+      // Add reference images - REQUIRED for remix and edit modes
+      // Fal AI Reve Remix API requires 'image_urls' parameter
+      if (sanitizedReferenceUrls.length > 0) {
+        falInput.image_urls = sanitizedReferenceUrls
+      }
 
-    // Add seed if valid
-    if (seedValid && seed !== undefined) {
-      falInput.seed = Math.floor(seed)
+      // Add seed if valid
+      if (seedValid && seed !== undefined) {
+        falInput.seed = Math.floor(seed)
+      }
     }
 
     // Log validation results
@@ -130,61 +144,81 @@ export async function POST(request: NextRequest) {
       mode,
       hasPrompt: !!sanitizedPrompt,
       promptPreview: sanitizedPrompt ? sanitizedPrompt.substring(0, 50) + '...' : '(no prompt)',
-      referenceImagesCount: sanitizedReferenceUrls.length,
+      imageUrlsCount: sanitizedReferenceUrls.length,
       aspectRatio: aspectRatioFormatted,
       numImages: numImagesToUse,
       hasSeed: seedValid && seed !== undefined,
       validatedInput: Object.keys(falInput).join(', '),
     })
 
-    // Validate that we have at least one required parameter
-    if (!falInput.prompt && !falInput.reference_image_urls) {
-      return NextResponse.json(
-        { error: 'Invalid request: Must provide either prompt or reference images', details: 'At least one input is required' },
-        { status: 400 }
-      )
+    // Validate that we have all required parameters based on mode
+    if (mode === 'text-to-image') {
+      // Text-to-image endpoint only needs prompt
+      if (!falInput.prompt) {
+        return NextResponse.json(
+          { error: 'Invalid request: Prompt is required for text-to-image mode', details: 'Please provide a text prompt' },
+          { status: 400 }
+        )
+      }
+    } else {
+      // Remix and Edit modes require image_urls
+      if (!falInput.image_urls || falInput.image_urls.length === 0) {
+        return NextResponse.json(
+          { error: 'Invalid request: Reference images are required', details: 'Fal AI Reve Remix requires at least one reference image URL (image_urls parameter) for remix and edit modes' },
+          { status: 400 }
+        )
+      }
+      
+      // Prompt is required for remix mode, optional for edit
+      if (mode === 'remix' && !falInput.prompt) {
+        return NextResponse.json(
+          { error: 'Invalid request: Prompt is required for remix mode', details: 'Please provide a text prompt' },
+          { status: 400 }
+        )
+      }
     }
 
-    // Final validation: Ensure Fal AI input structure is valid
-    if (falInput.reference_image_urls && falInput.reference_image_urls.length === 0) {
-      // Remove empty array - might cause validation error
-      delete falInput.reference_image_urls
-    }
+    // Determine which endpoint to use
+    const endpoint = mode === 'text-to-image' 
+      ? 'fal-ai/reve/text-to-image'
+      : 'fal-ai/reve/remix'
 
-    // Call Fal AI Reve Remix
-    console.log('📤 Sending request to Fal AI Reve Remix with input:', JSON.stringify(falInput, null, 2))
+    // Call Fal AI Reve endpoint
+    console.log(`📤 Sending request to Fal AI Reve (${endpoint}) with input:`, JSON.stringify(falInput, null, 2))
     
-    const result = await fal.subscribe('fal-ai/reve/remix', {
+    const result = await fal.subscribe(endpoint, {
       input: falInput,
       logs: true,
       onQueueUpdate: (update) => {
         if (update.status === 'IN_PROGRESS') {
-          console.log('🔄 Fal AI Reve Remix progress:', update.logs?.map((log: any) => log.message))
+          console.log(`🔄 Fal AI Reve (${endpoint}) progress:`, update.logs?.map((log: any) => log.message))
         }
       },
     })
 
-    console.log('📥 Fal AI Reve Remix response:', JSON.stringify(result, null, 2))
+    console.log(`📥 Fal AI Reve (${endpoint}) response:`, JSON.stringify(result, null, 2))
 
     // Remix returns images array
     const imageUrl = result.data?.images?.[0]?.url || result.data?.image?.url
 
     if (!imageUrl) {
       console.error('❌ No image URL in response. Full result:', result)
-      throw new Error('No image URL returned from Fal AI Reve Remix. Response: ' + JSON.stringify(result.data))
+      throw new Error(`No image URL returned from Fal AI Reve (${endpoint}). Response: ` + JSON.stringify(result.data))
     }
 
-    console.log('✅ Fal AI Reve Remix image generated:', imageUrl)
+    console.log(`✅ Fal AI Reve (${endpoint}) image generated:`, imageUrl)
 
     return NextResponse.json({
       success: true,
       imageUrl,
-      model: 'fal-ai-reve-remix',
+      model: mode === 'text-to-image' ? 'fal-ai-reve-text-to-image' : 'fal-ai-reve-remix',
+      endpoint,
       requestId: result.requestId,
       allImages: result.data?.images || [],
     })
   } catch (error: any) {
-    console.error('❌ Fal AI Reve Remix Error:', error)
+    const endpoint = mode === 'text-to-image' ? 'fal-ai/reve/text-to-image' : 'fal-ai/reve/remix'
+    console.error(`❌ Fal AI Reve (${endpoint}) Error:`, error)
     
     // Handle ValidationError specifically (422 status)
     if (error.name === 'ValidationError' || error.status === 422) {
@@ -216,8 +250,11 @@ export async function POST(request: NextRequest) {
         {
           error: 'Validation Error: Invalid request parameters',
           details: validationDetails,
-          model: 'fal-ai-reve-remix',
-          hint: 'Check that all required parameters are provided in the correct format. For Reve Remix: prompt and reference_image_urls are typically required for remix mode.',
+          model: mode === 'text-to-image' ? 'fal-ai-reve-text-to-image' : 'fal-ai-reve-remix',
+          endpoint,
+          hint: mode === 'text-to-image' 
+            ? 'Check that prompt is provided. Text-to-image endpoint only requires prompt and aspect_ratio.'
+            : 'Check that all required parameters are provided in the correct format. For Reve Remix: prompt and image_urls are required for remix mode, image_urls are required for edit mode.',
           statusCode: 422,
         },
         { status: 422 }
@@ -264,7 +301,8 @@ export async function POST(request: NextRequest) {
       {
         error: errorMessage,
         details: errorDetails,
-        model: 'fal-ai-reve-remix',
+        model: mode === 'text-to-image' ? 'fal-ai-reve-text-to-image' : 'fal-ai-reve-remix',
+        endpoint,
         hint: 'Check console logs for more details. Common issues: invalid API key, missing required parameters, or unsupported parameter combination.',
         statusCode,
       },

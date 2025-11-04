@@ -16,7 +16,8 @@ export default function ClipDetailDrawer() {
     isDrawerOpen, 
     setDrawerOpen,
     updateClip,
-    currentProject
+    currentProject,
+    setClipGeneratingStatus
   } = useAppStore()
   
   // Get aspect ratio from project story (default to 16:9)
@@ -30,7 +31,7 @@ export default function ClipDetailDrawer() {
   const [referenceImageUrls, setReferenceImageUrls] = useState<string[]>([''])
   const [nanoBananaInputImages, setNanoBananaInputImages] = useState<string[]>([''])
   const [isGeneratingVideo, setIsGeneratingVideo] = useState(false)
-  const [videoModel, setVideoModel] = useState<'text-to-video' | 'image-to-video' | 'reference-to-video'>('text-to-video')
+  const [videoModel, setVideoModel] = useState<'text-to-video' | 'image-to-video' | 'reference-to-video' | 'kling'>('text-to-video')
   const [videoReferenceUrls, setVideoReferenceUrls] = useState<string[]>([''])
   const [videoStartImageUrl, setVideoStartImageUrl] = useState('')
   
@@ -104,6 +105,9 @@ export default function ClipDetailDrawer() {
     })
 
     setIsGeneratingImage(true)
+    if (selectedClip?.id) {
+      setClipGeneratingStatus(selectedClip.id, 'image')
+    }
     let lastError: { model: string; error: string } | null = null
 
     try {
@@ -143,13 +147,26 @@ export default function ClipDetailDrawer() {
 
         const { imageUrl } = await response.json()
         handleUpdateClip({ generatedImage: imageUrl, previewImage: imageUrl })
+        if (selectedClip?.id) {
+          setClipGeneratingStatus(selectedClip.id, null)
+        }
       } else if (imageModel === 'fal-ai') {
         // Fal AI Vidu with reference images
         const validReferences = referenceImageUrls.filter(url => url.trim() !== '')
         
         if (validReferences.length === 0) {
-          alert('Please add at least one reference image URL for Fal AI')
+          alert(
+            '📷 Reference Images Required\n\n' +
+            'Fal AI Vidu requires at least one reference image to generate.\n\n' +
+            'Please:\n' +
+            '1. Click "Add Reference Image" below\n' +
+            '2. Upload an image file OR paste an image URL\n' +
+            '3. Try generating again'
+          )
           setIsGeneratingImage(false)
+          if (selectedClip?.id) {
+            setClipGeneratingStatus(selectedClip.id, null)
+          }
           return
         }
 
@@ -176,6 +193,9 @@ export default function ClipDetailDrawer() {
 
         const { imageUrl } = await response.json()
         handleUpdateClip({ generatedImage: imageUrl, previewImage: imageUrl })
+        if (selectedClip?.id) {
+          setClipGeneratingStatus(selectedClip.id, null)
+        }
       } else if (imageModel === 'remix') {
         const aspectRatioToUse = aspectRatio || '16:9'
         console.log('🎨 Fal AI Reve Remix - Mode:', remixMode, 'Aspect ratio:', aspectRatioToUse)
@@ -185,7 +205,15 @@ export default function ClipDetailDrawer() {
           // Edit mode: requires reference images, prompt is optional
           const validReferences = referenceImageUrls.filter(url => url.trim() !== '')
           if (validReferences.length === 0) {
-            alert('Please add at least one reference image URL for Edit mode')
+            alert(
+              '📷 Reference Images Required for Edit Mode\n\n' +
+              'Reve Remix Edit mode requires at least one reference image.\n\n' +
+              'To fix this:\n' +
+              '1. Scroll down to the "Reference Images" section\n' +
+              '2. Upload an image or paste an image URL\n' +
+              '3. The prompt is optional - you can generate with just images\n' +
+              '4. Try generating again'
+            )
             setIsGeneratingImage(false)
             return
           }
@@ -193,22 +221,53 @@ export default function ClipDetailDrawer() {
           // Remix mode: requires both prompt and reference images
           const validReferences = referenceImageUrls.filter(url => url.trim() !== '')
           if (validReferences.length === 0) {
-            alert('Please add at least one reference image URL for Remix mode')
+            alert(
+              '📷 Reference Images Required for Remix Mode\n\n' +
+              'Reve Remix mode needs both:\n' +
+              '✓ Your text prompt (you have this ✓)\n' +
+              '✗ Reference images (missing)\n\n' +
+              'To fix this:\n' +
+              '1. Scroll down to "Reference Images" section\n' +
+              '2. Upload 1-3 images or paste image URLs\n' +
+              '3. These images will be blended/transformed based on your prompt\n' +
+              '4. Try generating again'
+            )
             setIsGeneratingImage(false)
             return
           }
           if (!promptToUse) {
-            alert('Please enter a prompt for Remix mode')
+            alert(
+              '✍️ Prompt Required for Remix Mode\n\n' +
+              'Reve Remix mode needs both:\n' +
+              '✗ Text prompt (missing)\n' +
+              '✓ Reference images (you have this ✓)\n\n' +
+              'To fix this:\n' +
+              '1. Enter a prompt in the "Image Prompt" field above\n' +
+              '2. Describe how you want to blend or transform the reference images\n' +
+              '3. Example: "Blend the style of the first image with the content of the second"\n' +
+              '4. Try generating again'
+            )
             setIsGeneratingImage(false)
             return
           }
         } else if (remixMode === 'text-to-image') {
-          // Text-to-image mode: requires only prompt, no images
+          // Text-to-image mode: Uses fal-ai/reve/text-to-image endpoint
+          // Only requires prompt, no reference images needed
           if (!promptToUse) {
-            alert('Please enter a prompt for Text-to-Image mode')
+            alert(
+              '✍️ Prompt Required for Text-to-Image Mode\n\n' +
+              'Text-to-Image mode only needs a text prompt.\n' +
+              'No reference images required - this is pure text-to-image generation!\n\n' +
+              'To fix this:\n' +
+              '1. Enter a prompt in the "Image Prompt" field above\n' +
+              '2. Describe the image you want to generate\n' +
+              '3. Example: "A futuristic cityscape at sunset with neon lights"\n' +
+              '4. Try generating again'
+            )
             setIsGeneratingImage(false)
             return
           }
+          // No reference images validation needed for text-to-image mode
         }
 
         // Prepare request body based on mode
@@ -218,12 +277,13 @@ export default function ClipDetailDrawer() {
           aspect_ratio: aspectRatioToUse, // String format: "16:9", "9:16", "1:1"
         }
 
-        // Add prompt only for remix and text-to-image modes
+        // Add prompt for remix and text-to-image modes
         if (remixMode === 'remix' || remixMode === 'text-to-image') {
           requestBody.prompt = promptToUse
         }
 
-        // Add reference images only for edit and remix modes
+        // Add reference images - REQUIRED for edit and remix modes only
+        // Text-to-image mode uses fal-ai/reve/text-to-image endpoint which doesn't need reference images
         if (remixMode === 'edit' || remixMode === 'remix') {
           requestBody.reference_image_urls = validReferences
         }
@@ -273,6 +333,9 @@ export default function ClipDetailDrawer() {
 
         const { imageUrl } = await response.json()
         handleUpdateClip({ generatedImage: imageUrl, previewImage: imageUrl })
+        if (selectedClip?.id) {
+          setClipGeneratingStatus(selectedClip.id, null)
+        }
       } else if (imageModel === 'nano-banana') {
         // Fal AI Nano Banana - supports two modes
         const aspectRatioToUse = aspectRatio || '16:9'
@@ -313,6 +376,9 @@ export default function ClipDetailDrawer() {
 
         const { imageUrl } = await response.json()
         handleUpdateClip({ generatedImage: imageUrl, previewImage: imageUrl })
+        if (selectedClip?.id) {
+          setClipGeneratingStatus(selectedClip.id, null)
+        }
       }
     } catch (error: any) {
       console.error('Image generation error:', error)
@@ -332,6 +398,9 @@ export default function ClipDetailDrawer() {
       }
     } finally {
       setIsGeneratingImage(false)
+      if (selectedClip?.id) {
+        setClipGeneratingStatus(selectedClip.id, null)
+      }
     }
   }
 
@@ -373,6 +442,9 @@ export default function ClipDetailDrawer() {
     }
 
     setIsGeneratingVideo(true)
+    if (selectedClip?.id) {
+      setClipGeneratingStatus(selectedClip.id, 'video')
+    }
 
     try {
       let requestBody: any = {
@@ -382,22 +454,42 @@ export default function ClipDetailDrawer() {
       }
 
       // Add model-specific inputs
-      if (videoModel === 'image-to-video') {
+      if (videoModel === 'kling') {
+        // Kling model supports image-to-video
+        requestBody.videoModel = 'kling'
+        requestBody.aspect_ratio = aspectRatio
+        
+        // Add image if available (Kling supports image-to-video)
+        if (videoStartImageUrl.trim() || selectedClip.generatedImage) {
+          requestBody.image_url = videoStartImageUrl.trim() || selectedClip.generatedImage
+        }
+      } else if (videoModel === 'image-to-video') {
+        requestBody.videoModel = 'vidu'
         if (!videoStartImageUrl.trim() && !selectedClip.generatedImage) {
           alert('Please provide a start image URL or generate an image first')
           setIsGeneratingVideo(false)
+          if (selectedClip?.id) {
+            setClipGeneratingStatus(selectedClip.id, null)
+          }
           return
         }
         requestBody.image_url = videoStartImageUrl.trim() || selectedClip.generatedImage
       } else if (videoModel === 'reference-to-video') {
+        requestBody.videoModel = 'vidu'
         const validRefs = videoReferenceUrls.filter(url => url.trim() !== '')
         if (validRefs.length === 0) {
           alert('Please add at least one reference image URL for reference-to-video')
           setIsGeneratingVideo(false)
+          if (selectedClip?.id) {
+            setClipGeneratingStatus(selectedClip.id, null)
+          }
           return
         }
         requestBody.reference_image_urls = validRefs
         requestBody.aspect_ratio = aspectRatio
+      } else {
+        // text-to-video
+        requestBody.videoModel = 'vidu'
       }
 
       const response = await fetch('/api/generate-video', {
@@ -408,22 +500,167 @@ export default function ClipDetailDrawer() {
         body: JSON.stringify(requestBody),
       })
 
+      // Check content type to handle both JSON and HTML responses
+      const contentType = response.headers.get('content-type') || ''
+      const isJson = contentType.includes('application/json')
+
       if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.error || 'Failed to generate video')
+        let errorData
+        let errorText = ''
+        
+        try {
+          if (isJson) {
+            errorData = await response.json()
+          } else {
+            errorText = await response.text()
+            console.error('❌ Video generation API error (HTML response):', {
+              status: response.status,
+              statusText: response.statusText,
+              contentType: contentType,
+              preview: errorText.substring(0, 500),
+            })
+            
+            // Try to extract error from HTML if it's a Next.js error page
+            if (errorText.includes('Error:')) {
+              const errorMatch = errorText.match(/Error:([^<]+)/)
+              if (errorMatch) {
+                throw new Error(`Server error: ${errorMatch[1].trim()}`)
+              }
+            }
+            
+            throw new Error(
+              `Failed to generate video: Server returned HTML instead of JSON. ` +
+              `Status: ${response.status} ${response.statusText}. ` +
+              `This usually means the API route encountered an error. Check server logs.`
+            )
+          }
+        } catch (e: any) {
+          // If we already have an error from above, rethrow it
+          if (e.message && e.message.includes('Failed to generate video')) {
+            throw e
+          }
+          // Otherwise, if parsing failed
+          console.error('❌ Video generation API error (parse failed):', e)
+          throw new Error(
+            `Failed to generate video: ${response.status} ${response.statusText}. ` +
+            `Could not parse response as JSON. Check server logs for details.`
+          )
+        }
+        
+        console.error('❌ Video generation API error:', {
+          status: response.status,
+          statusText: response.statusText,
+          errorData: errorData,
+          fullErrorData: JSON.stringify(errorData, null, 2),
+        })
+        
+        // Build a detailed error message from all available fields
+        let errorMessage = errorData.error || 'Failed to generate video'
+        
+        // PRIORITY 1: Show validation message if available (most specific error)
+        if (errorData.validationMessage) {
+          errorMessage += `\n\nValidation Error:\n${errorData.validationMessage}`
+        }
+        
+        // PRIORITY 2: Show Fal AI validation error if available
+        if (errorData.falAiValidationError) {
+          const validationError = typeof errorData.falAiValidationError === 'string'
+            ? errorData.falAiValidationError
+            : JSON.stringify(errorData.falAiValidationError, null, 2)
+          errorMessage += `\n\nFal AI Validation Error:\n${validationError.substring(0, 1000)}`
+        }
+        
+        // PRIORITY 3: Show details if available
+        if (errorData.details && errorData.details !== errorMessage) {
+          errorMessage += `\n\nDetails: ${errorData.details}`
+        }
+        
+        // PRIORITY 4: Show Fal AI error if available and different
+        if (errorData.falAiError && 
+            errorData.falAiError !== 'No additional details available' &&
+            errorData.falAiError !== errorData.details &&
+            !errorData.validationMessage) {
+          errorMessage += `\n\nFal AI Error: ${errorData.falAiError}`
+        }
+        
+        // Show Kling input if available (for debugging)
+        if (errorData.klingInput) {
+          console.error('📋 Kling input that failed:', errorData.klingInput)
+        }
+        
+        // Show full error if available (for debugging)
+        if (errorData.fullError) {
+          console.error('📋 Full error details:', errorData.fullError)
+        }
+        
+        // Add error type if available
+        if (errorData.errorType && errorData.errorType !== 'UnknownError') {
+          errorMessage += `\n\nError Type: ${errorData.errorType}`
+        }
+        
+        // Add status code if available
+        if (errorData.statusCode) {
+          errorMessage += `\n\nStatus Code: ${errorData.statusCode}`
+        }
+        
+        throw new Error(errorMessage)
       }
 
-      const { videoUrl, duration: generatedDuration } = await response.json()
+      // Handle successful response
+      let responseData
+      try {
+        if (!isJson) {
+          const text = await response.text()
+          console.error('❌ Video generation succeeded but got HTML response:', text.substring(0, 500))
+          throw new Error(
+            'Server returned HTML instead of JSON. This usually indicates a server-side error. ' +
+            'Please check the server logs for details.'
+          )
+        }
+        responseData = await response.json()
+      } catch (e: any) {
+        // If it's already our error, rethrow it
+        if (e.message && e.message.includes('Server returned HTML')) {
+          throw e
+        }
+        // Otherwise it's a JSON parse error
+        console.error('❌ Failed to parse successful response as JSON:', e)
+        throw new Error('Failed to parse server response. The API may have returned invalid JSON.')
+      }
+
+      const { videoUrl, duration: generatedDuration } = responseData || {}
+      
+      if (!videoUrl) {
+        console.error('❌ No videoUrl in response:', responseData)
+        throw new Error(
+          'No video URL returned from server. ' +
+          `Response: ${JSON.stringify(responseData).substring(0, 200)}`
+        )
+      }
+
       handleUpdateClip({ 
         generatedVideo: videoUrl, 
         previewVideo: videoUrl,
         duration: generatedDuration || selectedClip.duration
       })
+      if (selectedClip?.id) {
+        setClipGeneratingStatus(selectedClip.id, null)
+      }
     } catch (error: any) {
-      console.error('Video generation error:', error)
-      alert(`Failed to generate video: ${error.message}`)
+      console.error('❌ Video generation error:', {
+        message: error.message,
+        stack: error.stack,
+        error: error,
+      })
+      
+      // Display error with more details
+      const errorMessage = error.message || 'Failed to generate video'
+      alert(errorMessage)
     } finally {
       setIsGeneratingVideo(false)
+      if (selectedClip?.id) {
+        setClipGeneratingStatus(selectedClip.id, null)
+      }
     }
   }
 
@@ -531,6 +768,27 @@ export default function ClipDetailDrawer() {
         <div className="flex-1 p-6 overflow-y-auto">
           {activeTab === 'image' && (
             <div className="space-y-4">
+              {/* General Help Info for Remix */}
+              {imageModel === 'remix' && (
+                <div className="p-3 bg-gradient-to-r from-blue-500/10 to-purple-500/10 rounded-lg border border-blue-500/30 mb-4">
+                  <p className="text-sm text-blue-300 font-medium mb-2">
+                    🎨 About Reve Remix
+                  </p>
+                  <p className="text-xs text-blue-200/90 leading-relaxed">
+                    Reve Remix offers three modes: <strong>Edit</strong> and <strong>Remix</strong> require reference images, 
+                    while <strong>Text-to-Image</strong> uses a dedicated endpoint for pure text-to-image generation (no reference images needed).
+                  </p>
+                  <div className="mt-2 pt-2 border-t border-blue-500/20">
+                    <p className="text-xs text-blue-300 font-medium">Quick Guide:</p>
+                    <ul className="text-xs text-blue-200/80 mt-1 space-y-1 ml-4 list-disc">
+                      <li><strong>Edit Mode:</strong> Reference images required, prompt optional</li>
+                      <li><strong>Remix Mode:</strong> Both prompt and reference images required</li>
+                      <li><strong>Text-to-Image Mode:</strong> Only prompt required (pure text-to-image)</li>
+                    </ul>
+                  </div>
+                </div>
+              )}
+
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">
                   Image Model
@@ -673,10 +931,19 @@ export default function ClipDetailDrawer() {
                     </div>
                   )}
                   {remixMode === 'text-to-image' && (
-                    <div className="mb-3 p-2 bg-[#00FFF0]/10 border border-[#00FFF0]/20 rounded-lg">
-                      <p className="text-xs text-[#00FFF0]">
-                        💡 Text-to-Image mode: Generate images purely from text. Enter a detailed prompt describing your desired image.
+                    <div className="mb-3 p-3 bg-green-500/10 border border-green-500/30 rounded-lg">
+                      <p className="text-xs text-green-300 font-medium mb-1">
+                        ✨ Pure Text-to-Image Generation
                       </p>
+                      <p className="text-xs text-green-200/90 leading-relaxed">
+                        This mode uses <strong>fal-ai/reve/text-to-image</strong> endpoint for true text-to-image generation. 
+                        No reference images needed - just enter your prompt and generate!
+                      </p>
+                      <ul className="text-xs text-green-200/80 space-y-1 ml-4 mt-2 list-disc">
+                        <li>Only requires a text prompt</li>
+                        <li>No reference images needed</li>
+                        <li>Perfect for generating images from scratch</li>
+                      </ul>
                     </div>
                   )}
                 </div>
@@ -713,20 +980,43 @@ export default function ClipDetailDrawer() {
                 </div>
               )}
 
-              {/* Reference Images - Only shown for Fal AI Vidu and Remix (Edit/Remix modes) */}
-              {(imageModel === 'fal-ai' || (imageModel === 'remix' && (remixMode === 'edit' || remixMode === 'remix'))) && (
+              {/* Reference Images - Required for Fal AI Vidu and Remix (Edit/Remix modes only, not Text-to-Image) */}
+              {(imageModel === 'fal-ai' || (imageModel === 'remix' && remixMode !== 'text-to-image')) && (
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">
                     Reference Images
                   </label>
-                  <p className="text-xs text-gray-400 mb-3">
-                    {imageModel === 'remix' && remixMode === 'edit'
-                      ? 'Upload one or more reference images to edit and transform them. No prompt needed for edit mode.'
-                      : imageModel === 'remix' && remixMode === 'remix'
-                      ? 'Upload reference images to combine and transform via your prompt. Remix lets you blend multiple images together.'
-                      : 'Upload reference images to maintain consistent character appearance across generations'
-                    }
-                  </p>
+                  <div className="mb-3 space-y-2">
+                    {imageModel === 'remix' && remixMode === 'edit' && (
+                      <div className="p-2 bg-[#1E1F22] rounded-lg border border-[#3AAFA9]/20">
+                        <p className="text-xs text-gray-300 mb-1">
+                          <strong>Edit Mode:</strong> Upload reference images to edit and transform them.
+                        </p>
+                        <p className="text-xs text-gray-400">
+                          • Add 1-3 reference images<br/>
+                          • Prompt is optional - helps guide the transformation<br/>
+                          • Images will be edited based on your prompt (if provided)
+                        </p>
+                      </div>
+                    )}
+                    {imageModel === 'remix' && remixMode === 'remix' && (
+                      <div className="p-2 bg-[#1E1F22] rounded-lg border border-[#3AAFA9]/20">
+                        <p className="text-xs text-gray-300 mb-1">
+                          <strong>Remix Mode:</strong> Combine and transform reference images with your prompt.
+                        </p>
+                        <p className="text-xs text-gray-400">
+                          • Add 1-3 reference images (required)<br/>
+                          • Enter a prompt describing how to blend/transform them (required)<br/>
+                          • Perfect for style transfers and creative combinations
+                        </p>
+                      </div>
+                    )}
+                    {imageModel === 'fal-ai' && (
+                      <p className="text-xs text-gray-400">
+                        Upload reference images to maintain consistent character appearance across generations. Add 1-3 images.
+                      </p>
+                    )}
+                  </div>
                   <div className="space-y-3">
                     {referenceImageUrls.map((url, index) => (
                       <div key={index} className="space-y-2">
@@ -943,7 +1233,7 @@ export default function ClipDetailDrawer() {
                       ? 'bg-[#00FFF0] text-black' 
                       : 'border-[#3AAFA9] text-[#3AAFA9] hover:bg-[#3AAFA9] hover:text-black'}
                   >
-                    Text to Video
+                    Text to Video (Vidu)
                   </Button>
                   <Button
                     variant={videoModel === 'image-to-video' ? 'default' : 'outline'}
@@ -952,7 +1242,7 @@ export default function ClipDetailDrawer() {
                       ? 'bg-[#00FFF0] text-black' 
                       : 'border-[#3AAFA9] text-[#3AAFA9] hover:bg-[#3AAFA9] hover:text-black'}
                   >
-                    Image to Video
+                    Image to Video (Vidu)
                   </Button>
                   <Button
                     variant={videoModel === 'reference-to-video' ? 'default' : 'outline'}
@@ -961,7 +1251,16 @@ export default function ClipDetailDrawer() {
                       ? 'bg-[#00FFF0] text-black' 
                       : 'border-[#3AAFA9] text-[#3AAFA9] hover:bg-[#3AAFA9] hover:text-black'}
                   >
-                    Reference to Video
+                    Reference to Video (Vidu)
+                  </Button>
+                  <Button
+                    variant={videoModel === 'kling' ? 'default' : 'outline'}
+                    onClick={() => setVideoModel('kling')}
+                    className={videoModel === 'kling' 
+                      ? 'bg-[#00FFF0] text-black' 
+                      : 'border-[#3AAFA9] text-[#3AAFA9] hover:bg-[#3AAFA9] hover:text-black'}
+                  >
+                    Kling v1.6 (Standard Elements)
                   </Button>
                 </div>
               </div>
@@ -980,10 +1279,10 @@ export default function ClipDetailDrawer() {
                 />
               </div>
 
-              {videoModel === 'image-to-video' && (
+              {(videoModel === 'image-to-video' || videoModel === 'kling') && (
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Start Image
+                    Start Image {videoModel === 'kling' && '(Optional)'}
                   </label>
                   {selectedClip.generatedImage && (
                     <div className="mb-3 p-2 bg-[#00FFF0]/10 border border-[#00FFF0]/30 rounded-lg">
@@ -1016,9 +1315,14 @@ export default function ClipDetailDrawer() {
                       className="w-full bg-[#0C0C0C] border-[#3AAFA9] text-white text-sm mt-2"
                     />
                   )}
-                  {selectedClip.generatedImage && !videoStartImageUrl && (
+                  {videoModel === 'image-to-video' && selectedClip.generatedImage && !videoStartImageUrl && (
                     <p className="text-xs text-[#00FFF0] mt-2">
                       ✓ Will use the generated image above automatically if no custom image is provided
+                    </p>
+                  )}
+                  {videoModel === 'kling' && (
+                    <p className="text-xs text-gray-400 mt-2">
+                      💡 Kling supports both text-to-video and image-to-video. Image is optional but recommended for better results.
                     </p>
                   )}
                 </div>
