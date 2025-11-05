@@ -89,6 +89,41 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
   }
 }
 
+export async function resetPasswordForEmail(email: string) {
+  try {
+    // Get the origin from environment or use current window location
+    const redirectUrl = typeof window !== 'undefined' 
+      ? `${window.location.origin}/auth/reset-password`
+      : process.env.NEXT_PUBLIC_APP_URL 
+        ? `${process.env.NEXT_PUBLIC_APP_URL}/auth/reset-password`
+        : 'http://localhost:3000/auth/reset-password'
+
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: redirectUrl,
+    })
+
+    if (error) throw error
+    return { error: null }
+  } catch (error: any) {
+    console.error('Reset password error:', error)
+    return { error }
+  }
+}
+
+export async function updatePassword(newPassword: string) {
+  try {
+    const { error } = await supabase.auth.updateUser({
+      password: newPassword,
+    })
+
+    if (error) throw error
+    return { error: null }
+  } catch (error: any) {
+    console.error('Update password error:', error)
+    return { error }
+  }
+}
+
 export function onAuthStateChange(callback: (user: AuthUser | null) => void) {
   return supabase.auth.onAuthStateChange(async (event, session) => {
     if (session?.user) {
