@@ -4,12 +4,122 @@
 
 :root {
   --foreground-rgb: 255, 255, 255;
-  --background-start-rgb: 12, 12, 12;
-  --background-end-rgb: 12, 12, 12;
+  --background-start-rgb: 8, 8, 12; /* Slightly purple-tinted dark */
+  --background-end-rgb: 12, 12, 20; /* Dark with subtle blue */
+  --neon-cyan: 0, 255, 240; /* #00FFF0 */
+  --neon-purple: 138, 43, 226; /* #8A2BE2 */
+  --neon-pink: 255, 20, 147; /* #FF1493 */
 }
 
 body {
   color: rgb(var(--foreground-rgb));
-  background: rgb(var(--background-start-rgb));
+  background: linear-gradient(
+    135deg,
+    rgb(var(--background-start-rgb)) 0%,
+    rgb(var(--background-end-rgb)) 50%,
+    rgb(var(--background-start-rgb)) 100%
+  );
+  background-size: 200% 200%;
+  background-attachment: fixed;
+  animation: gradientShift 15s ease infinite;
+  position: relative;
+  min-height: 100vh;
+  margin: 0;
+  padding: 0;
+  overscroll-behavior: none;
+  overflow-x: hidden;
+}
+
+/* Subtle animated gradient background */
+@keyframes gradientShift {
+  0%, 100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
+
+/* Subtle background pattern overlay */
+body::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: 
+    radial-gradient(circle at 20% 50%, rgba(var(--neon-cyan), 0.03) 0%, transparent 50%),
+    radial-gradient(circle at 80% 80%, rgba(var(--neon-purple), 0.03) 0%, transparent 50%),
+    radial-gradient(circle at 40% 20%, rgba(var(--neon-pink), 0.02) 0%, transparent 50%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Ensure content is above background */
+body > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* Prevent scroll bounce on macOS/iOS that can show content above header */
+html {
+  overscroll-behavior: none;
+  overflow-x: hidden;
+  margin: 0;
+  padding: 0;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.animate-shimmer {
+  animation: shimmer 3s infinite;
+}
+
+/* Neon glow effect utility */
+.neon-glow {
+  box-shadow: 
+    0 0 5px rgba(var(--neon-cyan), 0.5),
+    0 0 10px rgba(var(--neon-cyan), 0.3),
+    0 0 15px rgba(var(--neon-cyan), 0.2);
+}
+
+.neon-glow-strong {
+  box-shadow: 
+    0 0 10px rgba(var(--neon-cyan), 0.8),
+    0 0 20px rgba(var(--neon-cyan), 0.6),
+    0 0 30px rgba(var(--neon-cyan), 0.4),
+    0 0 40px rgba(var(--neon-cyan), 0.2);
+}
+
+/* Neon text glow */
+.neon-text {
+  text-shadow: 
+    0 0 5px rgba(var(--neon-cyan), 0.8),
+    0 0 10px rgba(var(--neon-cyan), 0.6),
+    0 0 15px rgba(var(--neon-cyan), 0.4);
+}
+
+/* Pulsing neon effect */
+@keyframes neonPulse {
+  0%, 100% {
+    opacity: 1;
+    filter: brightness(1);
+  }
+  50% {
+    opacity: 0.8;
+    filter: brightness(1.2);
+  }
+}
+
+.neon-pulse {
+  animation: neonPulse 2s ease-in-out infinite;
 }
 

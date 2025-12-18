@@ -19,7 +19,7 @@ interface UserMenuProps {
 export default function UserMenu({ user }: UserMenuProps) {
   const [isOpen, setIsOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
-  const { setProjectManagerOpen, setUser } = useAppStore()
+  const { setProjectManagerOpen, setUser, setShowProfileSettingsModal, setShowAuthModal } = useAppStore()
   const router = useRouter()
 
   // Close menu when clicking outside
@@ -49,18 +49,16 @@ export default function UserMenu({ user }: UserMenuProps) {
         break
       case 'settings':
         // TODO: Navigate to settings page or open settings modal
-        alert('Settings page coming soon!')
+        setShowProfileSettingsModal(true)  // Change this line
         break
       case 'projects':
-        setProjectManagerOpen(true)
+        router.push('/my-projects')
         break
       case 'photos':
-        // TODO: Navigate to photos page
-        alert('My Photos page coming soon!')
+        router.push('/my-images')
         break
       case 'videos':
-        // TODO: Navigate to videos page
-        alert('My Videos page coming soon!')
+        router.push('/my-videos')
         break
       case 'logout':
         try {
@@ -83,10 +81,9 @@ export default function UserMenu({ user }: UserMenuProps) {
         variant="ghost"
         size="sm"
         onClick={() => {
-          // Will be handled by AuthProvider or page-level auth check
-          alert('Please sign in to access your profile')
+          setShowAuthModal(true)
         }}
-        className="text-gray-400 hover:text-white hover:bg-[#1E1F22]"
+        className="text-gray-400 hover:text-white hover:bg-[#1A1A24]"
       >
         <User className="w-5 h-5 mr-2" />
         Sign In
@@ -101,7 +98,7 @@ export default function UserMenu({ user }: UserMenuProps) {
         variant="ghost"
         size="icon"
         onClick={() => setIsOpen(!isOpen)}
-        className="text-gray-400 hover:text-white hover:bg-[#1E1F22] rounded-full"
+        className="text-gray-400 hover:text-white hover:bg-[#1A1A24] rounded-full"
         aria-label="User menu"
         aria-expanded={isOpen}
       >
@@ -112,7 +109,7 @@ export default function UserMenu({ user }: UserMenuProps) {
             className="w-8 h-8 rounded-full object-cover"
           />
         ) : (
-          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#00FFF0] to-[#3AAFA9] flex items-center justify-center">
+          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#00FFF0] to-[#00FFF0]/70 flex items-center justify-center">
             <User className="w-5 h-5 text-black" />
           </div>
         )}
@@ -120,10 +117,10 @@ export default function UserMenu({ user }: UserMenuProps) {
 
       {/* Dropdown Menu */}
       {isOpen && (
-        <div className="absolute left-0 top-full mt-2 w-56 bg-[#1E1F22] rounded-xl border border-[#3AAFA9]/30 shadow-2xl backdrop-blur-md overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200 z-50">
+        <div className="absolute left-0 top-full mt-2 w-56 bg-[#1A1A24] rounded-xl border border-[#00FFF0]/30 shadow-2xl backdrop-blur-md overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200 z-50 shadow-[0_0_15px_rgba(0,255,240,0.2)]">
           {/* User Info */}
           {user && (
-            <div className="px-4 py-3 border-b border-[#3AAFA9]/20">
+            <div className="px-4 py-3 border-b border-[#00FFF0]/20">
               <p className="text-sm font-medium text-white truncate">
                 {user.name || 'User'}
               </p>
@@ -170,7 +167,7 @@ export default function UserMenu({ user }: UserMenuProps) {
               <Video className="w-4 h-4" />
               My Videos
             </button>
-            <div className="my-1 h-px bg-[#3AAFA9]/20" />
+            <div className="my-1 h-px bg-[#00FFF0]/20" />
             <button
               onClick={() => handleMenuClick('logout')}
               className="w-full flex items-center gap-3 px-4 py-2 text-sm text-red-400 hover:text-red-300 hover:bg-red-400/10 transition-colors"

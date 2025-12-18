@@ -7,7 +7,7 @@ const openai = new OpenAI({
 
 export async function POST(request: NextRequest) {
   try {
-    const { idea, tone, brandCues, targetRuntime } = await request.json()
+    const { idea, tone, brandCues, targetRuntime, assetContext } = await request.json()
 
     if (!idea || !idea.trim()) {
       return NextResponse.json(
@@ -27,9 +27,15 @@ export async function POST(request: NextRequest) {
     const storyPrompt = `You are a professional Story Writer. Your task is to analyze the user's idea, Detect its type of content, Character if there are - how many, name them if not provided and create a structured story breakdown.
 
 User's Idea: "${idea}"
-${tone ? `Tone: ${tone}` : ''}
-${brandCues ? `Brand Cues: ${brandCues}` : ''}
+${Array.isArray(tone) ? `Tone: ${tone.join(', ')}` : tone ? `Tone: ${tone}` : ''}
+${Array.isArray(brandCues) ? `Brand Cues: ${brandCues.join(', ')}` : brandCues ? `Brand Cues: ${brandCues}` : ''}
 Target Runtime: ${targetRuntime} seconds
+${assetContext ? `
+ASSET CONTEXT (Use these in your story structure):
+Characters: ${assetContext.characters ? assetContext.characters.map((c: any) => `${c.name} (${c.role}): ${c.description}`).join('; ') : ''}
+Products: ${assetContext.products ? assetContext.products.map((p: any) => `${p.name}: ${p.description}`).join('; ') : ''}
+Locations: ${assetContext.locations ? assetContext.locations.map((l: any) => `${l.name}: ${l.description}`).join('; ') : ''}
+` : ''}
 
 Generate a story structure with scenes. Return a JSON object with this exact format:
 {

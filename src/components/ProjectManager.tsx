@@ -3,10 +3,24 @@
 import { useState, useEffect } from 'react'
 import { useAppStore } from '@/lib/store'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
 import { X, Plus, FolderOpen, Calendar, Clock, Image, Video } from 'lucide-react'
 import { Project } from '@/types'
+import CreateProjectModal from './CreateProjectModal'
+
+// Helper function to format relative time
+function formatRelativeTime(date: Date): string {
+  const now = new Date()
+  const diffMs = now.getTime() - date.getTime()
+  const diffMins = Math.floor(diffMs / 60000)
+  const diffHours = Math.floor(diffMs / 3600000)
+  const diffDays = Math.floor(diffMs / 86400000)
+
+  if (diffMins < 1) return 'just now'
+  if (diffMins < 60) return `${diffMins}m ago`
+  if (diffHours < 24) return `${diffHours}h ago`
+  if (diffDays < 7) return `${diffDays}d ago`
+  return date.toLocaleDateString()
+}
 
 export default function ProjectManager() {
   const { 
@@ -17,86 +31,12 @@ export default function ProjectManager() {
     createProject 
   } = useAppStore()
   
-  const [newProjectName, setNewProjectName] = useState('')
-  const [newProjectDescription, setNewProjectDescription] = useState('')
-  const [isCreating, setIsCreating] = useState(false)
   const [activeView, setActiveView] = useState<'projects' | 'images' | 'videos'>('projects')
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
 
-  // Auto-generate project name from current idea
-  useEffect(() => {
-    if (isProjectManagerOpen && !newProjectName) {
-      const idea = localStorage.getItem('currentIdea')
-      if (idea) {
-        const words = idea.split(' ').slice(0, 3).join(' ')
-        setNewProjectName(`${words} - ${new Date().toLocaleDateString()}`)
-      }
-    }
-  }, [isProjectManagerOpen, newProjectName])
-
-  const handleCreateProject = async () => {
-    if (!newProjectName.trim()) return
-    
-    setIsCreating(true)
-    
-    const newProject: Project = {
-      id: crypto.randomUUID(),
-      name: newProjectName,
-      description: newProjectDescription,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      createdBy: 'current-user', // TODO: Get from auth
-      settings: {
-        defaultDuration: 5,
-        defaultQuality: 'standard',
-        autoRetry: true,
-        maxRetries: 3,
-        consentRequired: true,
-        offlineMode: false
-      },
-      story: {
-        id: crypto.randomUUID(),
-        originalIdea: localStorage.getItem('currentIdea') || '',
-        generatedStory: '',
-        targetRuntime: 60,
-        actualRuntime: 0,
-        tone: '',
-        brandCues: [],
-        styleTokens: [],
-        rationale: '',
-        aspectRatio: '16:9'
-      },
-      scenes: [],
-      characters: [],
-      metadata: {
-        version: '1.0.0',
-        lastModified: new Date(),
-        totalClips: 0,
-        totalDuration: 0,
-        totalCost: 0
-      },
-      permissions: {
-        owner: 'current-user',
-        collaborators: [],
-        roles: []
-      },
-      budget: {
-        projectId: '',
-        softCap: 100,
-        hardCap: 500,
-        currentSpend: 0,
-        currency: 'USD',
-        alerts: []
-      }
-    }
-    
-    // Simulate API call
-    setTimeout(() => {
-      createProject(newProject)
-      setNewProjectName('')
-      setNewProjectDescription('')
-      setIsCreating(false)
-      setProjectManagerOpen(false)
-    }, 1000)
+  const handleCreateProjectSuccess = (project: Project) => {
+    setCurrentProject(project)
+    setProjectManagerOpen(false)
   }
 
   const handleOpenProject = (project: Project) => {
@@ -142,30 +82,31 @@ export default function ProjectManager() {
   if (!isProjectManagerOpen) return null
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      {/* Backdrop */}
-      <div 
-        className="absolute inset-0 bg-black/80 backdrop-blur-sm"
-        onClick={() => setProjectManagerOpen(false)}
-      />
-      
-      {/* Modal */}
-      <div className="relative bg-[#1E1F22] rounded-2xl p-8 max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+    <>
+      <div className="min-h-screen bg-gradient-to-br from-[#08080C] via-[#0C0C14] to-[#08080C] text-white relative">
+        {/* Subtle neon overlay */}
+        <div className="fixed inset-0 bg-gradient-to-br from-cyan-500/5 via-purple-500/5 to-pink-500/5 pointer-events-none z-0" />
         {/* Header */}
-        <div className="flex items-center justify-between mb-8">
-          <h2 className="text-3xl font-bold text-white">Project Manager</h2>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setProjectManagerOpen(false)}
-            className="text-gray-400 hover:text-white"
-          >
-            <X className="w-6 h-6" />
-          </Button>
+        <div className="sticky top-0 z-40 bg-[#08080C]/95 backdrop-blur-sm border-b border-[#00FFF0]/30 shadow-[0_0_10px_rgba(0,255,240,0.1)] relative">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-3xl font-bold text-white">Project Manager</h2>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setProjectManagerOpen(false)}
+                className="text-gray-400 hover:text-white"
+              >
+                <X className="w-6 h-6" />
+              </Button>
+            </div>
+          </div>
         </div>
 
-        {/* Navigation Tabs */}
-        <div className="flex gap-2 mb-6 border-b border-[#3AAFA9]/20">
+        {/* Content */}
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative z-10">
+          {/* Navigation Tabs */}
+          <div className="flex gap-2 mb-6 border-b border-[#00FFF0]/30 relative z-10">
           <button
             onClick={() => setActiveView('projects')}
             className={`flex items-center gap-2 px-4 py-2 font-medium text-sm transition-colors border-b-2 ${
@@ -201,53 +142,22 @@ export default function ProjectManager() {
           </button>
         </div>
 
-        {/* Content based on active view */}
-        {activeView === 'projects' && (
-          <>
-        {/* Create New Project */}
-        <div className="mb-8 p-6 bg-[#0C0C0C] rounded-xl border border-[#3AAFA9]/20">
-          <h3 className="text-xl font-semibold text-white mb-4 flex items-center gap-2">
-            <Plus className="w-5 h-5 text-[#00FFF0]" />
-            Create New Project
-          </h3>
-          
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Project Name
-              </label>
-              <Input
-                value={newProjectName}
-                onChange={(e) => setNewProjectName(e.target.value)}
-                placeholder="Enter project name..."
-                className="bg-[#1E1F22] border-[#3AAFA9] text-white placeholder:text-gray-400"
-              />
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Description (Optional)
-              </label>
-              <Textarea
-                value={newProjectDescription}
-                onChange={(e) => setNewProjectDescription(e.target.value)}
-                placeholder="Describe your project..."
-                className="bg-[#1E1F22] border-[#3AAFA9] text-white placeholder:text-gray-400"
-                rows={3}
-              />
-            </div>
-            
-            <Button
-              onClick={handleCreateProject}
-              disabled={!newProjectName.trim() || isCreating}
-              className="bg-[#00FFF0] hover:bg-[#00FFF0]/90 text-black font-semibold px-6 py-2 rounded-xl"
-            >
-              {isCreating ? 'Creating...' : 'Create Project'}
-            </Button>
-          </div>
-        </div>
+          {/* Content based on active view */}
+          {activeView === 'projects' && (
+            <>
+              {/* Create New Project Button */}
+              <div className="mb-8">
+                <Button
+                  onClick={() => setIsCreateModalOpen(true)}
+                  className="bg-[#00FFF0] hover:bg-[#00FFF0]/90 text-black font-semibold px-6 py-2 rounded-xl flex items-center gap-2
+                           shadow-[0_0_15px_rgba(0,255,240,0.5)] hover:shadow-[0_0_25px_rgba(0,255,240,0.8)] transition-all duration-300"
+                >
+                  <Plus className="w-5 h-5" />
+                  Create New Project
+                </Button>
+              </div>
 
-        {/* Existing Projects */}
+              {/* Existing Projects */}
         <div>
           <h3 className="text-xl font-semibold text-white mb-4 flex items-center gap-2">
             <FolderOpen className="w-5 h-5 text-[#00FFF0]" />
@@ -286,6 +196,12 @@ export default function ProjectManager() {
                           <Clock className="w-3 h-3" />
                           {project.scenes.length} scenes
                         </div>
+                        {project.updatedAt && (
+                          <div className="flex items-center gap-1" title={`Last updated: ${project.updatedAt.toLocaleString()}`}>
+                            <Clock className="w-3 h-3" />
+                            Updated {formatRelativeTime(project.updatedAt)}
+                          </div>
+                        )}
                       </div>
                     </div>
                     <Button
@@ -301,11 +217,11 @@ export default function ProjectManager() {
             </div>
           )}
         </div>
-          </>
-        )}
+            </>
+          )}
 
-        {/* My Images View */}
-        {activeView === 'images' && (
+          {/* My Images View */}
+          {activeView === 'images' && (
           <div>
             <h3 className="text-xl font-semibold text-white mb-4 flex items-center gap-2">
               <Image className="w-5 h-5 text-[#00FFF0]" />
@@ -338,7 +254,7 @@ export default function ProjectManager() {
                       <p className="text-xs text-gray-400 mb-2 truncate">
                         {item.project.name}
                       </p>
-                      <p className="text-xs text-gray-500 truncate">
+                      <p className="text-[8px] text-gray-500 truncate leading-tight mb-1">
                         {item.prompt || 'No prompt'}
                       </p>
                       <div className="mt-2 text-xs text-gray-500">
@@ -350,10 +266,10 @@ export default function ProjectManager() {
               </div>
             )}
           </div>
-        )}
+          )}
 
-        {/* My Videos View */}
-        {activeView === 'videos' && (
+          {/* My Videos View */}
+          {activeView === 'videos' && (
           <div>
             <h3 className="text-xl font-semibold text-white mb-4 flex items-center gap-2">
               <Video className="w-5 h-5 text-[#00FFF0]" />
@@ -398,7 +314,7 @@ export default function ProjectManager() {
                       <p className="text-xs text-gray-400 mb-2 truncate">
                         {item.project.name}
                       </p>
-                      <p className="text-xs text-gray-500 truncate">
+                      <p className="text-[8px] text-gray-500 truncate leading-tight mb-1">
                         {item.prompt || 'No prompt'}
                       </p>
                       <div className="mt-2 text-xs text-gray-500">
@@ -410,8 +326,16 @@ export default function ProjectManager() {
               </div>
             )}
           </div>
-        )}
+          )}
+        </div>
       </div>
-    </div>
+
+      {/* Create Project Modal */}
+      <CreateProjectModal
+        isOpen={isCreateModalOpen}
+        onClose={() => setIsCreateModalOpen(false)}
+        onSuccess={handleCreateProjectSuccess}
+      />
+    </>
   )
 }

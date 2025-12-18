@@ -9,6 +9,9 @@ if (process.env.FAL_KEY) {
 }
 
 export async function POST(request: NextRequest) {
+  // Declare mode at function scope so it's accessible in catch block
+  let mode: string = 'remix'
+  
   try {
     // Parse and validate request body
     let requestBody
@@ -22,13 +25,15 @@ export async function POST(request: NextRequest) {
     }
 
     const {
-      mode = 'remix', // 'edit', 'remix', or 'text-to-image' - used for UI logic only
+      mode: requestMode = 'remix', // 'edit', 'remix', or 'text-to-image' - used for UI logic only
       prompt,
       reference_image_urls = [],
       aspect_ratio = '16:9',
       num_images = 1,
       seed,
     } = requestBody
+    
+    mode = requestMode
 
     if (!process.env.FAL_KEY) {
       return NextResponse.json(
@@ -105,7 +110,7 @@ export async function POST(request: NextRequest) {
 
     // Build Fal AI input object based on mode
     // Different endpoints have different requirements
-    let falInput: Record<string, any> = {
+    let falInput: any = {
       aspect_ratio: aspectRatioFormatted,
     }
 
@@ -199,7 +204,7 @@ export async function POST(request: NextRequest) {
     console.log(`📥 Fal AI Reve (${endpoint}) response:`, JSON.stringify(result, null, 2))
 
     // Remix returns images array
-    const imageUrl = result.data?.images?.[0]?.url || result.data?.image?.url
+    const imageUrl = result.data?.images?.[0]?.url
 
     if (!imageUrl) {
       console.error('❌ No image URL in response. Full result:', result)

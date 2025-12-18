@@ -15,6 +15,9 @@ export interface Project {
   scenes: Scene[];
   characters: Character[];
   
+  // Asset Context (from analysis screen)
+  assetContext?: AssetContext;
+  
   // Metadata
   metadata: ProjectMetadata;
   permissions: ProjectPermissions;
@@ -145,6 +148,30 @@ export interface Clip {
   // Preview
   previewImage?: string;
   previewVideo?: string;
+  
+  // Generation metadata (for automatic remix mode)
+  generationMetadata?: {
+    shouldUseRemix: boolean;
+    referenceImageUrls: string[];
+    assetContext: {
+      characters: Array<{
+        id: string;
+        name: string;
+        assetUrl: string;
+        appearanceDetails: string;
+      }>;
+      products: Array<{
+        id: string;
+        name: string;
+        assetUrl: string;
+      }>;
+      locations: Array<{
+        id: string;
+        name: string;
+        assetUrl: string;
+      }>;
+    };
+  };
   
   // Metadata
   createdAt: Date;
@@ -299,6 +326,7 @@ export interface ProjectSettings {
   maxRetries: number;
   consentRequired: boolean;
   offlineMode: boolean;
+  dontGenerateImages: boolean; // If true, skip auto-generating images for clips
 }
 
 // Style & Branding
@@ -345,6 +373,9 @@ export interface CharacterReference {
   characterId: string;
   role: string;
   faceRefId?: string;
+  // NEW: Direct asset reference for remix mode
+  assetUrl?: string;
+  appearanceDetails?: string;
 }
 
 export interface ClipVersion {
@@ -410,4 +441,78 @@ export interface ModelManifest {
   model: string;
   version: string;
   cost: number;
+}
+
+// Idea Analysis Types
+export interface IdeaAnalysis {
+  preview: string;
+  analysis: {
+    type: "DVC" | "TVC" | "Film" | "Content/UGC" | "Animated/3D/ComputerGenerated";
+    subjectType: "Product" | "Livingbeing";
+    recommendedTone: string[];
+    recommendedBrandCues: string[];
+    detectedItems: DetectedItem[];
+  };
+}
+
+export interface DetectedItem {
+  id: string;
+  type: "character" | "product" | "location";
+  name: string;
+  role?: "protagonist" | "antagonist" | "supporting";
+  mentionedInIdea: boolean;
+  needsExactMatch?: boolean;
+  description: string;
+  suggestedPrompt: string;
+}
+
+// Asset Context (stored in project)
+export interface AssetContext {
+  characters: Array<{
+    id: string;
+    name: string;
+    description: string;
+    role: 'protagonist' | 'antagonist' | 'supporting';
+    assetUrl?: string;
+    assetAction: 'upload' | 'generate' | 'remix' | 'auto';
+    appearanceDetails: string;
+    createdAt: Date;
+  }>;
+  products: Array<{
+    id: string;
+    name: string;
+    description: string;
+    assetUrl?: string;
+    assetAction: 'upload' | 'generate' | 'remix' | 'auto';
+    needsExactMatch: boolean;
+    createdAt: Date;
+  }>;
+  locations: Array<{
+    id: string;
+    name: string;
+    description: string;
+    assetUrl?: string;
+    assetAction: 'upload' | 'generate' | 'remix' | 'auto';
+    createdAt: Date;
+  }>;
+  settings: {
+    tone: string[];
+    brandCues: string[];
+    type: string;
+    confirmed: boolean;
+  };
+}
+
+// Asset Action State (for analysis screen)
+export interface AssetActionState {
+  assetId: string;
+  type: 'character' | 'product' | 'location';
+  name: string;
+  role?: string;
+  action: 'upload' | 'generate' | 'remix' | 'auto' | null;
+  uploadedFile?: File;
+  prompt?: string;
+  baseImageUrl?: string;
+  resultImageUrl?: string;
+  error?: string;
 }

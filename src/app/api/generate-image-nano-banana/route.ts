@@ -85,8 +85,8 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    // Nano Banana typically returns images array
-    const imageUrl = result.data?.images?.[0]?.url || result.data?.image?.url
+    // Nano Banana returns images array
+    const imageUrl = result.data?.images?.[0]?.url
 
     if (!imageUrl) {
       throw new Error('No image URL returned from Fal AI Nano Banana')

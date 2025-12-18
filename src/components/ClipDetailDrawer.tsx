@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input'
 import { X, Play, Settings, Image, Video, Zap, Loader2, Plus, Info, Maximize2 } from 'lucide-react'
 import { FileUpload } from '@/components/ui/fileUpload'
 import ImageModal from './ImageModal'
+import { saveUserImage, saveUserVideo } from '@/lib/userMedia'
 
 export default function ClipDetailDrawer() {
   const { 
@@ -17,7 +18,8 @@ export default function ClipDetailDrawer() {
     setDrawerOpen,
     updateClip,
     currentProject,
-    setClipGeneratingStatus
+    setClipGeneratingStatus,
+    clipGeneratingStatus
   } = useAppStore()
   
   // Get aspect ratio from project story (default to 16:9)
@@ -48,8 +50,20 @@ export default function ClipDetailDrawer() {
     if (selectedClip) {
       setLocalImagePrompt(selectedClip.imagePrompt || '')
       setLocalVideoPrompt(selectedClip.videoPrompt || '')
+      
+      // Sync generating status from global state
+      const currentStatus = clipGeneratingStatus[selectedClip.id]
+      if (currentStatus === 'image') {
+        setIsGeneratingImage(true)
+      } else if (currentStatus === 'video') {
+        setIsGeneratingVideo(true)
+      } else {
+        // Only reset if this clip is not generating
+        setIsGeneratingImage(false)
+        setIsGeneratingVideo(false)
+      }
     }
-  }, [selectedClip?.id, selectedClip?.imagePrompt, selectedClip?.videoPrompt])
+  }, [selectedClip?.id, selectedClip?.imagePrompt, selectedClip?.videoPrompt, clipGeneratingStatus])
 
   // Auto-switch to image-to-video when image is generated
   useEffect(() => {
@@ -150,6 +164,15 @@ export default function ClipDetailDrawer() {
         if (selectedClip?.id) {
           setClipGeneratingStatus(selectedClip.id, null)
         }
+        // Save to user_images table
+        await saveUserImage({
+          image_url: imageUrl,
+          prompt: promptToUse,
+          model: 'openai',
+          aspect_ratio: aspectRatio,
+          project_id: currentProject?.id,
+          clip_id: selectedClip?.id
+        })
       } else if (imageModel === 'fal-ai') {
         // Fal AI Vidu with reference images
         const validReferences = referenceImageUrls.filter(url => url.trim() !== '')
@@ -196,6 +219,15 @@ export default function ClipDetailDrawer() {
         if (selectedClip?.id) {
           setClipGeneratingStatus(selectedClip.id, null)
         }
+        // Save to user_images table
+        await saveUserImage({
+          image_url: imageUrl,
+          prompt: promptToUse,
+          model: 'openai',
+          aspect_ratio: aspectRatio,
+          project_id: currentProject?.id,
+          clip_id: selectedClip?.id
+        })
       } else if (imageModel === 'remix') {
         const aspectRatioToUse = aspectRatio || '16:9'
         console.log('🎨 Fal AI Reve Remix - Mode:', remixMode, 'Aspect ratio:', aspectRatioToUse)
@@ -336,6 +368,15 @@ export default function ClipDetailDrawer() {
         if (selectedClip?.id) {
           setClipGeneratingStatus(selectedClip.id, null)
         }
+        // Save to user_images table
+        await saveUserImage({
+          image_url: imageUrl,
+          prompt: promptToUse,
+          model: 'remix',
+          aspect_ratio: aspectRatioToUse,
+          project_id: currentProject?.id,
+          clip_id: selectedClip?.id
+        })
       } else if (imageModel === 'nano-banana') {
         // Fal AI Nano Banana - supports two modes
         const aspectRatioToUse = aspectRatio || '16:9'
@@ -379,6 +420,15 @@ export default function ClipDetailDrawer() {
         if (selectedClip?.id) {
           setClipGeneratingStatus(selectedClip.id, null)
         }
+        // Save to user_images table
+        await saveUserImage({
+          image_url: imageUrl,
+          prompt: promptToUse,
+          model: 'nano-banana',
+          aspect_ratio: aspectRatio,
+          project_id: currentProject?.id,
+          clip_id: selectedClip?.id
+        })
       }
     } catch (error: any) {
       console.error('Image generation error:', error)
@@ -646,6 +696,17 @@ export default function ClipDetailDrawer() {
       if (selectedClip?.id) {
         setClipGeneratingStatus(selectedClip.id, null)
       }
+      // Save to user_videos table
+      await saveUserVideo({
+        video_url: videoUrl,
+        prompt: promptToUse,
+        model: videoModel || 'vidu',
+        duration: generatedDuration || selectedClip.duration,
+        aspect_ratio: aspectRatio,
+        project_id: currentProject?.id,
+        clip_id: selectedClip?.id,
+        thumbnail_url: selectedClip.generatedImage || undefined
+      })
     } catch (error: any) {
       console.error('❌ Video generation error:', {
         message: error.message,
@@ -714,11 +775,11 @@ export default function ClipDetailDrawer() {
           <div className="h-32 bg-[#0C0C0C] rounded-lg flex items-center justify-center mb-4 relative group">
             {selectedClip.generatedImage ? (
               <>
-                <img 
-                  src={selectedClip.generatedImage} 
-                  alt={selectedClip.name}
-                  className="w-full h-full object-cover rounded-lg"
-                />
+              <img 
+                src={selectedClip.generatedImage} 
+                alt={selectedClip.name}
+                className="w-full h-full object-cover rounded-lg"
+              />
                 <Button
                   variant="ghost"
                   size="icon"
@@ -951,17 +1012,17 @@ export default function ClipDetailDrawer() {
 
               {/* Image Prompt - Hidden for Remix Edit mode, shown for others */}
               {(imageModel !== 'remix' || remixMode !== 'edit') && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Image Prompt
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Image Prompt
                     {imageModel === 'remix' && remixMode === 'remix' && (
                       <span className="text-xs text-gray-400 ml-2">(Required for Remix mode)</span>
                     )}
                     {imageModel === 'remix' && remixMode === 'text-to-image' && (
                       <span className="text-xs text-gray-400 ml-2">(Required for Text-to-Image mode)</span>
                     )}
-                  </label>
-                  <Textarea
+                </label>
+                <Textarea
                     value={localImagePrompt}
                     onChange={(e) => handleImagePromptChange(e.target.value)}
                     placeholder={
@@ -973,11 +1034,11 @@ export default function ClipDetailDrawer() {
                         ? "Describe how to combine and transform the reference images (e.g., 'Blend the style of the first image with the content of the second')..."
                         : "Describe the image you want to generate..."
                     }
-                    className="w-full h-24 bg-[#0C0C0C] border-[#3AAFA9] text-white placeholder:text-gray-400 
-                             focus:border-[#00FFF0] focus:ring-2 focus:ring-[#00FFF0]/20 focus:outline-none
-                             rounded-lg px-3 py-2 text-sm resize-none"
-                  />
-                </div>
+                  className="w-full h-24 bg-[#0C0C0C] border-[#3AAFA9] text-white placeholder:text-gray-400 
+                           focus:border-[#00FFF0] focus:ring-2 focus:ring-[#00FFF0]/20 focus:outline-none
+                           rounded-lg px-3 py-2 text-sm resize-none"
+                />
+              </div>
               )}
 
               {/* Reference Images - Required for Fal AI Vidu and Remix (Edit/Remix modes only, not Text-to-Image) */}
@@ -1043,7 +1104,7 @@ export default function ClipDetailDrawer() {
                               className="flex-1 bg-[#0C0C0C] border-[#3AAFA9] text-white text-sm"
                             />
                             {referenceImageUrls.length > 1 && (
-                              <Button
+              <Button
                                 variant="ghost"
                                 size="icon"
                                 onClick={() => removeReferenceImageUrl(index)}
@@ -1164,11 +1225,12 @@ export default function ClipDetailDrawer() {
                   </div>
                 </div>
               )}
-              
+
               <Button
                 onClick={handleGenerateImage}
                 disabled={
                   isGeneratingImage || 
+                  clipGeneratingStatus[selectedClip.id] === 'image' ||
                   (imageModel === 'remix' && remixMode === 'edit' && referenceImageUrls.filter(url => url.trim() !== '').length === 0) ||
                   (imageModel === 'remix' && remixMode === 'remix' && (!localImagePrompt?.trim() || referenceImageUrls.filter(url => url.trim() !== '').length === 0)) ||
                   (imageModel === 'remix' && remixMode === 'text-to-image' && !localImagePrompt?.trim()) ||
@@ -1177,14 +1239,14 @@ export default function ClipDetailDrawer() {
                 className="w-full bg-[#00FFF0] hover:bg-[#00FFF0]/90 text-black font-semibold py-2 rounded-lg
                          disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {isGeneratingImage ? (
+                {(isGeneratingImage || clipGeneratingStatus[selectedClip.id] === 'image') ? (
                   <>
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                     Generating...
                   </>
                 ) : (
                   <>
-                    <Image className="w-4 h-4 mr-2" />
+                <Image className="w-4 h-4 mr-2" />
                     Generate Preview Image
                   </>
                 )}
@@ -1212,7 +1274,7 @@ export default function ClipDetailDrawer() {
                       aria-label="Expand image preview"
                     >
                       <Maximize2 className="w-5 h-5 text-[#00FFF0]" />
-                    </Button>
+              </Button>
                   </div>
                 </div>
               )}
@@ -1278,7 +1340,7 @@ export default function ClipDetailDrawer() {
                            rounded-lg px-3 py-2 text-sm resize-none"
                 />
               </div>
-
+              
               {(videoModel === 'image-to-video' || videoModel === 'kling') && (
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">
@@ -1371,8 +1433,8 @@ export default function ClipDetailDrawer() {
                         )}
                       </div>
                     ))}
-                    <Button
-                      variant="outline"
+                <Button
+                  variant="outline"
                       size="sm"
                       onClick={addVideoReferenceUrl}
                       className="w-full border-[#3AAFA9] text-[#3AAFA9] hover:bg-[#3AAFA9] hover:text-black"
@@ -1394,37 +1456,37 @@ export default function ClipDetailDrawer() {
                     className={selectedClip.duration === 5 
                       ? 'bg-[#00FFF0] text-black' 
                       : 'border-[#3AAFA9] text-[#3AAFA9] hover:bg-[#3AAFA9] hover:text-black'}
-                    onClick={() => handleUpdateClip({ duration: 5 })}
-                  >
-                    5s
-                  </Button>
-                  <Button
+                  onClick={() => handleUpdateClip({ duration: 5 })}
+                >
+                  5s
+                </Button>
+                <Button
                     variant={selectedClip.duration === 10 ? 'default' : 'outline'}
                     className={selectedClip.duration === 10 
                       ? 'bg-[#00FFF0] text-black' 
                       : 'border-[#3AAFA9] text-[#3AAFA9] hover:bg-[#3AAFA9] hover:text-black'}
-                    onClick={() => handleUpdateClip({ duration: 10 })}
-                  >
-                    10s
-                  </Button>
+                  onClick={() => handleUpdateClip({ duration: 10 })}
+                >
+                  10s
+                </Button>
                 </div>
               </div>
               
               <Button
                 onClick={handleGenerateVideo}
-                disabled={!localVideoPrompt?.trim() || isGeneratingVideo}
+                disabled={!localVideoPrompt?.trim() || isGeneratingVideo || clipGeneratingStatus[selectedClip.id] === 'video'}
                 className="w-full bg-[#00FFF0] hover:bg-[#00FFF0]/90 text-black font-semibold py-2 rounded-lg
                          disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {isGeneratingVideo ? (
+                {(isGeneratingVideo || clipGeneratingStatus[selectedClip.id] === 'video') ? (
                   <>
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                     Generating Video...
                   </>
                 ) : (
                   <>
-                    <Video className="w-4 h-4 mr-2" />
-                    Generate Video
+                <Video className="w-4 h-4 mr-2" />
+                Generate Video
                   </>
                 )}
               </Button>
@@ -1491,13 +1553,13 @@ export default function ClipDetailDrawer() {
                       <p className="font-medium text-gray-300 mb-1">Output:</p>
                       <p className="ml-2">Video with faces replaced while maintaining motion and scene consistency</p>
                     </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
+                  <Button
+                    variant="outline"
+                    size="sm"
                       className="w-full border-[#3AAFA9] text-[#3AAFA9] hover:bg-[#3AAFA9] hover:text-black"
-                    >
-                      Upload Face Reference
-                    </Button>
+                  >
+                    Upload Face Reference
+                  </Button>
                   </div>
                 </div>
                 
@@ -1523,13 +1585,13 @@ export default function ClipDetailDrawer() {
                       <p className="font-medium text-gray-300 mb-1">Output:</p>
                       <p className="ml-2">Video with objects swapped seamlessly throughout all frames</p>
                     </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
+                  <Button
+                    variant="outline"
+                    size="sm"
                       className="w-full border-[#3AAFA9] text-[#3AAFA9] hover:bg-[#3AAFA9] hover:text-black"
-                    >
+                  >
                       Add Object Replacement
-                    </Button>
+                  </Button>
                   </div>
                 </div>
                 
@@ -1555,13 +1617,13 @@ export default function ClipDetailDrawer() {
                       <p className="font-medium text-gray-300 mb-1">Output:</p>
                       <p className="ml-2">Clean video with object removed and background seamlessly filled</p>
                     </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
+                  <Button
+                    variant="outline"
+                    size="sm"
                       className="w-full border-[#3AAFA9] text-[#3AAFA9] hover:bg-[#3AAFA9] hover:text-black"
-                    >
+                  >
                       Select Object to Remove
-                    </Button>
+                  </Button>
                   </div>
                 </div>
 

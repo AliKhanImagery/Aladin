@@ -3,16 +3,43 @@
 import { useState, useRef, useEffect } from 'react'
 import { useAppStore } from '@/lib/store'
 import { Button } from '@/components/ui/button'
-import { Play, Pause, Download, Volume2, VolumeX, Settings } from 'lucide-react'
+import { Select, SelectOption } from '@/components/ui/select'
+import { Play, Pause, Download, Volume2, VolumeX, Settings, Sparkles, Loader2, Clock, Zap } from 'lucide-react'
+import { Clip } from '@/types'
+import { saveUserVideo } from '@/lib/userMedia'
+import toast from 'react-hot-toast'
+
+// Video model options
+const VIDEO_MODELS: SelectOption[] = [
+  {
+    value: 'vidu',
+    label: 'Vidu (Recommended)',
+    description: 'High quality, supports image-to-video and text-to-video'
+  },
+  {
+    value: 'kling',
+    label: 'Kling AI',
+    description: 'Alternative model for video generation'
+  }
+]
 
 export default function TimelineTab() {
-  const { currentProject } = useAppStore()
+  const { 
+    currentProject, 
+    updateClip, 
+    setClipGeneratingStatus, 
+    clipGeneratingStatus,
+    user,
+    saveProjectNow
+  } = useAppStore()
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
   const [isMuted, setIsMuted] = useState(false)
   const [hasLipsync, setHasLipsync] = useState(false)
   const [hasSFX, setHasSFX] = useState(false)
   const [currentClipIndex, setCurrentClipIndex] = useState(0)
+  const [isGeneratingTimeline, setIsGeneratingTimeline] = useState(false)
+  const [selectedVideoModel, setSelectedVideoModel] = useState<string>('vidu')
   const videoRef = useRef<HTMLVideoElement>(null)
   const timelineRef = useRef<HTMLDivElement>(null)
 
@@ -138,27 +165,131 @@ export default function TimelineTab() {
     }
   }
 
-  // Sync video element with current clip
+  // Handle video source changes smoothly when clip changes
   useEffect(() => {
-    if (videoRef.current && currentClip?.generatedVideo && currentClipType === 'video') {
-      videoRef.current.src = currentClip.generatedVideo
-      videoRef.current.load()
-      
-      if (isPlaying) {
-        videoRef.current.play().catch(error => {
-          console.error('Error playing video:', error)
+    const video = videoRef.current
+    if (!video || currentClipType !== 'video' || !currentClip?.generatedVideo) {
+      return
+    }
+
+    // Check if we're switching to a different clip
+    const previousClipId = video.getAttribute('data-clip-id')
+    const isNewClip = previousClipId !== currentClip.id
+
+    if (isNewClip) {
+      // New clip - update source smoothly
+      const wasPlaying = !video.paused
+      const currentSrc = video.src
+
+      // Only change source if it's actually different
+      if (currentSrc !== currentClip.generatedVideo) {
+        // Pause current video to prevent black screen
+        video.pause()
+        
+        // Update source
+        video.src = currentClip.generatedVideo
+        video.setAttribute('data-clip-id', currentClip.id)
+        
+        // Reset time
+        setCurrentTime(0)
+        video.currentTime = 0
+        
+        // Load new video
+        video.load()
+        
+        // Resume playing if it was playing before
+        if (wasPlaying && isPlaying) {
+          const handleCanPlayThrough = () => {
+            if (video.src === currentClip.generatedVideo) {
+              video.play().catch(() => {
+                // Ignore play errors
+              })
+            }
+            video.removeEventListener('canplaythrough', handleCanPlayThrough)
+          }
+          video.addEventListener('canplaythrough', handleCanPlayThrough, { once: true })
+        }
+      }
+    }
+  }, [currentClipIndex, currentClip?.id, currentClip?.generatedVideo, currentClipType])
+
+  // Sync video playback state when clip changes or play state changes
+  // This effect handles smooth transitions between video clips
+  useEffect(() => {
+    const video = videoRef.current
+    if (!video || currentClipType !== 'video' || !currentClip?.generatedVideo) {
+      return
+    }
+
+    // Don't reset time if we're just changing play state on the same clip
+    const previousClipId = video.getAttribute('data-clip-id')
+    if (previousClipId !== currentClip.id) {
+      setCurrentTime(0)
+      video.setAttribute('data-clip-id', currentClip.id)
+    }
+
+    // Wait for video to be ready before playing
+    const handleCanPlay = () => {
+      // Double-check the video source matches (in case clip changed during load)
+      if (video.src === currentClip.generatedVideo && isPlaying) {
+        video.play().catch(error => {
+          // Only log if it's not an AbortError (which is expected during transitions)
+          if (error.name !== 'AbortError') {
+            console.error('Error playing video:', error)
+          }
           setIsPlaying(false)
         })
-      } else {
-        videoRef.current.pause()
       }
-    } else if (videoRef.current) {
-      // Clear video source if clip doesn't have video or switching away from video
-      videoRef.current.src = ''
-      videoRef.current.load()
-      // Don't set isPlaying to false here - let it stay in play state for auto-advance
     }
-  }, [currentClipIndex, currentClip, currentClipType, isPlaying])
+
+    const handleLoadedData = () => {
+      // Video is ready, can now play if needed
+      if (video.src === currentClip.generatedVideo && isPlaying) {
+        // Small delay to ensure video is fully ready
+        requestAnimationFrame(() => {
+          if (video.src === currentClip.generatedVideo && isPlaying) {
+            video.play().catch(error => {
+              if (error.name !== 'AbortError') {
+                console.error('Error playing video:', error)
+              }
+              setIsPlaying(false)
+            })
+          }
+        })
+      }
+    }
+
+    // If video is already loaded and ready, try to play immediately
+    if (video.readyState >= 3) { // HAVE_FUTURE_DATA or higher (more reliable)
+      if (isPlaying && video.src === currentClip.generatedVideo) {
+        // Use requestAnimationFrame to ensure smooth transition
+        requestAnimationFrame(() => {
+          if (video.src === currentClip.generatedVideo && isPlaying) {
+            video.play().catch(error => {
+              if (error.name !== 'AbortError') {
+                console.error('Error playing video:', error)
+              }
+              setIsPlaying(false)
+            })
+          }
+        })
+      } else if (!isPlaying) {
+        video.pause()
+      }
+    } else {
+      // Wait for video to load - use both events for better compatibility
+      video.addEventListener('canplay', handleCanPlay, { once: true })
+      video.addEventListener('loadeddata', handleLoadedData, { once: true })
+      video.addEventListener('canplaythrough', handleCanPlay, { once: true })
+    }
+
+    // Cleanup function
+    return () => {
+      video.removeEventListener('canplay', handleCanPlay)
+      video.removeEventListener('loadeddata', handleLoadedData)
+      video.removeEventListener('canplaythrough', handleCanPlay)
+    }
+  }, [currentClipIndex, currentClip?.id, currentClip?.generatedVideo, currentClipType, isPlaying])
 
   // Format time for display
   const formatTime = (seconds: number) => {
@@ -166,6 +297,383 @@ export default function TimelineTab() {
     const secs = Math.floor(seconds % 60)
     return `${mins}:${secs.toString().padStart(2, '0')}`
   }
+
+  // Generate videos for all clips that need them
+  const handleGenerateTimeline = async () => {
+    if (!currentProject) return
+
+    // Get all clips that need video generation
+    const clipsNeedingVideo: Array<{ clip: Clip; sceneId: string }> = []
+    currentProject.scenes.forEach(scene => {
+      scene.clips.forEach(clip => {
+        // Only generate if clip has a video prompt and doesn't already have a video
+        if (clip.videoPrompt && !clip.generatedVideo) {
+          clipsNeedingVideo.push({ clip, sceneId: scene.id })
+        }
+      })
+    })
+
+    if (clipsNeedingVideo.length === 0) {
+      toast.success('All clips already have videos!')
+      return
+    }
+
+    // CRITICAL: Save project BEFORE starting generation to prevent data loss
+    if (user?.id) {
+      try {
+        console.log('💾 Saving project state before video generation...')
+        await saveProjectNow(currentProject.id, true)
+        console.log('✅ Project saved successfully before generation')
+        toast.success('Project saved. Starting video generation...', { duration: 2000 })
+      } catch (saveError) {
+        console.error('❌ Failed to save project before generation:', saveError)
+        toast.error('Failed to save project. Please try again.', { duration: 3000 })
+        return // Don't proceed if save fails
+      }
+    }
+
+    console.log(`🎬 Starting timeline generation for ${clipsNeedingVideo.length} clips with model: ${selectedVideoModel}...`)
+    setIsGeneratingTimeline(true)
+
+    // Set generating status for ALL clips immediately
+    clipsNeedingVideo.forEach(({ clip }) => {
+      setClipGeneratingStatus(clip.id, 'video')
+    })
+
+    toast.loading(`Generating ${clipsNeedingVideo.length} videos...`, { id: 'timeline-generation' })
+
+    const startTime = Date.now()
+    const aspectRatio = currentProject.story.aspectRatio || '16:9'
+
+    // Generate all videos in parallel
+    const videoGenerationPromises = clipsNeedingVideo.map(async ({ clip }, index) => {
+      const clipName = clip.name
+      const clipId = clip.id
+      const requestStartTime = Date.now()
+
+      try {
+        console.log(`\n🎬 [${index + 1}/${clipsNeedingVideo.length}] Starting video generation for clip: "${clipName}"`, {
+          clipId,
+          promptLength: clip.videoPrompt?.length || 0,
+          promptPreview: clip.videoPrompt?.substring(0, 100) + '...' || 'N/A',
+          duration: clip.duration || 5,
+          aspectRatio
+        })
+
+        // Determine video model based on available assets and user selection
+        let requestBody: any = {
+          prompt: clip.videoPrompt,
+          duration: clip.duration || 5,
+          resolution: '720p',
+          videoModel: selectedVideoModel, // Use selected model
+        }
+
+        // Use image-to-video if clip has an image
+        if (clip.generatedImage) {
+          requestBody.image_url = clip.generatedImage
+          console.log(`📸 [${index + 1}/${clipsNeedingVideo.length}] Using image-to-video for "${clipName}" with model: ${selectedVideoModel}`)
+        } else {
+          // Text-to-video
+          console.log(`📝 [${index + 1}/${clipsNeedingVideo.length}] Using text-to-video for "${clipName}" with model: ${selectedVideoModel}`)
+        }
+
+        // Create timeout controller
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => {
+          console.warn(`⏱️ [${index + 1}/${clipsNeedingVideo.length}] Timeout triggered for "${clipName}" after 5 minutes`)
+          controller.abort()
+        }, 300000) // 5 minute timeout for videos
+
+        let videoResponse
+        try {
+          console.log(`📤 [${index + 1}/${clipsNeedingVideo.length}] Sending request to /api/generate-video for "${clipName}"`)
+          videoResponse = await fetch('/api/generate-video', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(requestBody),
+            signal: controller.signal,
+          })
+
+          const requestDuration = Date.now() - requestStartTime
+          console.log(`📥 [${index + 1}/${clipsNeedingVideo.length}] Response received for "${clipName}"`, {
+            status: videoResponse.status,
+            statusText: videoResponse.statusText,
+            ok: videoResponse.ok,
+            duration: `${requestDuration}ms`
+          })
+        } catch (fetchError: any) {
+          clearTimeout(timeoutId)
+          const requestDuration = Date.now() - requestStartTime
+
+          console.error(`❌ [${index + 1}/${clipsNeedingVideo.length}] Fetch error for "${clipName}"`, {
+            errorName: fetchError.name,
+            errorMessage: fetchError.message,
+            duration: `${requestDuration}ms`,
+            isAbort: fetchError.name === 'AbortError'
+          })
+
+          if (fetchError.name === 'AbortError') {
+            throw new Error('Video generation timed out after 5 minutes')
+          }
+          throw fetchError
+        } finally {
+          clearTimeout(timeoutId)
+        }
+
+        if (!videoResponse) {
+          throw new Error('No response received from video generation API')
+        }
+
+        if (!videoResponse.ok) {
+          let errorMessage = 'Unknown error'
+          try {
+            const errorData = await videoResponse.json()
+            errorMessage = errorData.error || errorData.message || JSON.stringify(errorData)
+          } catch (e) {
+            errorMessage = `HTTP ${videoResponse.status}: ${videoResponse.statusText}`
+          }
+          console.error(`❌ [${index + 1}/${clipsNeedingVideo.length}] API error for "${clipName}"`, {
+            status: videoResponse.status,
+            errorMessage
+          })
+          throw new Error(errorMessage)
+        }
+
+        let responseData
+        try {
+          responseData = await videoResponse.json()
+          console.log(`📦 [${index + 1}/${clipsNeedingVideo.length}] Response parsed for "${clipName}"`, {
+            hasVideoUrl: !!responseData.videoUrl,
+            duration: responseData.duration
+          })
+        } catch (parseError) {
+          throw new Error(`Failed to parse response: ${parseError}`)
+        }
+
+        const videoUrl = responseData.videoUrl
+        if (!videoUrl) {
+          throw new Error(`No video URL in response: ${JSON.stringify(responseData)}`)
+        }
+
+        console.log(`✅ [${index + 1}/${clipsNeedingVideo.length}] Video URL extracted for "${clipName}"`, {
+          videoUrl: videoUrl.substring(0, 100) + '...'
+        })
+
+        // Update clip with generated video
+        console.log(`💾 [${index + 1}/${clipsNeedingVideo.length}] Updating clip "${clipName}" with generated video...`)
+        updateClip(clipId, {
+          generatedVideo: videoUrl,
+          previewVideo: videoUrl,
+          duration: responseData.duration || clip.duration
+        })
+        console.log(`✓ [${index + 1}/${clipsNeedingVideo.length}] Clip "${clipName}" updated successfully`)
+        
+        // CRITICAL: Wait a tick to ensure Zustand store has updated before saving
+        await new Promise(resolve => setTimeout(resolve, 100))
+
+        // CRITICAL: Save to user_videos table if authenticated
+        if (user?.id) {
+          try {
+            console.log(`💾 [${index + 1}/${clipsNeedingVideo.length}] Saving video to database for "${clipName}"...`)
+            const savedVideo = await saveUserVideo({
+              video_url: videoUrl,
+              prompt: clip.videoPrompt,
+              model: selectedVideoModel, // Save the model used
+              duration: responseData.duration || clip.duration,
+              aspect_ratio: aspectRatio,
+              project_id: currentProject.id,
+              clip_id: clipId,
+              thumbnail_url: clip.generatedImage || undefined
+            })
+            
+            if (!savedVideo) {
+              throw new Error('saveUserVideo returned null - video was not saved to database')
+            }
+            
+            console.log(`✅ [${index + 1}/${clipsNeedingVideo.length}] Video saved to database for "${clipName}"`, {
+              videoId: savedVideo.id
+            })
+          } catch (err: any) {
+            const errorMsg = err?.message || 'Unknown error'
+            console.error(`❌ [${index + 1}/${clipsNeedingVideo.length}] CRITICAL: Failed to save video to database for "${clipName}"`, {
+              error: errorMsg,
+              videoUrl: videoUrl.substring(0, 50) + '...',
+              clipId,
+              projectId: currentProject.id
+            })
+            // Don't throw - continue with project save, but log as critical error
+            toast.error(`Video generated but failed to save to database: ${errorMsg}`, { duration: 5000 })
+          }
+        } else {
+          console.warn(`⚠️ [${index + 1}/${clipsNeedingVideo.length}] Skipping video database save - user not authenticated`)
+        }
+
+        const totalDuration = Date.now() - requestStartTime
+        console.log(`✅ [${index + 1}/${clipsNeedingVideo.length}] Video generation completed for "${clipName}"`, {
+          duration: `${totalDuration}ms`
+        })
+
+        setClipGeneratingStatus(clipId, null)
+        
+        // CRITICAL: Save project immediately after each video generation to prevent data loss
+        // Get the latest project state from store to ensure we have the updated clip
+        if (user?.id) {
+          try {
+            // Get the latest project state from the store (it should have the updated clip)
+            const latestProject = useAppStore.getState().currentProject
+            if (!latestProject) {
+              throw new Error('Current project is null - cannot save')
+            }
+            
+            console.log(`💾 [${index + 1}/${clipsNeedingVideo.length}] Saving project after video generation for "${clipName}"...`)
+            const saveResult = await saveProjectNow(latestProject.id, true)
+            
+            // Check if save actually succeeded
+            if (saveResult === undefined) {
+              // saveProjectNow doesn't return anything, check the project state
+              const lastSaved = useAppStore.getState().projectLastSaved[latestProject.id]
+              if (!lastSaved) {
+                throw new Error('Project save did not complete - no lastSaved timestamp')
+              }
+              console.log(`✅ [${index + 1}/${clipsNeedingVideo.length}] Project saved after "${clipName}" video generation`, {
+                lastSaved: lastSaved.toISOString()
+              })
+            }
+          } catch (saveErr: any) {
+            const errorMsg = saveErr?.message || 'Unknown error'
+            console.error(`❌ [${index + 1}/${clipsNeedingVideo.length}] CRITICAL: Failed to save project after video generation:`, {
+              error: errorMsg,
+              clipName,
+              clipId,
+              projectId: currentProject.id,
+              stack: saveErr?.stack
+            })
+            // Show user-facing error
+            toast.error(`CRITICAL: Project save failed after video generation: ${errorMsg}`, { 
+              duration: 8000,
+              id: `save-error-${clipId}`
+            })
+            // Don't throw - continue with other videos, but this is critical
+          }
+        } else {
+          console.warn(`⚠️ [${index + 1}/${clipsNeedingVideo.length}] Skipping project save - user not authenticated`)
+        }
+        
+        return { success: true, clipId, clipName, videoUrl, duration: totalDuration }
+      } catch (error: any) {
+        const errorMessage = error.message || 'Unknown error'
+        const totalDuration = Date.now() - requestStartTime
+
+        if (error.name === 'AbortError' || errorMessage.includes('timeout')) {
+          console.error(`⏱️ [${index + 1}/${clipsNeedingVideo.length}] Timeout generating video for "${clipName}"`, {
+            duration: `${totalDuration}ms`
+          })
+        } else {
+          console.error(`❌ [${index + 1}/${clipsNeedingVideo.length}] Error generating video for "${clipName}"`, {
+            error: errorMessage,
+            duration: `${totalDuration}ms`
+          })
+        }
+
+        setClipGeneratingStatus(clipId, null)
+        return { success: false, clipId, clipName, error: errorMessage, duration: totalDuration }
+      }
+    })
+
+    // Wait for all video generations to complete
+    console.log('⏳ Waiting for all video generation requests to complete...')
+    let results: Array<{ success: boolean; clipId: string; clipName: string; videoUrl?: string; error?: string; duration: number }>
+    try {
+      results = await Promise.all(videoGenerationPromises)
+    } catch (error) {
+      console.error('❌ Error in Promise.all for video generation:', error)
+      // Ensure we still process what we can
+      results = []
+    }
+    
+    const totalDuration = Date.now() - startTime
+
+    // Process results
+    const successful = results.filter(r => r.success)
+    const failed = results.filter(r => !r.success)
+
+    console.log(`\n📊 Timeline Generation Summary:`, {
+      total: clipsNeedingVideo.length,
+      successful: successful.length,
+      failed: failed.length,
+      totalDuration: `${totalDuration}ms (${(totalDuration / 1000).toFixed(2)}s)`
+    })
+
+    // CRITICAL: Always clear generating status, even if there were errors
+    setIsGeneratingTimeline(false)
+    
+    // Ensure all clip generating statuses are cleared
+    clipsNeedingVideo.forEach(({ clip }) => {
+      setClipGeneratingStatus(clip.id, null)
+    })
+
+    // CRITICAL: Final save after all videos are generated
+    // Get the latest project state to ensure all updates are included
+    if (user?.id) {
+      try {
+        // Wait a bit to ensure all Zustand updates have propagated
+        await new Promise(resolve => setTimeout(resolve, 200))
+        
+        const latestProject = useAppStore.getState().currentProject
+        if (!latestProject) {
+          throw new Error('Current project is null - cannot perform final save')
+        }
+        
+        console.log('💾 Performing final project save after all video generations...', {
+          projectId: latestProject.id,
+          totalClips: latestProject.scenes?.reduce((sum, s) => sum + (s.clips?.length || 0), 0) || 0,
+          videosGenerated: latestProject.scenes?.flatMap(s => s.clips || []).filter(c => c.generatedVideo).length || 0
+        })
+        
+        await saveProjectNow(latestProject.id, true)
+        
+        // Verify save succeeded by checking lastSaved timestamp
+        await new Promise(resolve => setTimeout(resolve, 100))
+        const lastSaved = useAppStore.getState().projectLastSaved[latestProject.id]
+        if (lastSaved) {
+          console.log('✅ Final project save completed successfully', {
+            lastSaved: lastSaved.toISOString(),
+            projectId: latestProject.id
+          })
+          toast.success(`All videos generated and project saved successfully!`, { duration: 4000 })
+        } else {
+          throw new Error('Final save did not complete - no lastSaved timestamp')
+        }
+      } catch (saveErr: any) {
+        const errorMsg = saveErr?.message || 'Unknown error'
+        console.error('❌ CRITICAL: Failed to save project after batch video generation:', {
+          error: errorMsg,
+          stack: saveErr?.stack
+        })
+        toast.error(`CRITICAL: Videos generated but project save failed: ${errorMsg}. Please save manually!`, { 
+          duration: 10000,
+          id: 'final-save-error'
+        })
+      }
+    }
+
+    if (failed.length > 0) {
+      toast.error(`Timeline generation completed: ${successful.length} succeeded, ${failed.length} failed`, {
+        id: 'timeline-generation',
+        duration: 5000
+      })
+    } else {
+      toast.success(`All ${successful.length} videos generated successfully!`, {
+        id: 'timeline-generation',
+        duration: 3000
+      })
+    }
+  }
+
+  // Check if any clips are generating - sync with isGeneratingTimeline state
+  const isAnyClipGenerating = isGeneratingTimeline || allClips.some(clip => clipGeneratingStatus[clip.id] === 'video')
 
   return (
     <div className="max-w-7xl mx-auto space-y-8">
@@ -186,6 +694,48 @@ export default function TimelineTab() {
             <p className="text-sm text-gray-400">Total Cost</p>
             <p className="text-lg font-semibold text-[#FFC44D]">${totalCost.toFixed(2)}</p>
           </div>
+          {/* Generate Timeline Button with Model Selection */}
+          {allClips.length > 0 && (
+            <div className="flex flex-col items-end gap-2">
+              <div className="flex items-center gap-2">
+                {/* Model Selection Dropdown */}
+                <div className="relative">
+                  <Select
+                    value={selectedVideoModel}
+                    onChange={(e) => setSelectedVideoModel(e.target.value)}
+                    options={VIDEO_MODELS}
+                    disabled={isGeneratingTimeline}
+                    className="w-52 bg-[#1E1F22] border-[#3AAFA9]/30 text-white"
+                  />
+                </div>
+                
+                <Button
+                  onClick={handleGenerateTimeline}
+                  disabled={isGeneratingTimeline || allClips.every(clip => clip.generatedVideo)}
+                  className="bg-[#00FFF0] hover:bg-[#00FFF0]/90 text-black font-semibold px-6 py-3 rounded-xl
+                           disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                >
+                  {isGeneratingTimeline ? (
+                    <>
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                      Generating Timeline...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-5 h-5" />
+                      Generate Timeline
+                    </>
+                  )}
+                </Button>
+              </div>
+              {/* Model Description */}
+              {!isGeneratingTimeline && (
+                <p className="text-xs text-gray-400 text-right max-w-md">
+                  {VIDEO_MODELS.find(m => m.value === selectedVideoModel)?.description}
+                </p>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
@@ -201,10 +751,30 @@ export default function TimelineTab() {
                   <video
                     ref={videoRef}
                     className="w-full h-full object-contain"
+                    src={currentClip.generatedVideo}
                     onEnded={handleVideoEnd}
                     onTimeUpdate={handleTimeUpdate}
+                    onLoadedData={() => {
+                      // Video loaded, sync time
+                      if (videoRef.current && videoRef.current.currentTime > 0) {
+                        setCurrentTime(videoRef.current.currentTime)
+                      }
+                    }}
+                    onCanPlay={() => {
+                      // Video can play, ensure smooth transition
+                      if (videoRef.current && isPlaying && videoRef.current.paused) {
+                        videoRef.current.play().catch(() => {
+                          // Ignore play errors during transitions
+                        })
+                      }
+                    }}
+                    onError={(e) => {
+                      console.error('Video playback error:', e)
+                    }}
                     muted={isMuted}
                     playsInline
+                    preload="auto"
+                    crossOrigin="anonymous"
                   />
                 ) : currentClipType === 'image' && currentClip.generatedImage ? (
                   /* Image State */
@@ -349,7 +919,6 @@ export default function TimelineTab() {
                   Next →
                 </Button>
               </div>
-            )}
           </div>
           
           {/* Current Clip Info */}
@@ -418,7 +987,49 @@ export default function TimelineTab() {
         </div>
 
         {/* Timeline Track */}
-        <div className="bg-[#0C0C0C] rounded-xl p-4 overflow-x-auto">
+        <div className="bg-[#0C0C0C] rounded-xl p-4 overflow-x-auto relative">
+          {/* Magical Animation Overlay - Shows when generating */}
+          {isAnyClipGenerating && (
+            <div className="absolute inset-0 bg-gradient-to-r from-[#00FFF0]/10 via-[#3AAFA9]/20 to-[#00FFF0]/10 rounded-xl z-10 pointer-events-none overflow-hidden">
+              {/* Animated sparkles */}
+              <div className="absolute inset-0">
+                {[...Array(20)].map((_, i) => (
+                  <div
+                    key={i}
+                    className="absolute w-2 h-2 bg-[#00FFF0] rounded-full animate-pulse"
+                    style={{
+                      left: `${(i * 5) % 100}%`,
+                      top: `${(i * 7) % 100}%`,
+                      animationDelay: `${i * 0.2}s`,
+                      animationDuration: `${2 + (i % 3)}s`,
+                      opacity: 0.6 + (i % 3) * 0.1
+                    }}
+                  />
+                ))}
+              </div>
+              {/* Shimmer effect */}
+              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent animate-shimmer"
+                style={{
+                  backgroundSize: '200% 100%'
+                }}
+              />
+              {/* Glowing border */}
+              <div className="absolute inset-0 border-2 border-[#00FFF0]/50 rounded-xl animate-pulse" />
+              {/* Text overlay */}
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="bg-[#0C0C0C]/90 backdrop-blur-sm rounded-xl px-6 py-4 border border-[#00FFF0]/30">
+                  <div className="flex items-center gap-3">
+                    <Zap className="w-6 h-6 text-[#00FFF0] animate-pulse" />
+                    <div>
+                      <p className="text-white font-semibold">Generating Timeline...</p>
+                      <p className="text-xs text-gray-400">Creating magical videos for your story</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+          
           <div className="flex gap-2 min-w-max">
             {allClips.length === 0 ? (
               <div className="text-center py-16 w-full">
@@ -431,57 +1042,89 @@ export default function TimelineTab() {
                 </p>
               </div>
             ) : (
-              allClips.map((clip, index) => (
-                <div
-                  key={clip.id}
-                  className="bg-[#1E1F22] rounded-lg p-3 min-w-[200px] border border-[#3AAFA9]/20 hover:border-[#00FFF0]/40 transition-colors"
-                >
-                  <div className="flex items-center justify-between mb-2">
-                    <h4 className="font-medium text-white text-sm truncate">{clip.name}</h4>
-                    <span className="text-xs text-gray-400">{clip.duration}s</span>
-                  </div>
-                  
-                  <div className="h-16 bg-[#0C0C0C] rounded mb-2 flex items-center justify-center">
-                    {clip.generatedVideo ? (
-                      <video 
-                        src={clip.generatedVideo}
-                        className="w-full h-full object-cover rounded"
-                        muted
-                      />
-                    ) : (
-                      <div className="text-center text-gray-500">
-                        <Play className="w-6 h-6 mx-auto mb-1" />
-                        <p className="text-xs">Pending</p>
+              allClips.map((clip, index) => {
+                const isGenerating = clipGeneratingStatus[clip.id] === 'video'
+                return (
+                  <div
+                    key={clip.id}
+                    className={`bg-[#1E1F22] rounded-lg p-3 min-w-[200px] border transition-all relative ${
+                      isGenerating 
+                        ? 'border-[#00FFF0] shadow-lg shadow-[#00FFF0]/20 animate-pulse' 
+                        : 'border-[#3AAFA9]/20 hover:border-[#00FFF0]/40'
+                    }`}
+                  >
+                    {/* Generating Indicator Badge */}
+                    {isGenerating && (
+                      <div className="absolute -top-2 -right-2 z-20 bg-[#00FFF0] text-black rounded-full px-2 py-1 flex items-center gap-1 shadow-lg">
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                        <span className="text-[10px] font-semibold">Generating</span>
                       </div>
                     )}
+                    
+                    <div className="flex items-center justify-between mb-2">
+                      <h4 className="font-medium text-white text-sm truncate">{clip.name}</h4>
+                      <span className="text-xs text-gray-400">{clip.duration}s</span>
+                    </div>
+                    
+                    <div className="h-16 bg-[#0C0C0C] rounded mb-2 flex items-center justify-center relative overflow-hidden">
+                      {isGenerating ? (
+                        <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-[#00FFF0]/10 to-[#3AAFA9]/10">
+                          <div className="text-center">
+                            <Loader2 className="w-6 h-6 mx-auto mb-1 text-[#00FFF0] animate-spin" />
+                            <p className="text-xs text-[#00FFF0] font-medium">Generating video</p>
+                          </div>
+                        </div>
+                      ) : clip.generatedVideo ? (
+                        <video 
+                          src={clip.generatedVideo}
+                          className="w-full h-full object-cover rounded"
+                          muted
+                        />
+                      ) : (
+                        <div className="text-center text-gray-500">
+                          <Play className="w-6 h-6 mx-auto mb-1" />
+                          <p className="text-xs">Pending</p>
+                        </div>
+                      )}
+                    </div>
+                    
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-gray-400">{clip.sceneName}</span>
+                      <span className="text-[#FFC44D]">${clip.actualCost.toFixed(2)}</span>
+                    </div>
+                    
+                    {/* Generation Status Chip */}
+                    {isGenerating && (
+                      <div className="mt-2 flex items-center gap-1 px-2 py-0.5 bg-[#00FFF0]/10 border border-[#00FFF0]/30 rounded-full w-fit">
+                        <Clock className="w-2.5 h-2.5 text-[#00FFF0]" />
+                        <span className="text-[10px] text-[#00FFF0] font-medium">
+                          Generating video
+                        </span>
+                      </div>
+                    )}
+                    
+                    {/* SFX Controls */}
+                    <div className="flex items-center gap-1 mt-2">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className={`p-1 h-6 w-6 ${hasLipsync ? 'text-[#00FFF0]' : 'text-gray-400'}`}
+                        onClick={() => setHasLipsync(!hasLipsync)}
+                      >
+                        <Volume2 className="w-3 h-3" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className={`p-1 h-6 w-6 ${hasSFX ? 'text-[#00FFF0]' : 'text-gray-400'}`}
+                        onClick={() => setHasSFX(!hasSFX)}
+                      >
+                        <Settings className="w-3 h-3" />
+                      </Button>
+                    </div>
                   </div>
-                  
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-gray-400">{clip.sceneName}</span>
-                    <span className="text-[#FFC44D]">${clip.actualCost.toFixed(2)}</span>
-                  </div>
-                  
-                  {/* SFX Controls */}
-                  <div className="flex items-center gap-1 mt-2">
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className={`p-1 h-6 w-6 ${hasLipsync ? 'text-[#00FFF0]' : 'text-gray-400'}`}
-                      onClick={() => setHasLipsync(!hasLipsync)}
-                    >
-                      <Volume2 className="w-3 h-3" />
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className={`p-1 h-6 w-6 ${hasSFX ? 'text-[#00FFF0]' : 'text-gray-400'}`}
-                      onClick={() => setHasSFX(!hasSFX)}
-                    >
-                      <Settings className="w-3 h-3" />
-                    </Button>
-                  </div>
-                </div>
-              ))
+                )
+              })
             )}
           </div>
         </div>

@@ -1,9 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { Button } from './ui/button'
-import { X, Mail, ArrowLeft } from 'lucide-react'
+import { X, Mail, ArrowLeft, Eye, EyeOff } from 'lucide-react'
 import { signUp, signIn, resetPasswordForEmail } from '@/lib/auth'
+import toast from 'react-hot-toast'
 
 interface AuthModalProps {
   isOpen: boolean
@@ -23,6 +24,31 @@ export default function AuthModal({ isOpen, onClose, onSuccess, context = 'gener
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [resetEmailSent, setResetEmailSent] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const isRequestPendingRef = useRef<boolean>(false)
+
+  // Cleanup on unmount or when modal closes
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current)
+      }
+      isRequestPendingRef.current = false
+    }
+  }, [])
+
+  // Reset loading state when modal closes
+  useEffect(() => {
+    if (!isOpen) {
+      setIsLoading(false)
+      setError(null)
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current)
+        timeoutRef.current = null
+      }
+    }
+  }, [isOpen])
 
   if (!isOpen) return null
 
@@ -31,34 +57,168 @@ export default function AuthModal({ isOpen, onClose, onSuccess, context = 'gener
     setError(null)
     setIsLoading(true)
 
+    // Set timeout (60 seconds - more reasonable for network requests)
+    const TIMEOUT_MS = 60000
+    isRequestPendingRef.current = true
+    
+    // Create a promise that rejects after timeout
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timeoutRef.current = setTimeout(() => {
+        if (isRequestPendingRef.current) {
+          isRequestPendingRef.current = false
+          setIsLoading(false)
+          const errorMessage = view === 'signin' 
+            ? 'Sign-in request timed out. Please check your connection and try again.'
+            : view === 'signup'
+            ? 'Sign-up request timed out. Please check your connection and try again.'
+            : 'Request timed out. Please try again.'
+          
+          setError(errorMessage)
+          
+          // Show toast with helpful message
+          toast.error(
+            <div>
+              <p className="font-semibold">Request Timeout</p>
+              <p className="text-sm mt-1">{errorMessage}</p>
+              <p className="text-xs mt-2 text-gray-400">
+                💡 Help: Check your internet connection, verify Supabase is accessible, or try again in a moment.
+              </p>
+            </div>,
+            {
+              duration: 6000,
+            }
+          )
+          
+          reject(new Error(errorMessage))
+        }
+      }, TIMEOUT_MS)
+    })
+
     try {
       if (view === 'signup') {
-        const { error } = await signUp(email, password, fullName)
+        const signUpPromise = signUp(email, password, fullName)
+        const { error } = await Promise.race([signUpPromise, timeoutPromise])
+        
+        isRequestPendingRef.current = false
+        if (timeoutRef.current) {
+          clearTimeout(timeoutRef.current)
+          timeoutRef.current = null
+        }
+        
         if (error) {
-          setError(error.message)
+          const errorMsg = error.message || 'Failed to sign up'
+          setError(errorMsg)
+          toast.error(
+            <div>
+              <p className="font-semibold">Sign Up Failed</p>
+              <p className="text-sm mt-1">{errorMsg}</p>
+              <p className="text-xs mt-2 text-gray-400">
+                💡 Help: Check your email format, ensure password is at least 6 characters, or try signing in if you already have an account.
+              </p>
+            </div>,
+            { duration: 5000 }
+          )
         } else {
+          toast.success('Account created successfully!')
           onSuccess()
           onClose()
         }
       } else if (view === 'signin') {
-        const { error } = await signIn(email, password)
+        console.log('🔐 Attempting sign in for:', email)
+        const signInPromise = signIn(email, password)
+        const { error } = await Promise.race([signInPromise, timeoutPromise])
+        
+        isRequestPendingRef.current = false
+        if (timeoutRef.current) {
+          clearTimeout(timeoutRef.current)
+          timeoutRef.current = null
+        }
+        
+        console.log('🔐 Sign in result:', error ? `Error: ${error.message}` : 'Success')
+        
         if (error) {
-          setError(error.message)
+          const errorMsg = error.message || 'Failed to sign in'
+          setError(errorMsg)
+          
+          // Provide helpful error messages based on error type
+          let helpText = '💡 Help: '
+          if (errorMsg.toLowerCase().includes('invalid') || errorMsg.toLowerCase().includes('credentials')) {
+            helpText += 'Check your email and password. Use "Forgot password?" if you need to reset it.'
+          } else if (errorMsg.toLowerCase().includes('email')) {
+            helpText += 'Verify your email address is correct and try again.'
+          } else if (errorMsg.toLowerCase().includes('network') || errorMsg.toLowerCase().includes('fetch')) {
+            helpText += 'Check your internet connection and ensure Supabase is accessible.'
+          } else {
+            helpText += 'Please try again. If the problem persists, check your internet connection.'
+          }
+          
+          toast.error(
+            <div>
+              <p className="font-semibold">Sign In Failed</p>
+              <p className="text-sm mt-1">{errorMsg}</p>
+              <p className="text-xs mt-2 text-gray-400">{helpText}</p>
+            </div>,
+            { duration: 6000 }
+          )
         } else {
+          toast.success('Signed in successfully!')
           onSuccess()
           onClose()
         }
       } else if (view === 'forgot-password') {
-        const { error } = await resetPasswordForEmail(email)
+        const resetPromise = resetPasswordForEmail(email)
+        const { error } = await Promise.race([resetPromise, timeoutPromise])
+        
+        isRequestPendingRef.current = false
+        if (timeoutRef.current) {
+          clearTimeout(timeoutRef.current)
+          timeoutRef.current = null
+        }
+        
         if (error) {
-          setError(error.message)
+          const errorMsg = error.message || 'Failed to send reset email'
+          setError(errorMsg)
+          toast.error(
+            <div>
+              <p className="font-semibold">Reset Email Failed</p>
+              <p className="text-sm mt-1">{errorMsg}</p>
+              <p className="text-xs mt-2 text-gray-400">
+                💡 Help: Verify your email address is correct and try again.
+              </p>
+            </div>,
+            { duration: 5000 }
+          )
         } else {
+          toast.success('Password reset email sent! Check your inbox.')
           setResetEmailSent(true)
           setView('reset-sent')
         }
       }
     } catch (err: any) {
-      setError(err.message || 'An error occurred')
+      isRequestPendingRef.current = false
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current)
+        timeoutRef.current = null
+      }
+      
+      // Don't show error if it was a timeout (already handled)
+      if (err.message && err.message.includes('timed out')) {
+        return
+      }
+      
+      console.error('❌ Auth error:', err)
+      const errorMsg = err.message || 'An unexpected error occurred'
+      setError(errorMsg)
+      toast.error(
+        <div>
+          <p className="font-semibold">Error</p>
+          <p className="text-sm mt-1">{errorMsg}</p>
+          <p className="text-xs mt-2 text-gray-400">
+            💡 Help: Please try again. If the problem persists, check your connection or contact support.
+          </p>
+        </div>,
+        { duration: 5000 }
+      )
     } finally {
       setIsLoading(false)
     }
@@ -70,12 +230,18 @@ export default function AuthModal({ isOpen, onClose, onSuccess, context = 'gener
     setResetEmailSent(false)
     setEmail('')
     setPassword('')
+    setIsLoading(false)
+    isRequestPendingRef.current = false
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current)
+      timeoutRef.current = null
+    }
   }
 
   return (
     <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-      <div className="bg-[#1E1F22] rounded-2xl border border-[#3AAFA9]/30 shadow-2xl w-full max-w-md">
-        <div className="flex items-center justify-between p-6 border-b border-[#3AAFA9]/20">
+      <div className="bg-[#1A1A24] rounded-2xl border border-[#00FFF0]/30 shadow-[0_0_20px_rgba(0,255,240,0.2)] w-full max-w-md">
+        <div className="flex items-center justify-between p-6 border-b border-[#00FFF0]/20">
           <div className="flex items-center gap-3">
             {view === 'forgot-password' || view === 'reset-sent' ? (
               <Button
@@ -97,7 +263,20 @@ export default function AuthModal({ isOpen, onClose, onSuccess, context = 'gener
           <Button
             variant="ghost"
             size="icon"
-            onClick={onClose}
+            onClick={() => {
+              setIsLoading(false)
+              isRequestPendingRef.current = false
+              if (timeoutRef.current) {
+                clearTimeout(timeoutRef.current)
+                timeoutRef.current = null
+              }
+              setError(null)
+              setPassword('')
+              setEmail('')
+              setFullName('')
+              setShowPassword(false)
+              onClose()
+            }}
             className="text-gray-400 hover:text-white"
           >
             <X className="w-5 h-5" />
@@ -141,7 +320,7 @@ export default function AuthModal({ isOpen, onClose, onSuccess, context = 'gener
               <Button
                 onClick={handleBackToSignIn}
                 variant="outline"
-                className="w-full border-[#3AAFA9]/30 text-gray-300 hover:bg-[#3AAFA9]/10"
+                className="w-full border-[#00FFF0]/30 text-gray-300 hover:bg-[#00FFF0]/10 hover:border-[#00FFF0]/50 hover:shadow-[0_0_5px_rgba(0,255,240,0.2)] transition-all duration-300"
               >
                 Back to Sign In
               </Button>
@@ -158,7 +337,7 @@ export default function AuthModal({ isOpen, onClose, onSuccess, context = 'gener
                   type="text"
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
-                  className="w-full px-4 py-2 bg-[#0C0C0C] border border-[#3AAFA9]/30 rounded-lg text-white placeholder:text-gray-500 focus:border-[#00FFF0] focus:outline-none"
+                  className="w-full px-4 py-2 bg-[#0C0C0C] border border-[#00FFF0]/30 rounded-lg text-white placeholder:text-gray-500 focus:border-[#00FFF0] focus:outline-none focus:shadow-[0_0_10px_rgba(0,255,240,0.2)] transition-all duration-300"
                   placeholder="John Doe"
                 />
               </div>
@@ -183,15 +362,29 @@ export default function AuthModal({ isOpen, onClose, onSuccess, context = 'gener
                 <label className="block text-sm font-medium text-gray-300 mb-2">
                   Password
                 </label>
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  minLength={6}
-                  className="w-full px-4 py-2 bg-[#0C0C0C] border border-[#3AAFA9]/30 rounded-lg text-white placeholder:text-gray-500 focus:border-[#00FFF0] focus:outline-none"
-                  placeholder="••••••••"
-                />
+                <div className="relative">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    minLength={6}
+                    className="w-full px-4 py-2 pr-10 bg-[#0C0C0C] border border-[#3AAFA9]/30 rounded-lg text-white placeholder:text-gray-500 focus:border-[#00FFF0] focus:outline-none"
+                    placeholder="••••••••"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-[#00FFF0] transition-colors focus:outline-none"
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showPassword ? (
+                      <EyeOff className="w-5 h-5" />
+                    ) : (
+                      <Eye className="w-5 h-5" />
+                    )}
+                  </button>
+                </div>
               </div>
             )}
 
@@ -212,7 +405,9 @@ export default function AuthModal({ isOpen, onClose, onSuccess, context = 'gener
             <Button
               type="submit"
               disabled={isLoading}
-              className="w-full bg-[#00FFF0] hover:bg-[#00FFF0]/90 text-black font-semibold py-2 rounded-lg disabled:opacity-50"
+              className="w-full bg-[#00FFF0] hover:bg-[#00FFF0]/90 text-black font-semibold py-2 rounded-lg 
+                       shadow-[0_0_15px_rgba(0,255,240,0.5)] hover:shadow-[0_0_25px_rgba(0,255,240,0.8)]
+                       transition-all duration-300 disabled:opacity-50 disabled:shadow-none"
             >
               {isLoading 
                 ? 'Loading...' 
@@ -230,6 +425,12 @@ export default function AuthModal({ isOpen, onClose, onSuccess, context = 'gener
                   onClick={() => {
                     setView('forgot-password')
                     setError(null)
+                    setIsLoading(false)
+                    isRequestPendingRef.current = false
+                    if (timeoutRef.current) {
+                      clearTimeout(timeoutRef.current)
+                      timeoutRef.current = null
+                    }
                   }}
                   className="block w-full text-sm text-[#00FFF0] hover:text-[#00FFF0]/80"
                 >
@@ -241,6 +442,12 @@ export default function AuthModal({ isOpen, onClose, onSuccess, context = 'gener
                 onClick={() => {
                   setView(view === 'signup' ? 'signin' : 'signup')
                   setError(null)
+                  setIsLoading(false)
+                  isRequestPendingRef.current = false
+                  if (timeoutRef.current) {
+                    clearTimeout(timeoutRef.current)
+                    timeoutRef.current = null
+                  }
                 }}
                 className="text-sm text-gray-400 hover:text-[#00FFF0]"
               >

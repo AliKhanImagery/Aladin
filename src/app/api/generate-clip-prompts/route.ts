@@ -7,7 +7,7 @@ const openai = new OpenAI({
 
 export async function POST(request: NextRequest) {
   try {
-    const { sceneDescription, clipDescription, storyContext, tone, brandCues } = await request.json()
+    const { sceneDescription, clipDescription, storyContext, tone, brandCues, sceneStyle, assetContext } = await request.json()
     
     // Handle brandCues as array or string
     const brandCuesFormatted = Array.isArray(brandCues) 
@@ -21,6 +21,44 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Build asset context string if provided
+    let assetContextString = ''
+    if (assetContext) {
+      const characterStrings: string[] = []
+      const productStrings: string[] = []
+      const locationStrings: string[] = []
+      
+      if (assetContext.characters && Array.isArray(assetContext.characters) && assetContext.characters.length > 0) {
+        for (const c of assetContext.characters) {
+          const char = c as { name: string; appearanceDetails?: string; description: string; assetUrl?: string }
+          characterStrings.push(`${char.name}: ${char.appearanceDetails || char.description}. ${char.assetUrl ? 'Use provided reference image for consistency.' : 'Generate based on description.'}`)
+        }
+      }
+      
+      if (assetContext.products && Array.isArray(assetContext.products) && assetContext.products.length > 0) {
+        for (const p of assetContext.products) {
+          const product = p as { name: string; description: string; assetUrl?: string }
+          productStrings.push(`${product.name}: ${product.description}. ${product.assetUrl ? 'Use provided reference image for exact match.' : 'Generate based on description.'}`)
+        }
+      }
+      
+      if (assetContext.locations && Array.isArray(assetContext.locations) && assetContext.locations.length > 0) {
+        for (const l of assetContext.locations) {
+          const location = l as { name: string; description: string; assetUrl?: string }
+          locationStrings.push(`${location.name}: ${location.description}. ${location.assetUrl ? 'Use provided reference image.' : 'Generate based on description.'}`)
+        }
+      }
+      
+      if (characterStrings.length > 0 || productStrings.length > 0 || locationStrings.length > 0) {
+        assetContextString = `
+ASSET REFERENCES FOR THIS CLIP:
+${characterStrings.length > 0 ? `Characters: ${characterStrings.join('\n')}` : ''}
+${productStrings.length > 0 ? `Products: ${productStrings.join('\n')}` : ''}
+${locationStrings.length > 0 ? `Locations: ${locationStrings.join('\n')}` : ''}
+`
+      }
+    }
+
     // Story Boarding Expert & AI Prompting Expert role
     const prompt = `You are an elite Story Boarding Expert and AI Prompting Expert. Your task is to create ultra-detailed, cinematic, production-ready prompts that dilivery story ,continuty, scene, characters detail and location inheriited and matching across clips and scenes based onstorry idea, generate stunning, professional-quality visuals.
 
@@ -32,8 +70,16 @@ ${sceneDescription}
 
 CLIP DESCRIPTION:
 ${clipDescription}
-${tone ? `\nTONE/MOOD: ${tone}` : ''}
+${Array.isArray(tone) ? `\nTONE/MOOD: ${tone.join(', ')}` : tone ? `\nTONE/MOOD: ${tone}` : ''}
 ${brandCuesFormatted ? `\nBRAND CUES: ${brandCuesFormatted}` : ''}
+${sceneStyle ? `
+SCENE STYLE (Apply consistently to this clip):
+- Mood: ${sceneStyle.mood || 'dramatic'}
+- Lighting: ${sceneStyle.lighting || 'natural'}
+- Color Palette: ${sceneStyle.colorPalette || 'warm'}
+- Camera Style: ${sceneStyle.cameraStyle || 'cinematic'}
+- Post Processing: ${sceneStyle.postProcessing?.join(', ') || 'none'}
+` : ''}${assetContextString}
 
 CRITICAL REQUIREMENTS FOR PROMPT QUALITY:
 1. IMAGE PROMPT must be EXTREMELY DETAILED (minimum 50-250 words) including:

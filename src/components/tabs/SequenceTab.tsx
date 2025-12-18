@@ -240,15 +240,15 @@ export default function SequenceTab() {
                 <div className="flex items-center justify-between">
                   <h4 className="text-md font-medium text-white">Clips</h4>
                   {!isGeneratingStory && (
-                    <Button
-                      onClick={() => handleAddClip(scene.id)}
-                      variant="outline"
-                      size="sm"
-                      className="border-[#3AAFA9] text-[#3AAFA9] hover:bg-[#3AAFA9] hover:text-black"
-                    >
-                      <Plus className="w-3 h-3 mr-1" />
-                      Add Clip
-                    </Button>
+                  <Button
+                    onClick={() => handleAddClip(scene.id)}
+                    variant="outline"
+                    size="sm"
+                    className="border-[#3AAFA9] text-[#3AAFA9] hover:bg-[#3AAFA9] hover:text-black"
+                  >
+                    <Plus className="w-3 h-3 mr-1" />
+                    Add Clip
+                  </Button>
                   )}
                 </div>
 
@@ -261,15 +261,15 @@ export default function SequenceTab() {
                       </div>
                     ) : (
                       <>
-                        <p className="text-gray-500 mb-4">No clips in this scene yet</p>
-                        <Button
-                          onClick={() => handleAddClip(scene.id)}
-                          variant="outline"
-                          size="sm"
-                          className="border-[#3AAFA9] text-[#3AAFA9] hover:bg-[#3AAFA9] hover:text-black"
-                        >
-                          Add First Clip
-                        </Button>
+                    <p className="text-gray-500 mb-4">No clips in this scene yet</p>
+                    <Button
+                      onClick={() => handleAddClip(scene.id)}
+                      variant="outline"
+                      size="sm"
+                      className="border-[#3AAFA9] text-[#3AAFA9] hover:bg-[#3AAFA9] hover:text-black"
+                    >
+                      Add First Clip
+                    </Button>
                       </>
                     )}
                   </div>
@@ -293,9 +293,9 @@ export default function SequenceTab() {
                             {clip.name}
                           </h5>
                           <div className="flex items-center gap-2">
-                            <div className="flex items-center gap-1">
-                              {clip.locked && <Lock className="w-3 h-3 text-yellow-400" />}
-                              <span className="text-xs text-gray-400">{clip.duration}s</span>
+                          <div className="flex items-center gap-1">
+                            {clip.locked && <Lock className="w-3 h-3 text-yellow-400" />}
+                            <span className="text-xs text-gray-400">{clip.duration}s</span>
                             </div>
                             {!isGeneratingStory && (
                               <Button
@@ -350,11 +350,11 @@ export default function SequenceTab() {
                               </>
                             ) : clip.generatedImage ? (
                               <>
-                                <img 
-                                  src={clip.generatedImage} 
-                                  alt={clip.name}
-                                  className="w-full h-full object-cover rounded-lg"
-                                />
+                              <img 
+                                src={clip.generatedImage} 
+                                alt={clip.name}
+                                className="w-full h-full object-cover rounded-lg"
+                              />
                                 <Button
                                   variant="ghost"
                                   size="icon"

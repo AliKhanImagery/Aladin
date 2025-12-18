@@ -66,16 +66,66 @@ export async function signOut() {
 
 export async function getCurrentUser(): Promise<AuthUser | null> {
   try {
-    const { data: { user }, error } = await supabase.auth.getUser()
+    // Check if we're in browser environment
+    if (typeof window === 'undefined') {
+      return null
+    }
+
+    // Industry standard: First check for existing session
+    // Supabase automatically loads session from localStorage if persistSession is true
+    // This is fast and synchronous for localStorage, so no timeout needed
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession()
     
-    if (error || !user) return null
+    if (sessionError) {
+      console.warn('⚠️ Session check error (may be expired):', sessionError.message)
+      return null
+    }
+    
+    // If no session, user is definitely not logged in
+    if (!session?.user) {
+      return null
+    }
+
+    // Verify the session is still valid by getting fresh user data
+    // This also triggers automatic token refresh if needed (autoRefreshToken: true)
+    const { data: { user }, error: userError } = await supabase.auth.getUser()
+    
+    if (userError) {
+      // Token might be expired or invalid
+      console.warn('⚠️ User verification error (token may be expired):', userError.message)
+      
+      // If it's a token refresh error, clear the invalid session
+      if (userError.message.includes('refresh') || userError.message.includes('expired')) {
+        console.log('🔄 Clearing expired session...')
+        await supabase.auth.signOut().catch(() => {}) // Ignore signOut errors
+        return null
+      }
+      return null
+    }
+    
+    if (!user) {
+      return null
+    }
 
     // Get user profile from users table
-    const { data: profile } = await supabase
-      .from('users')
-      .select('*')
-      .eq('id', user.id)
-      .single()
+    // Don't block on this - if it fails, we still have user data from auth
+    let profile = null
+    try {
+      const { data, error: profileError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', user.id)
+        .single()
+      
+      if (!profileError && data) {
+        profile = data
+      } else {
+        console.warn('⚠️ Profile fetch error (user may not have profile yet):', profileError?.message)
+      }
+    } catch (profileErr) {
+      // Profile fetch failed - continue without it
+      console.warn('⚠️ Profile fetch error:', profileErr)
+    }
 
     return {
       id: user.id,
@@ -83,8 +133,8 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
       name: profile?.full_name || user.user_metadata?.full_name,
       avatar: profile?.avatar_url || user.user_metadata?.avatar_url,
     }
-  } catch (error) {
-    console.error('Get current user error:', error)
+  } catch (error: any) {
+    console.error('❌ Get current user error:', error)
     return null
   }
 }
@@ -126,11 +176,86 @@ export async function updatePassword(newPassword: string) {
 
 export function onAuthStateChange(callback: (user: AuthUser | null) => void) {
   return supabase.auth.onAuthStateChange(async (event, session) => {
-    if (session?.user) {
-      const user = await getCurrentUser()
-      callback(user)
-    } else {
-      callback(null)
+    // Industry standard: Handle all auth events for comprehensive state management
+    console.log('🔄 Auth state change event:', event)
+    
+    // Handle different auth events
+    switch (event) {
+      case 'SIGNED_IN':
+      case 'TOKEN_REFRESHED':
+      case 'USER_UPDATED':
+        // User is authenticated - get fresh user data
+        if (session?.user) {
+          const user = await getCurrentUser()
+          callback(user)
+        } else {
+          callback(null)
+        }
+        break
+      
+      case 'SIGNED_OUT':
+        // User explicitly logged out
+        callback(null)
+        break
+      
+      default:
+        // For other events, check session status
+        if (session?.user) {
+          const user = await getCurrentUser()
+          callback(user)
+        } else {
+          callback(null)
+        }
     }
   })
+}
+
+export async function updateUserProfile(name: string, avatarUrl?: string): Promise<{ success: boolean; error?: any }> {
+  try {
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    
+    if (authError || !user) {
+      console.error('Auth error:', authError)
+      return { success: false, error: { message: 'Not authenticated', code: 'UNAUTHENTICATED' } }
+    }
+
+    // Update user profile in users table
+    const updates: { full_name?: string; avatar_url?: string | null } = {}
+    if (name && name.trim()) {
+      updates.full_name = name.trim()
+    }
+    if (avatarUrl !== undefined) {
+      updates.avatar_url = avatarUrl || null
+    }
+
+    // Check if there are any updates to make
+    if (Object.keys(updates).length === 0) {
+      return { success: true } // No updates needed
+    }
+
+    console.log('Updating user profile:', { userId: user.id, updates })
+
+    const { data, error } = await supabase
+      .from('users')
+      .update(updates)
+      .eq('id', user.id)
+      .select()
+
+    if (error) {
+      console.error('Update profile error:', error)
+      console.error('Error details:', {
+        code: error.code,
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+      })
+      return { success: false, error }
+    }
+
+    console.log('Profile updated successfully:', data)
+    return { success: true }
+  } catch (error: any) {
+    console.error('Update profile error:', error)
+    return { success: false, error: { message: error.message || 'Unknown error' } }
+  }
 }

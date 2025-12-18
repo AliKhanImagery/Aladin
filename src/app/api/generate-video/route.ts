@@ -3,17 +3,35 @@ import { fal } from '@fal-ai/client'
 
 // Configure Fal AI client
 if (process.env.FAL_KEY) {
-  fal.config({
-    credentials: process.env.FAL_KEY,
-  })
+  try {
+    fal.config({
+      credentials: process.env.FAL_KEY,
+    })
+    console.log('✅ Fal AI client configured successfully')
+  } catch (configError: any) {
+    console.error('❌ Failed to configure Fal AI client:', configError)
+  }
+} else {
+  console.warn('⚠️ FAL_KEY environment variable not set')
 }
 
 export async function POST(request: NextRequest) {
   try {
+    console.log('🎬 /api/generate-video: Request received')
+    
     // Parse request body with error handling
     let requestBody
     try {
       requestBody = await request.json()
+      console.log('🎬 /api/generate-video: Request body parsed', {
+        hasPrompt: !!requestBody.prompt,
+        promptLength: requestBody.prompt?.length || 0,
+        hasImageUrl: !!requestBody.image_url,
+        imageUrlPreview: requestBody.image_url ? requestBody.image_url.substring(0, 100) : 'none',
+        duration: requestBody.duration,
+        videoModel: requestBody.videoModel,
+        aspectRatio: requestBody.aspect_ratio,
+      })
     } catch (parseError: any) {
       console.error('❌ Failed to parse request body:', parseError)
       return NextResponse.json(
@@ -38,7 +56,19 @@ export async function POST(request: NextRequest) {
       videoModel = 'vidu', // 'vidu' or 'kling'
     } = requestBody
 
+    console.log('🎬 /api/generate-video: Extracted parameters', {
+      hasPrompt: !!prompt,
+      promptLength: prompt?.length || 0,
+      duration,
+      resolution,
+      hasImageUrl: !!image_url,
+      hasReferenceImages: reference_image_urls.length > 0,
+      aspectRatio: aspect_ratio,
+      videoModel,
+    })
+
     if (!prompt || !prompt.trim()) {
+      console.error('❌ /api/generate-video: Missing prompt')
       return NextResponse.json(
         { error: 'Prompt is required' },
         { status: 400 }
@@ -46,19 +76,31 @@ export async function POST(request: NextRequest) {
     }
 
     if (!process.env.FAL_KEY) {
+      console.error('❌ /api/generate-video: FAL_KEY not configured')
       return NextResponse.json(
-        { error: 'FAL_KEY not configured' },
+        { error: 'FAL_KEY not configured', details: 'Server configuration error - FAL_KEY environment variable is missing' },
         { status: 500 }
       )
     }
+    
+    console.log('✅ /api/generate-video: FAL_KEY is configured')
 
     // Validate image_url format if provided
     if (image_url) {
       try {
-        new URL(image_url)
+        const imageUrlObj = new URL(image_url)
+        console.log('✅ /api/generate-video: Image URL is valid', {
+          protocol: imageUrlObj.protocol,
+          hostname: imageUrlObj.hostname,
+          pathname: imageUrlObj.pathname.substring(0, 50),
+        })
       } catch (e) {
+        console.error('❌ /api/generate-video: Invalid image_url format', {
+          image_url: image_url?.substring(0, 100),
+          error: e,
+        })
         return NextResponse.json(
-          { error: 'Invalid image_url format. Must be a valid URL.' },
+          { error: 'Invalid image_url format. Must be a valid URL.', details: String(e) },
           { status: 400 }
         )
       }
@@ -174,7 +216,7 @@ export async function POST(request: NextRequest) {
           result = await fal.subscribe('fal-ai/kling-video/v1.6/standard/elements', {
             input: klingInput,
             logs: true,
-            onQueueUpdate: (update) => {
+            onQueueUpdate: (update: any) => {
               if (update.status === 'IN_PROGRESS') {
                 console.log('🔄 Kling progress:', update.logs?.map((log: any) => log.message))
               } else if (update.status === 'FAILED' || update.status === 'ERROR') {
@@ -203,7 +245,7 @@ export async function POST(request: NextRequest) {
         })
         
         // Check if result has video in different possible structures
-        if (!result.data && !result.video && !result.url) {
+        if (!result.data && !(result as any).url) {
           console.warn('⚠️ Kling response structure unexpected:', {
             resultType: typeof result,
             resultKeys: Object.keys(result || {}),
@@ -388,19 +430,53 @@ export async function POST(request: NextRequest) {
       // Determine which Vidu model to use
       if (image_url) {
         // Image-to-Video: Start from an existing image
-        console.log('Using Q2 Image-to-Video model with image_url:', image_url.substring(0, 100))
+        console.log('🎬 /api/generate-video: Using Q2 Image-to-Video model', {
+          imageUrl: image_url.substring(0, 100),
+          promptLength: prompt.length,
+          duration: duration.toString(),
+          resolution,
+        })
+        
+        // Vidu Q2 Image-to-Video endpoint parameters
+        // Based on Fal AI docs: prompt, image_url, duration, resolution, movement_amplitude are required
+        // Note: aspect_ratio is NOT supported by Q2 image-to-video (it uses the image's aspect ratio)
+        const viduInput: any = {
+          prompt: prompt.trim(),
+          image_url: image_url.trim(),
+          duration: duration.toString(),
+          resolution: resolution as '720p' | '1080p',
+        }
+        
+        // movement_amplitude: 'auto' | 'low' | 'medium' | 'high'
+        // Only add if it's a valid value
+        if (movement_amplitude && ['auto', 'low', 'medium', 'high'].includes(movement_amplitude)) {
+          viduInput.movement_amplitude = movement_amplitude
+        } else {
+          viduInput.movement_amplitude = 'auto' // Default
+        }
+        
+        // Add seed if provided (optional)
+        if (seed !== undefined && seed !== null) {
+          viduInput.seed = seed
+        }
+        
+        // Note: aspect_ratio is NOT supported by Q2 image-to-video endpoint
+        // The aspect ratio is determined by the input image
+        
+        console.log('🎬 /api/generate-video: Vidu input prepared', {
+          hasPrompt: !!viduInput.prompt,
+          hasImageUrl: !!viduInput.image_url,
+          duration: viduInput.duration,
+          resolution: viduInput.resolution,
+          inputKeys: Object.keys(viduInput),
+        })
+        
         try {
+          console.log('🎬 /api/generate-video: Calling fal.subscribe...')
           result = await fal.subscribe('fal-ai/vidu/q2-image-to-video', {
-            input: {
-              prompt: prompt,
-              image_url: image_url,
-              duration: duration.toString(),
-              resolution: resolution as '720p' | '1080p',
-              movement_amplitude: movement_amplitude,
-              ...(seed && { seed }),
-            },
+            input: viduInput,
             logs: true,
-            onQueueUpdate: (update) => {
+            onQueueUpdate: (update: any) => {
               if (update.status === 'IN_PROGRESS') {
                 console.log('🔄 Fal AI progress:', update.logs?.map((log: any) => log.message))
               } else if (update.status === 'FAILED' || update.status === 'ERROR') {
@@ -423,6 +499,12 @@ export async function POST(request: NextRequest) {
           }
         } catch (falError: any) {
           // Comprehensive error logging - capture everything
+          console.error('❌ /api/generate-video: Fal AI Q2 Image-to-Video error caught')
+          console.error('❌ Error type:', typeof falError)
+          console.error('❌ Error constructor:', falError?.constructor?.name)
+          console.error('❌ Error name:', falError?.name)
+          console.error('❌ Error message:', falError?.message)
+          
           const errorInfo: any = {
             message: falError.message,
             status: falError.status,
@@ -434,14 +516,33 @@ export async function POST(request: NextRequest) {
             response: falError.response,
           }
           
+          // Try to extract response body if available
+          if (falError.response) {
+            try {
+              if (falError.response.data) {
+                errorInfo.responseData = typeof falError.response.data === 'string' 
+                  ? falError.response.data 
+                  : JSON.stringify(falError.response.data, null, 2)
+              }
+              if (falError.response.body) {
+                errorInfo.responseBody = typeof falError.response.body === 'string'
+                  ? falError.response.body
+                  : JSON.stringify(falError.response.body, null, 2)
+              }
+            } catch (e) {
+              console.error('❌ Error parsing response:', e)
+            }
+          }
+          
           // Try to stringify the entire error object
           try {
-            errorInfo.fullErrorString = JSON.stringify(falError, Object.getOwnPropertyNames(falError), 2).substring(0, 2000)
+            errorInfo.fullErrorString = JSON.stringify(falError, Object.getOwnPropertyNames(falError), 2).substring(0, 3000)
           } catch (e) {
             errorInfo.fullErrorString = 'Could not stringify error'
           }
           
-          console.error('❌ Fal AI Q2 Image-to-Video error - Complete Error Info:', errorInfo)
+          console.error('❌ Fal AI Q2 Image-to-Video error - Complete Error Info:', JSON.stringify(errorInfo, null, 2))
+          console.error('❌ Vidu input that failed:', JSON.stringify(viduInput, null, 2))
           
           // Try multiple strategies to extract error message
           let errorMsg: string | null = null
@@ -506,7 +607,15 @@ export async function POST(request: NextRequest) {
             errorMsg += ` | Image URL: ${urlPreview}`
           }
           
-          throw new Error(errorMsg)
+          // Re-throw the error with enhanced information so it's caught by outer catch
+          const enhancedError: any = new Error(errorMsg)
+          enhancedError.originalError = falError
+          enhancedError.errorInfo = errorInfo
+          enhancedError.viduInput = viduInput
+          enhancedError.status = falError?.status || falError?.statusCode || 500
+          enhancedError.statusCode = falError?.statusCode || falError?.status || 500
+          
+          throw enhancedError
         }
       } else if (reference_image_urls.length > 0) {
         // Reference-to-Video: Use reference images for consistent characters
@@ -549,10 +658,10 @@ export async function POST(request: NextRequest) {
 
     // Check multiple possible response structures from Fal AI (for both Kling and Vidu)
     const videoUrl = result?.data?.video?.url || 
-                    result?.video?.url || 
+                    (result as any)?.video?.url || 
                     result?.data?.url || 
-                    result?.url ||
-                    result?.video_url ||
+                    (result as any)?.url ||
+                    (result as any)?.video_url ||
                     (result?.data && typeof result.data === 'object' && (result.data as any)?.video?.url)
 
     if (!videoUrl) {
