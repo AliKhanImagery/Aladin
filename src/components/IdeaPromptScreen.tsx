@@ -298,7 +298,6 @@ export default function IdeaPromptScreen() {
             <Sparkles className="w-10 h-10 text-[#00FFF0]" />
           </div>
           <h1 className="text-4xl font-bold text-white mb-4 neon-text">StoryFlow AI</h1>
-          <p className="text-xl text-gray-400 mb-2">From Idea to Frame</p>
           <p className="text-sm text-gray-500">
             Transform your creative idea into a visual storyboard
           </p>
