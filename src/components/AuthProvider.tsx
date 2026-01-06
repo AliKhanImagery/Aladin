@@ -167,22 +167,28 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
       <Toaster 
         position="top-right"
         toastOptions={{
+          duration: 4000, // Default 4 seconds for all toasts
           style: {
             background: '#1E1F22',
             color: '#fff',
             border: '1px solid rgba(58, 175, 169, 0.3)',
           },
           success: {
+            duration: 3000, // 3 seconds for success messages
             iconTheme: {
               primary: '#00FFF0',
               secondary: '#1E1F22',
             },
           },
           error: {
+            duration: 5000, // 5 seconds for error messages
             iconTheme: {
               primary: '#ef4444',
               secondary: '#1E1F22',
             },
+          },
+          loading: {
+            duration: Infinity, // Loading toasts stay until manually dismissed
           },
         }}
       />

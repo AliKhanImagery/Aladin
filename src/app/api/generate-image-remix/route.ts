@@ -115,16 +115,22 @@ export async function POST(request: NextRequest) {
     }
 
     if (mode === 'text-to-image') {
-      // Text-to-image endpoint: only needs prompt and aspect_ratio
-      // Uses fal-ai/reve/text-to-image endpoint
+      // Text-to-image endpoint: Use FLUX.2 Pro for high-quality, realistic outputs
+      // FLUX.2 Pro supports up to 10 reference images for consistency
       falInput.prompt = sanitizedPrompt
       falInput.num_images = numImagesToUse
+      
+      // FLUX.2 Pro can accept reference images even in text-to-image mode for consistency
+      if (sanitizedReferenceUrls.length > 0 && sanitizedReferenceUrls.length <= 10) {
+        falInput.image_urls = sanitizedReferenceUrls
+      }
+      
       if (seedValid && seed !== undefined) {
         falInput.seed = Math.floor(seed)
       }
     } else {
-      // Remix and Edit modes: use fal-ai/reve/remix endpoint
-      // Requires image_urls (and optionally prompt for remix)
+      // Remix and Edit modes: Use FLUX.2 Pro for studio-grade consistency
+      // FLUX.2 Pro supports up to 10 reference images simultaneously
       falInput.num_images = numImagesToUse
       
       // Add prompt if provided (required for remix, optional for edit)
@@ -133,26 +139,36 @@ export async function POST(request: NextRequest) {
       }
 
       // Add reference images - REQUIRED for remix and edit modes
-      // Fal AI Reve Remix API requires 'image_urls' parameter
+      // FLUX.2 Pro uses 'image_urls' parameter (supports up to 10 images)
+      // Prioritize: characters first, then products, then locations
       if (sanitizedReferenceUrls.length > 0) {
-        falInput.image_urls = sanitizedReferenceUrls
+        // Limit to 10 reference images (FLUX.2 Pro maximum)
+        falInput.image_urls = sanitizedReferenceUrls.slice(0, 10)
       }
 
-      // Add seed if valid
+      // Add seed if valid (for reproducibility and consistency)
       if (seedValid && seed !== undefined) {
         falInput.seed = Math.floor(seed)
       }
+      
+      // FLUX.2 Pro specific parameters for enhanced consistency
+      // These parameters help maintain facial/subject consistency across generations
+      falInput.guidance_scale = 7.5 // Higher guidance for better prompt adherence
+      falInput.num_inference_steps = 28 // Standard for FLUX.2 Pro quality
     }
 
     // Log validation results
-    console.log('🎨 Generating image with Fal AI Reve Remix:', {
+    console.log('🎨 Generating image with Fal AI FLUX.2 Pro:', {
       mode,
       hasPrompt: !!sanitizedPrompt,
       promptPreview: sanitizedPrompt ? sanitizedPrompt.substring(0, 50) + '...' : '(no prompt)',
       imageUrlsCount: sanitizedReferenceUrls.length,
+      referenceImagesUsed: falInput.image_urls?.length || 0,
       aspectRatio: aspectRatioFormatted,
       numImages: numImagesToUse,
       hasSeed: seedValid && seed !== undefined,
+      guidanceScale: falInput.guidance_scale,
+      inferenceSteps: falInput.num_inference_steps,
       validatedInput: Object.keys(falInput).join(', '),
     })
 
@@ -166,10 +182,10 @@ export async function POST(request: NextRequest) {
         )
       }
     } else {
-      // Remix and Edit modes require image_urls
+      // Remix and Edit modes require image_urls for FLUX.2 Pro
       if (!falInput.image_urls || falInput.image_urls.length === 0) {
         return NextResponse.json(
-          { error: 'Invalid request: Reference images are required', details: 'Fal AI Reve Remix requires at least one reference image URL (image_urls parameter) for remix and edit modes' },
+          { error: 'Invalid request: Reference images are required', details: 'FLUX.2 Pro requires at least one reference image URL (image_urls parameter) for remix and edit modes to maintain consistency' },
           { status: 400 }
         )
       }
@@ -184,12 +200,13 @@ export async function POST(request: NextRequest) {
     }
 
     // Determine which endpoint to use
+    // FLUX.2 Pro for all modes - provides studio-grade quality and consistency
     const endpoint = mode === 'text-to-image' 
-      ? 'fal-ai/reve/text-to-image'
-      : 'fal-ai/reve/remix'
+      ? 'fal-ai/flux/flux-2-pro' // FLUX.2 Pro for text-to-image (supports reference images for consistency)
+      : 'fal-ai/flux/flux-2-pro' // FLUX.2 Pro for remix and edit modes (best for facial/subject consistency)
 
-    // Call Fal AI Reve endpoint
-    console.log(`📤 Sending request to Fal AI Reve (${endpoint}) with input:`, JSON.stringify(falInput, null, 2))
+    // Call Fal AI FLUX.2 Pro endpoint
+    console.log(`📤 Sending request to Fal AI FLUX.2 Pro (${endpoint}) with input:`, JSON.stringify(falInput, null, 2))
     
     const result = await fal.subscribe(endpoint, {
       input: falInput,
@@ -201,29 +218,29 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    console.log(`📥 Fal AI Reve (${endpoint}) response:`, JSON.stringify(result, null, 2))
+    console.log(`📥 Fal AI FLUX.2 Pro (${endpoint}) response:`, JSON.stringify(result, null, 2))
 
-    // Remix returns images array
-    const imageUrl = result.data?.images?.[0]?.url
+    // FLUX.2 Pro returns images array
+    const imageUrl = result.data?.images?.[0]?.url || result.data?.image?.url || result.data?.url
 
     if (!imageUrl) {
       console.error('❌ No image URL in response. Full result:', result)
-      throw new Error(`No image URL returned from Fal AI Reve (${endpoint}). Response: ` + JSON.stringify(result.data))
+      throw new Error(`No image URL returned from Fal AI FLUX.2 Pro (${endpoint}). Response: ` + JSON.stringify(result.data))
     }
 
-    console.log(`✅ Fal AI Reve (${endpoint}) image generated:`, imageUrl)
+    console.log(`✅ Fal AI FLUX.2 Pro (${endpoint}) image generated:`, imageUrl)
 
     return NextResponse.json({
       success: true,
       imageUrl,
-      model: mode === 'text-to-image' ? 'fal-ai-reve-text-to-image' : 'fal-ai-reve-remix',
+      model: 'fal-ai-flux-2-pro', // Consistent model name
       endpoint,
       requestId: result.requestId,
       allImages: result.data?.images || [],
     })
   } catch (error: any) {
-    const endpoint = mode === 'text-to-image' ? 'fal-ai/reve/text-to-image' : 'fal-ai/reve/remix'
-    console.error(`❌ Fal AI Reve (${endpoint}) Error:`, error)
+    const endpoint = 'fal-ai/flux/flux-2-pro'
+    console.error(`❌ Fal AI FLUX.2 Pro (${endpoint}) Error:`, error)
     
     // Handle ValidationError specifically (422 status)
     if (error.name === 'ValidationError' || error.status === 422) {
@@ -255,11 +272,11 @@ export async function POST(request: NextRequest) {
         {
           error: 'Validation Error: Invalid request parameters',
           details: validationDetails,
-          model: mode === 'text-to-image' ? 'fal-ai-reve-text-to-image' : 'fal-ai-reve-remix',
+          model: 'fal-ai-flux-2-pro',
           endpoint,
           hint: mode === 'text-to-image' 
-            ? 'Check that prompt is provided. Text-to-image endpoint only requires prompt and aspect_ratio.'
-            : 'Check that all required parameters are provided in the correct format. For Reve Remix: prompt and image_urls are required for remix mode, image_urls are required for edit mode.',
+            ? 'Check that prompt is provided. FLUX.2 Pro text-to-image requires prompt and aspect_ratio. Reference images (up to 10) are optional for consistency.'
+            : 'Check that all required parameters are provided in the correct format. For FLUX.2 Pro remix/edit: prompt and image_urls (up to 10) are required for remix mode, image_urls are required for edit mode.',
           statusCode: 422,
         },
         { status: 422 }
@@ -306,9 +323,9 @@ export async function POST(request: NextRequest) {
       {
         error: errorMessage,
         details: errorDetails,
-        model: mode === 'text-to-image' ? 'fal-ai-reve-text-to-image' : 'fal-ai-reve-remix',
+        model: 'fal-ai-flux-2-pro',
         endpoint,
-        hint: 'Check console logs for more details. Common issues: invalid API key, missing required parameters, or unsupported parameter combination.',
+        hint: 'Check console logs for more details. Common issues: invalid API key, missing required parameters, or unsupported parameter combination. FLUX.2 Pro supports up to 10 reference images for consistency.',
         statusCode,
       },
       { status: statusCode }

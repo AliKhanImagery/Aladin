@@ -57,8 +57,8 @@ export default function AuthModal({ isOpen, onClose, onSuccess, context = 'gener
     setError(null)
     setIsLoading(true)
 
-    // Set timeout (60 seconds - more reasonable for network requests)
-    const TIMEOUT_MS = 60000
+    // Set timeout (90 seconds - increased for slow connections)
+    const TIMEOUT_MS = 90000
     isRequestPendingRef.current = true
     
     // Create a promise that rejects after timeout
@@ -97,7 +97,10 @@ export default function AuthModal({ isOpen, onClose, onSuccess, context = 'gener
     try {
       if (view === 'signup') {
         const signUpPromise = signUp(email, password, fullName)
-        const { error } = await Promise.race([signUpPromise, timeoutPromise])
+        const result = await Promise.race([
+          signUpPromise.then(result => ({ type: 'result' as const, result })),
+          timeoutPromise
+        ])
         
         isRequestPendingRef.current = false
         if (timeoutRef.current) {
@@ -105,28 +108,35 @@ export default function AuthModal({ isOpen, onClose, onSuccess, context = 'gener
           timeoutRef.current = null
         }
         
-        if (error) {
-          const errorMsg = error.message || 'Failed to sign up'
-          setError(errorMsg)
-          toast.error(
-            <div>
-              <p className="font-semibold">Sign Up Failed</p>
-              <p className="text-sm mt-1">{errorMsg}</p>
-              <p className="text-xs mt-2 text-gray-400">
-                💡 Help: Check your email format, ensure password is at least 6 characters, or try signing in if you already have an account.
-              </p>
-            </div>,
-            { duration: 5000 }
-          )
-        } else {
-          toast.success('Account created successfully!')
-          onSuccess()
-          onClose()
+        // If we got here, it wasn't a timeout
+        if (result.type === 'result') {
+          const { error } = result.result
+          if (error) {
+            const errorMsg = error.message || 'Failed to sign up'
+            setError(errorMsg)
+            toast.error(
+              <div>
+                <p className="font-semibold">Sign Up Failed</p>
+                <p className="text-sm mt-1">{errorMsg}</p>
+                <p className="text-xs mt-2 text-gray-400">
+                  💡 Help: Check your email format, ensure password is at least 6 characters, or try signing in if you already have an account.
+                </p>
+              </div>,
+              { duration: 5000 }
+            )
+          } else {
+            toast.success('Account created successfully!')
+            onSuccess()
+            onClose()
+          }
         }
       } else if (view === 'signin') {
         console.log('🔐 Attempting sign in for:', email)
         const signInPromise = signIn(email, password)
-        const { error } = await Promise.race([signInPromise, timeoutPromise])
+        const result = await Promise.race([
+          signInPromise.then(result => ({ type: 'result' as const, result })),
+          timeoutPromise
+        ])
         
         isRequestPendingRef.current = false
         if (timeoutRef.current) {
@@ -134,40 +144,61 @@ export default function AuthModal({ isOpen, onClose, onSuccess, context = 'gener
           timeoutRef.current = null
         }
         
-        console.log('🔐 Sign in result:', error ? `Error: ${error.message}` : 'Success')
-        
-        if (error) {
-          const errorMsg = error.message || 'Failed to sign in'
-          setError(errorMsg)
-          
-          // Provide helpful error messages based on error type
-          let helpText = '💡 Help: '
-          if (errorMsg.toLowerCase().includes('invalid') || errorMsg.toLowerCase().includes('credentials')) {
-            helpText += 'Check your email and password. Use "Forgot password?" if you need to reset it.'
-          } else if (errorMsg.toLowerCase().includes('email')) {
-            helpText += 'Verify your email address is correct and try again.'
-          } else if (errorMsg.toLowerCase().includes('network') || errorMsg.toLowerCase().includes('fetch')) {
-            helpText += 'Check your internet connection and ensure Supabase is accessible.'
+        // If we got here, it wasn't a timeout
+        if (result.type === 'result') {
+          const { error } = result.result
+            if (error) {
+            let errorMsg = error.message || 'Failed to sign in'
+            
+            // Handle schema/database errors specifically
+            if (errorMsg.toLowerCase().includes('schema') || 
+                errorMsg.toLowerCase().includes('querying') ||
+                errorMsg.toLowerCase().includes('does not exist') ||
+                error.code === '42P01') {
+              errorMsg = 'Database configuration error. Please contact support or check your database setup.'
+              console.error('❌ Database schema error during sign in:', {
+                message: error.message,
+                code: error.code,
+                hint: 'Database migrations may not have been run. Check Supabase setup.'
+              })
+            }
+            
+            setError(errorMsg)
+            
+            // Provide helpful error messages based on error type
+            let helpText = '💡 Help: '
+            if (errorMsg.toLowerCase().includes('database') || errorMsg.toLowerCase().includes('schema')) {
+              helpText += 'Database setup issue detected. Please ensure database migrations have been run in Supabase.'
+            } else if (errorMsg.toLowerCase().includes('invalid') || errorMsg.toLowerCase().includes('credentials')) {
+              helpText += 'Check your email and password. Use "Forgot password?" if you need to reset it.'
+            } else if (errorMsg.toLowerCase().includes('email')) {
+              helpText += 'Verify your email address is correct and try again.'
+            } else if (errorMsg.toLowerCase().includes('network') || errorMsg.toLowerCase().includes('fetch')) {
+              helpText += 'Check your internet connection and ensure Supabase is accessible.'
+            } else {
+              helpText += 'Please try again. If the problem persists, check your internet connection.'
+            }
+            
+            toast.error(
+              <div>
+                <p className="font-semibold">Sign In Failed</p>
+                <p className="text-sm mt-1">{errorMsg}</p>
+                <p className="text-xs mt-2 text-gray-400">{helpText}</p>
+              </div>,
+              { duration: 6000 }
+            )
           } else {
-            helpText += 'Please try again. If the problem persists, check your internet connection.'
+            toast.success('Signed in successfully!')
+            onSuccess()
+            onClose()
           }
-          
-          toast.error(
-            <div>
-              <p className="font-semibold">Sign In Failed</p>
-              <p className="text-sm mt-1">{errorMsg}</p>
-              <p className="text-xs mt-2 text-gray-400">{helpText}</p>
-            </div>,
-            { duration: 6000 }
-          )
-        } else {
-          toast.success('Signed in successfully!')
-          onSuccess()
-          onClose()
         }
       } else if (view === 'forgot-password') {
         const resetPromise = resetPasswordForEmail(email)
-        const { error } = await Promise.race([resetPromise, timeoutPromise])
+        const result = await Promise.race([
+          resetPromise.then(result => ({ type: 'result' as const, result })),
+          timeoutPromise
+        ])
         
         isRequestPendingRef.current = false
         if (timeoutRef.current) {
@@ -175,23 +206,27 @@ export default function AuthModal({ isOpen, onClose, onSuccess, context = 'gener
           timeoutRef.current = null
         }
         
-        if (error) {
-          const errorMsg = error.message || 'Failed to send reset email'
-          setError(errorMsg)
-          toast.error(
-            <div>
-              <p className="font-semibold">Reset Email Failed</p>
-              <p className="text-sm mt-1">{errorMsg}</p>
-              <p className="text-xs mt-2 text-gray-400">
-                💡 Help: Verify your email address is correct and try again.
-              </p>
-            </div>,
-            { duration: 5000 }
-          )
-        } else {
-          toast.success('Password reset email sent! Check your inbox.')
-          setResetEmailSent(true)
-          setView('reset-sent')
+        // If we got here, it wasn't a timeout
+        if (result.type === 'result') {
+          const { error } = result.result
+          if (error) {
+            const errorMsg = error.message || 'Failed to send reset email'
+            setError(errorMsg)
+            toast.error(
+              <div>
+                <p className="font-semibold">Reset Email Failed</p>
+                <p className="text-sm mt-1">{errorMsg}</p>
+                <p className="text-xs mt-2 text-gray-400">
+                  💡 Help: Verify your email address is correct and try again.
+                </p>
+              </div>,
+              { duration: 5000 }
+            )
+          } else {
+            toast.success('Password reset email sent! Check your inbox.')
+            setResetEmailSent(true)
+            setView('reset-sent')
+          }
         }
       }
     } catch (err: any) {

@@ -353,7 +353,7 @@ export default function IdeaAnalysisScreen({ analysis, onContinue, onBack }: Ide
   return (
     <div className="max-w-5xl mx-auto space-y-8 pb-12">
       {/* Header */}
-      <div className="text-center">
+      <div className="text-center pb-[53px]">
         <div className="inline-flex items-center justify-center w-16 h-16 bg-[#00FFF0]/10 rounded-full mb-4 shadow-[0_0_20px_rgba(0,255,240,0.3)]">
           <Sparkles className="w-8 h-8 text-[#00FFF0]" />
         </div>

@@ -9,8 +9,9 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Sparkles, Users, Palette, Clock, Target, Square, Monitor, Smartphone } from 'lucide-react'
 import { Scene, Clip, IdeaAnalysis, AssetContext } from '@/types'
 import IdeaAnalysisScreen from '@/components/IdeaAnalysisScreen'
+import toast from 'react-hot-toast'
 
-// Helper function to derive color palette from brand cues
+// Helper function to derive color palette from brand cues (legacy - kept for fallback)
 function deriveColorPalette(brandCues: string[]): string {
   const cues = brandCues.map(c => c.toLowerCase()).join(' ')
   
@@ -26,7 +27,61 @@ function deriveColorPalette(brandCues: string[]): string {
   return 'warm'
 }
 
-// Helper function to match assets to clip based on description
+// AI-Powered visual style generation function
+async function generateVisualStyle(
+  brandCues: string[],
+  tone: string[],
+  sceneType: string,
+  sceneOrder: number,
+  totalScenes: number,
+  clipOrder: number,
+  totalClipsInScene: number,
+  scenePurpose: string
+) {
+  try {
+    const response = await fetch('/api/generate-visual-style', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        brandCues,
+        tone,
+        sceneType,
+        sceneOrder,
+        totalScenes,
+        clipOrder,
+        totalClipsInScene,
+        scenePurpose
+      }),
+    })
+
+    if (!response.ok) {
+      console.warn('AI style generation failed, using fallback')
+      return {
+        mood: tone.join(', ') || 'dramatic',
+        lighting: 'natural',
+        colorPalette: deriveColorPalette(brandCues),
+        cameraStyle: 'cinematic',
+        postProcessing: []
+      }
+    }
+
+    const { data } = await response.json()
+    return data.style
+  } catch (error) {
+    console.warn('AI style generation error, using fallback:', error)
+    return {
+      mood: tone.join(', ') || 'dramatic',
+      lighting: 'natural',
+      colorPalette: deriveColorPalette(brandCues),
+      cameraStyle: 'cinematic',
+      postProcessing: []
+    }
+  }
+}
+
+// Helper function to match assets to clip based on description (legacy - kept for fallback)
 function matchAssetsToClip(clipDescription: string, assetContext: AssetContext) {
   const lowerDescription = clipDescription.toLowerCase()
   
@@ -40,6 +95,51 @@ function matchAssetsToClip(clipDescription: string, assetContext: AssetContext) 
     locations: assetContext.locations.filter(location => 
       lowerDescription.includes(location.name.toLowerCase())
     )
+  }
+}
+
+// AI-Powered character matching function
+async function matchAssetsToClipAI(
+  clipDescription: string,
+  clipOrder: number,
+  sceneDescription: string,
+  sceneOrder: number,
+  storyContext: string,
+  assetContext: AssetContext,
+  allClipsInScene: any[]
+) {
+  try {
+    const response = await fetch('/api/match-characters-to-clips', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        storyContext,
+        sceneDescription,
+        clipDescription,
+        clipOrder,
+        sceneOrder,
+        allClipsInScene,
+        assetContext
+      }),
+    })
+
+    if (!response.ok) {
+      console.warn('AI character matching failed, falling back to simple matching')
+      return matchAssetsToClip(clipDescription, assetContext)
+    }
+
+    const { matchedCharacters, matchedProducts, matchedLocations } = await response.json()
+    
+    return {
+      characters: matchedCharacters || [],
+      products: matchedProducts || [],
+      locations: matchedLocations || []
+    }
+  } catch (error) {
+    console.warn('AI character matching error, falling back to simple matching:', error)
+    return matchAssetsToClip(clipDescription, assetContext)
   }
 }
 
@@ -147,6 +247,9 @@ export default function IdeaTab() {
   const handleContinueFromAnalysis = async (confirmedAssetContext: AssetContext) => {
     if (!currentProject || !ideaAnalysis) return
 
+    // Dismiss any existing toasts before starting story generation
+    toast.dismiss()
+
     setAssetContext(confirmedAssetContext)
     setShowAnalysisScreen(false)
     
@@ -240,6 +343,19 @@ export default function IdeaTab() {
         const sceneData = scenes[sceneIndex]
         setGenerationStatus(`Creating Scene ${sceneIndex + 1}: ${sceneData.name}...`)
         
+        // Generate unique visual style for this scene using AI
+        setGenerationStatus(`Generating unique visual style for Scene ${sceneIndex + 1}...`)
+        const sceneStyle = await generateVisualStyle(
+          confirmedAssetContext.settings.brandCues,
+          confirmedAssetContext.settings.tone,
+          sceneData.type || 'establishing',
+          sceneIndex + 1,
+          scenes.length,
+          1, // clipOrder (not used for scene-level style)
+          1, // totalClipsInScene (not used for scene-level style)
+          sceneData.purpose || ''
+        )
+        
         const sceneId = crypto.randomUUID()
         const scene: Scene = {
           id: sceneId,
@@ -251,12 +367,16 @@ export default function IdeaTab() {
           purpose: sceneData.purpose || '',
           duration: sceneData.duration || Math.floor(targetRuntime / scenes.length),
           style: {
-            mood: confirmedAssetContext.settings.tone.join(', ') || sceneData.mood || 'dramatic',
-            lighting: 'natural',
-            colorPalette: deriveColorPalette(confirmedAssetContext.settings.brandCues) || 'warm',
-            cameraStyle: 'cinematic',
-            postProcessing: []
-          },
+            mood: sceneStyle.mood || confirmedAssetContext.settings.tone.join(', ') || 'dramatic',
+            lighting: sceneStyle.lighting || 'natural',
+            colorPalette: typeof sceneStyle.colorPalette === 'string' 
+              ? sceneStyle.colorPalette 
+              : sceneStyle.colorPalette?.description || deriveColorPalette(confirmedAssetContext.settings.brandCues) || 'warm',
+            cameraStyle: sceneStyle.cameraStyle || 'cinematic',
+            postProcessing: sceneStyle.postProcessing || [],
+            visualTreatment: sceneStyle.visualTreatment,
+            atmosphere: sceneStyle.atmosphere
+          } as any,
           wardrobe: [],
           location: `Location ${sceneIndex + 1}`,
           coverage: {
@@ -294,6 +414,24 @@ export default function IdeaTab() {
           const clipData = sceneClips[clipIndex]
           setGenerationStatus(`Creating clip ${clipIndex + 1} of ${sceneClips.length} for Scene ${sceneIndex + 1}...`)
           
+          // Use AI-powered character matching for better accuracy
+          setGenerationStatus(`Matching characters to clip ${clipIndex + 1}...`)
+          const matchedAssets = await matchAssetsToClipAI(
+            clipData.description || clipData.name,
+            clipIndex + 1,
+            scene.description,
+            sceneIndex + 1,
+            generatedStory,
+            confirmedAssetContext,
+            sceneClips.map((c: any) => ({ description: c.description, name: c.name }))
+          )
+          
+          console.log(`🎯 AI-matched assets for clip ${clipIndex + 1}:`, {
+            characters: matchedAssets.characters.map((c: any) => ({ name: c.name, confidence: c.confidence, reason: c.matchReason })),
+            products: matchedAssets.products.length,
+            locations: matchedAssets.locations.length
+          })
+          
           // Optionally enhance clip prompts with Story Boarding Expert API
           let imagePrompt = clipData.imagePrompt || ''
           let videoPrompt = clipData.videoPrompt || ''
@@ -315,7 +453,7 @@ export default function IdeaTab() {
                   tone: confirmedAssetContext.settings.tone,
                   brandCues: confirmedAssetContext.settings.brandCues,
                   sceneStyle: scene.style,
-                  assetContext: matchAssetsToClip(clipData.description || clipData.name, confirmedAssetContext),
+                  assetContext: matchedAssets, // Use AI-matched assets
                 }),
               })
 
@@ -331,10 +469,9 @@ export default function IdeaTab() {
           
           await new Promise(resolve => setTimeout(resolve, 300))
           
-          // Match assets to this clip
-          const matchedAssets = matchAssetsToClip(clipData.description || clipData.name, confirmedAssetContext)
-          
-          // Collect reference image URLs from matched assets and filter to only those with URLs
+          // Collect reference image URLs from matched assets with PRIORITY ORDERING
+          // Priority: Characters (highest) -> Products -> Locations (lowest)
+          // This ensures facial consistency gets maximum attention from FLUX.2 Pro
           const referenceImageUrls: string[] = []
           const assetsWithUrls = {
             characters: matchedAssets.characters
@@ -361,10 +498,34 @@ export default function IdeaTab() {
               }))
           }
           
-          // Collect URLs
+          // Collect URLs in PRIORITY ORDER (characters first for facial consistency)
+          // FLUX.2 Pro can handle up to 10 reference images, so we prioritize:
+          // 1. All character reference images (most critical for consistency)
+          // 2. Product reference images (important for brand consistency)
+          // 3. Location reference images (environmental consistency)
           assetsWithUrls.characters.forEach(char => referenceImageUrls.push(char.assetUrl))
           assetsWithUrls.products.forEach(product => referenceImageUrls.push(product.assetUrl))
           assetsWithUrls.locations.forEach(location => referenceImageUrls.push(location.assetUrl))
+          
+          // Limit to 10 reference images (FLUX.2 Pro maximum)
+          // If we exceed, prioritize characters (most important for facial consistency)
+          if (referenceImageUrls.length > 10) {
+            const characterUrls = assetsWithUrls.characters.map(c => c.assetUrl)
+            const productUrls = assetsWithUrls.products.map(p => p.assetUrl)
+            const locationUrls = assetsWithUrls.locations.map(l => l.assetUrl)
+            
+            // Prioritize: all characters, then products, then locations (up to 10 total)
+            referenceImageUrls.length = 0 // Clear array
+            referenceImageUrls.push(...characterUrls.slice(0, 10))
+            const remaining = 10 - referenceImageUrls.length
+            if (remaining > 0) {
+              referenceImageUrls.push(...productUrls.slice(0, remaining))
+            }
+            const stillRemaining = 10 - referenceImageUrls.length
+            if (stillRemaining > 0) {
+              referenceImageUrls.push(...locationUrls.slice(0, stillRemaining))
+            }
+          }
           
           // Determine if remix should be used
           const shouldUseRemix = referenceImageUrls.length > 0
@@ -536,22 +697,92 @@ export default function IdeaTab() {
               
               let imageResponse
               try {
-                // Enhance prompt with asset details if available
+                // Sophisticated prompt enhancement for human-replacing realistic consistency
                 let enhancedPrompt = clip.imagePrompt || ''
+                
                 if (metadata?.assetContext) {
+                  const consistencyInstructions: string[] = []
                   const assetDetails: string[] = []
+                  
+                  // PRIORITY 1: Characters - Explicit facial consistency instructions
                   if (metadata.assetContext.characters.length > 0) {
-                    assetDetails.push(`Characters: ${metadata.assetContext.characters.map(c => `${c.name}: ${c.appearanceDetails}`).join(', ')}`)
+                    const characterInstructions: string[] = []
+                    metadata.assetContext.characters.forEach(char => {
+                      if (char.assetUrl) {
+                        // CRITICAL: Explicit instruction for facial consistency
+                        characterInstructions.push(
+                          `MAINTAIN THE EXACT FACIAL FEATURES, PHYSICAL LIKENESS, AND APPEARANCE OF ${char.name.toUpperCase()} as shown in the reference image. This is CRITICAL for character consistency. Do not alter their face, body type, or distinctive features.`
+                        )
+                        if (char.appearanceDetails) {
+                          characterInstructions.push(
+                            `Additional appearance details for ${char.name}: ${char.appearanceDetails}`
+                          )
+                        }
+                      } else if (char.appearanceDetails) {
+                        // Fallback: Use appearance details if no reference image
+                        characterInstructions.push(
+                          `${char.name} appearance: ${char.appearanceDetails}`
+                        )
+                      }
+                    })
+                    
+                    if (characterInstructions.length > 0) {
+                      consistencyInstructions.push(...characterInstructions)
+                      assetDetails.push(`Characters present: ${metadata.assetContext.characters.map(c => c.name).join(', ')}`)
+                    }
                   }
+                  
+                  // PRIORITY 2: Products/Objects - Exact product consistency
                   if (metadata.assetContext.products.length > 0) {
-                    assetDetails.push(`Products: ${metadata.assetContext.products.map(p => p.name).join(', ')}`)
+                    const productInstructions: string[] = []
+                    metadata.assetContext.products.forEach(product => {
+                      if (product.assetUrl) {
+                        productInstructions.push(
+                          `DEPICT ${product.name.toUpperCase()} PRECISELY AS SHOWN IN THE REFERENCE IMAGE, maintaining its exact design, color, branding, and physical characteristics. This is CRITICAL for product consistency.`
+                        )
+                      } else {
+                        productInstructions.push(`Product: ${product.name}`)
+                      }
+                    })
+                    
+                    if (productInstructions.length > 0) {
+                      consistencyInstructions.push(...productInstructions)
+                      assetDetails.push(`Products present: ${metadata.assetContext.products.map(p => p.name).join(', ')}`)
+                    }
                   }
+                  
+                  // PRIORITY 3: Locations - Environmental consistency
                   if (metadata.assetContext.locations.length > 0) {
-                    assetDetails.push(`Locations: ${metadata.assetContext.locations.map(l => l.name).join(', ')}`)
+                    const locationInstructions: string[] = []
+                    metadata.assetContext.locations.forEach(location => {
+                      if (location.assetUrl) {
+                        locationInstructions.push(
+                          `The environment MUST CONSISTENTLY REFLECT THE REFERENCE IMAGE'S architectural style, atmosphere, lighting, and key visual elements of ${location.name.toUpperCase()}. Maintain spatial consistency and environmental continuity.`
+                        )
+                      } else {
+                        locationInstructions.push(`Location: ${location.name}`)
+                      }
+                    })
+                    
+                    if (locationInstructions.length > 0) {
+                      consistencyInstructions.push(...locationInstructions)
+                      assetDetails.push(`Locations: ${metadata.assetContext.locations.map(l => l.name).join(', ')}`)
+                    }
                   }
+                  
+                  // Combine all instructions with the original prompt
+                  // Place consistency instructions FIRST for maximum impact
+                  if (consistencyInstructions.length > 0) {
+                    enhancedPrompt = consistencyInstructions.join(' ') + '. ' + enhancedPrompt
+                  }
+                  
+                  // Add asset context summary at the end for additional guidance
                   if (assetDetails.length > 0) {
-                    enhancedPrompt += '. ' + assetDetails.join('. ')
+                    enhancedPrompt += '. Context: ' + assetDetails.join('. ')
                   }
+                  
+                  // Add realism and quality instructions
+                  enhancedPrompt += '. Generate a photorealistic, human-replacing realistic image with professional cinematography, natural lighting, and high detail. Ensure all subjects appear natural and lifelike.'
                 }
                 
                 const requestPayload: any = {
@@ -702,7 +933,8 @@ export default function IdeaTab() {
                     model: generationMode === 'remix' ? 'remix' : 'remix-text-to-image',
                     aspect_ratio: latestProject.story.aspectRatio || '16:9',
                     project_id: latestProject.id,
-                    clip_id: clipId
+                    clip_id: clipId,
+                    storeExternally: true // Automatically download and store in Supabase Storage
                   })
                   console.log(`✓ [${index + 1}/${allClips.length}] Image saved to database for "${clipName}"`)
                 } catch (err) {
@@ -884,10 +1116,23 @@ export default function IdeaTab() {
   }
 
   const handleGenerateStory = async () => {
+    console.log('🔘 Generate Story Structure button clicked')
+    
     if (!currentProject?.story?.originalIdea?.trim()) {
-      console.error('❌ Cannot generate: No original idea found', { currentProject })
+      console.error('❌ Cannot generate: No original idea found', { 
+        hasProject: !!currentProject,
+        hasStory: !!currentProject?.story,
+        hasIdea: !!currentProject?.story?.originalIdea,
+        ideaLength: currentProject?.story?.originalIdea?.length || 0
+      })
+      toast.error('Please enter an idea before generating the story structure')
       return
     }
+    
+    console.log('✅ Validation passed, proceeding with generation', {
+      ideaLength: currentProject.story.originalIdea.length,
+      ideaPreview: currentProject.story.originalIdea.substring(0, 50) + '...'
+    })
 
     // Warn user if they have existing scenes/clips
     const hasExistingContent = currentProject.scenes && currentProject.scenes.length > 0
@@ -907,10 +1152,18 @@ export default function IdeaTab() {
       originalIdea: currentProject.story.originalIdea.substring(0, 50) + '...'
     })
     
+    const loadingToast = toast.loading('Analyzing your idea...')
+    
     try {
       setIsGenerating(true)
       setGeneratingStory(true)
       setGenerationStatus('Analyzing your idea...')
+      
+      console.log('📡 Calling analysis API with:', {
+        ideaLength: currentProject.story.originalIdea.length,
+        hasTone: !!tone,
+        hasBrandCues: !!brandCues
+      })
       
       // Step 1: Call analysis API
       const analysisResponse = await fetch('/api/analyze-idea-preview', {
@@ -926,12 +1179,98 @@ export default function IdeaTab() {
       })
 
       if (!analysisResponse.ok) {
-        const errorData = await analysisResponse.json()
-        throw new Error(errorData.error || 'Failed to analyze idea')
+        let errorMessage = 'Failed to analyze idea'
+        let errorDetails = ''
+        
+        try {
+          const errorData = await analysisResponse.json()
+          errorMessage = errorData.error || errorMessage
+          errorDetails = errorData.details || ''
+          
+          // Provide helpful messages based on error type
+          if (errorData.errorType === 'configuration_error') {
+            errorMessage = 'OpenAI API key not configured. Please check server configuration.'
+          } else if (errorData.errorType === 'auth_error') {
+            errorMessage = 'OpenAI API authentication failed. Please check your API key.'
+          } else if (errorData.errorType === 'rate_limit_error') {
+            errorMessage = 'Rate limit exceeded. Please wait a moment and try again.'
+          } else if (errorData.errorType === 'model_error') {
+            errorMessage = `Model error: ${errorDetails || 'The AI model is not available'}`
+          } else if (errorData.errorType === 'parse_error') {
+            errorMessage = 'Failed to parse AI response. Please try again.'
+          } else if (errorData.details) {
+            errorMessage = `${errorMessage}: ${errorData.details}`
+          }
+          
+          console.error('❌ Analysis API error:', {
+            status: analysisResponse.status,
+            errorType: errorData.errorType,
+            error: errorData.error,
+            details: errorData.details
+          })
+        } catch (e) {
+          // If response is not JSON, get text
+          const text = await analysisResponse.text()
+          console.error('❌ Analysis API error response (non-JSON):', text.substring(0, 200))
+          errorMessage = `Server error (${analysisResponse.status}): ${analysisResponse.statusText}`
+          if (text) {
+            errorDetails = text.substring(0, 200)
+          }
+        }
+        
+        toast.dismiss(loadingToast)
+        toast.error(errorMessage + (errorDetails ? `\n${errorDetails}` : ''), { 
+          duration: 6000,
+          style: {
+            maxWidth: '500px',
+            whiteSpace: 'pre-wrap'
+          }
+        })
+        throw new Error(errorMessage)
       }
 
-      const { data: analysisData } = await analysisResponse.json()
-      console.log('✅ Idea analyzed:', analysisData)
+      let responseData
+      try {
+        responseData = await analysisResponse.json()
+      } catch (parseError) {
+        console.error('❌ Failed to parse JSON response:', parseError)
+        const text = await analysisResponse.text()
+        console.error('Response text:', text.substring(0, 500))
+        toast.dismiss(loadingToast)
+        toast.error('Server returned invalid response. Please check server logs.', { duration: 5000 })
+        throw new Error('Failed to parse server response as JSON')
+      }
+      
+      // Validate response structure
+      if (!responseData) {
+        console.error('❌ Empty response received')
+        toast.dismiss(loadingToast)
+        toast.error('Empty response from server. Please try again.', { duration: 5000 })
+        throw new Error('Empty response')
+      }
+
+      // Handle both { data: {...} } and direct data response formats
+      const analysisData = responseData.data || responseData
+      
+      if (!analysisData || !analysisData.analysis) {
+        console.error('❌ Invalid response structure - missing analysis:', {
+          responseData,
+          hasData: !!responseData.data,
+          hasDirectData: !responseData.data && !!responseData.analysis
+        })
+        toast.dismiss(loadingToast)
+        toast.error('Invalid response structure from server. Please try again.', { duration: 5000 })
+        throw new Error('Invalid response structure - missing analysis field')
+      }
+
+      console.log('✅ Idea analyzed successfully:', {
+        type: analysisData.analysis?.type,
+        detectedItems: analysisData.analysis?.detectedItems?.length || 0,
+        fullData: analysisData
+      })
+      
+      toast.dismiss(loadingToast)
+      toast.success('Idea analyzed successfully! Review and confirm your settings below.', { duration: 3000 })
       
       // Step 2: Show analysis screen
       setIdeaAnalysis(analysisData)
@@ -939,9 +1278,17 @@ export default function IdeaTab() {
       setIsGenerating(false)
       setGeneratingStory(false)
       setGenerationStatus('')
-    } catch (error) {
-      console.error('Error analyzing idea:', error)
-      setGenerationStatus('Error analyzing idea. Please try again.')
+    } catch (error: any) {
+      console.error('❌ Error analyzing idea:', error)
+      toast.dismiss(loadingToast)
+      
+      const errorMessage = error?.message || 'Failed to analyze idea. Please check your connection and try again.'
+      toast.error(errorMessage, { 
+        duration: 5000,
+        icon: '⚠️'
+      })
+      
+      setGenerationStatus('')
       setGeneratingStory(false)
       setIsGenerating(false)
     }
@@ -1086,10 +1433,20 @@ export default function IdeaTab() {
       {/* Generate Button */}
       <div className="text-center">
         <Button
-          onClick={handleGenerateStory}
+          onClick={(e) => {
+            e.preventDefault()
+            e.stopPropagation()
+            console.log('🔘 Button onClick triggered', {
+              isGenerating,
+              hasIdea: !!currentProject?.story?.originalIdea?.trim(),
+              ideaLength: currentProject?.story?.originalIdea?.trim().length || 0
+            })
+            handleGenerateStory()
+          }}
           disabled={!currentProject.story.originalIdea.trim() || isGenerating}
           className="bg-[#00FFF0] hover:bg-[#00FFF0]/90 text-black font-semibold px-8 py-3 rounded-xl
                    disabled:opacity-50 disabled:cursor-not-allowed"
+          type="button"
         >
           {isGenerating ? (
             <div className="flex items-center gap-2">

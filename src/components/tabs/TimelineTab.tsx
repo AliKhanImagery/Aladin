@@ -361,6 +361,7 @@ export default function TimelineTab() {
         })
 
         // Determine video model based on available assets and user selection
+        // Prioritize consistent images and reference images for video generation
         let requestBody: any = {
           prompt: clip.videoPrompt,
           duration: clip.duration || 5,
@@ -368,13 +369,27 @@ export default function TimelineTab() {
           videoModel: selectedVideoModel, // Use selected model
         }
 
-        // Use image-to-video if clip has an image
+        // Use image-to-video if clip has a generated image (ensures consistency)
         if (clip.generatedImage) {
           requestBody.image_url = clip.generatedImage
           console.log(`📸 [${index + 1}/${clipsNeedingVideo.length}] Using image-to-video for "${clipName}" with model: ${selectedVideoModel}`)
+          
+          // If we have reference images in metadata, pass them for additional consistency
+          // This helps video models maintain character/product consistency across frames
+          if (clip.generationMetadata?.referenceImageUrls && clip.generationMetadata.referenceImageUrls.length > 0) {
+            requestBody.reference_image_urls = clip.generationMetadata.referenceImageUrls.slice(0, 4) // Limit to 4 for video models
+            console.log(`🎯 [${index + 1}/${clipsNeedingVideo.length}] Adding ${requestBody.reference_image_urls.length} reference images for video consistency`)
+          }
         } else {
-          // Text-to-video
-          console.log(`📝 [${index + 1}/${clipsNeedingVideo.length}] Using text-to-video for "${clipName}" with model: ${selectedVideoModel}`)
+          // Text-to-video: Still try to use reference images if available for consistency
+          if (clip.generationMetadata?.referenceImageUrls && clip.generationMetadata.referenceImageUrls.length > 0) {
+            // Use reference-to-video if available (Vidu Q1 supports this)
+            requestBody.reference_image_urls = clip.generationMetadata.referenceImageUrls.slice(0, 4)
+            console.log(`📝 [${index + 1}/${clipsNeedingVideo.length}] Using reference-to-video for "${clipName}" with ${requestBody.reference_image_urls.length} reference images`)
+          } else {
+            // Pure text-to-video
+            console.log(`📝 [${index + 1}/${clipsNeedingVideo.length}] Using text-to-video for "${clipName}" with model: ${selectedVideoModel}`)
+          }
         }
 
         // Create timeout controller
@@ -485,7 +500,8 @@ export default function TimelineTab() {
               aspect_ratio: aspectRatio,
               project_id: currentProject.id,
               clip_id: clipId,
-              thumbnail_url: clip.generatedImage || undefined
+              thumbnail_url: clip.generatedImage || undefined,
+              storeExternally: true // Automatically download and store in Supabase Storage
             })
             
             if (!savedVideo) {
