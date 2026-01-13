@@ -37,7 +37,7 @@ export default function ImageModal({ imageUrl, alt = 'Preview', isOpen, onClose 
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 backdrop-blur-sm animate-in fade-in duration-200"
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 backdrop-blur-md animate-in fade-in duration-300 p-2 sm:p-4"
       onClick={handleBackdropClick}
       onKeyDown={handleKeyDown}
       tabIndex={-1}
@@ -45,41 +45,46 @@ export default function ImageModal({ imageUrl, alt = 'Preview', isOpen, onClose 
       aria-modal="true"
       aria-label="Image preview modal"
     >
-      {/* Close Button */}
-      <Button
-        variant="ghost"
-        size="icon"
-        onClick={onClose}
-        className="absolute top-4 right-4 z-10 bg-[#1E1F22]/90 hover:bg-[#1E1F22] text-white hover:text-[#00FFF0] rounded-full border border-[#3AAFA9]/30 backdrop-blur-sm"
-        aria-label="Close image preview"
-      >
-        <X className="w-5 h-5" />
-      </Button>
-
-      {/* Download Button */}
-      <Button
-        variant="ghost"
-        size="icon"
-        onClick={handleDownload}
-        className="absolute top-4 right-16 z-10 bg-[#1E1F22]/90 hover:bg-[#1E1F22] text-white hover:text-[#00FFF0] rounded-full border border-[#3AAFA9]/30 backdrop-blur-sm"
-        aria-label="Download image"
-      >
-        <Download className="w-5 h-5" />
-      </Button>
-
-      {/* Image Container */}
-      <div className="relative max-w-[95vw] max-h-[95vh] w-full h-full flex items-center justify-center p-4">
-        <img
-          src={imageUrl}
-          alt={alt}
-          className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
-          onClick={(e) => e.stopPropagation()}
-          onError={(e) => {
-            const target = e.target as HTMLImageElement
-            target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAwIiBoZWlnaHQ9IjMwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjMWUxZjIyIi8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtc2l6ZT0iMTgiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIuM2VtIiBmaWxsPSIjNjY2Ij5JbWFnZSBub3QgZm91bmQ8L3RleHQ+PC9zdmc+'
-          }}
-        />
+      {/* Action Bar (Top Right) */}
+      <div className="absolute top-4 right-4 sm:top-6 sm:right-6 flex items-center gap-3 z-[110]">
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={handleDownload}
+          className="bg-white/5 hover:bg-white/10 text-white hover:text-brand-emerald rounded-full border border-white/10 backdrop-blur-xl h-10 w-10 sm:h-12 sm:w-12 transition-all duration-300 shadow-lg"
+          aria-label="Download image"
+        >
+          <Download className="w-4 h-4 sm:w-5 sm:h-5" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={onClose}
+          className="bg-white/5 hover:bg-white/10 text-white hover:text-red-400 rounded-full border border-white/10 backdrop-blur-xl h-10 w-10 sm:h-12 sm:w-12 transition-all duration-300 shadow-lg"
+          aria-label="Close image preview"
+        >
+          <X className="w-5 h-5 sm:w-6 sm:h-6" />
+        </Button>
       </div>
+
+      {/* Image - Fills available space while maintaining aspect ratio */}
+      <img
+        src={imageUrl}
+        alt={alt}
+        className="block rounded-2xl shadow-[0_0_50px_-12px_rgba(0,0,0,0.5)] animate-in zoom-in-95 duration-500 ease-out cursor-default"
+        style={{
+          maxWidth: 'calc(100vw - 1rem)',
+          maxHeight: 'calc(100vh - 5rem)',
+          width: 'auto',
+          height: 'auto',
+          objectFit: 'contain',
+        }}
+        onClick={(e) => e.stopPropagation()}
+        onError={(e) => {
+          const target = e.target as HTMLImageElement
+          target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAwIiBoZWlnaHQ9IjMwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjMWUxZjIyIi8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtc2l6ZT0iMTgiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIuM2VtIiBmaWxsPSIjNjY2Ij5JbWFnZSBub3QgZm91bmQ8L3RleHQ+PC9zdmc+'
+        }}
+      />
     </div>
   )
 }

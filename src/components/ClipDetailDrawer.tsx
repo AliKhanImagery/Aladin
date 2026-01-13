@@ -5,7 +5,7 @@ import { useAppStore } from '@/lib/store'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Input } from '@/components/ui/input'
-import { X, Play, Settings, Image, Video, Zap, Loader2, Plus, Info, Maximize2 } from 'lucide-react'
+import { X, Play, Settings, Image, Video, Zap, Loader2, Plus, Info, Maximize2, Sparkles, Palette } from 'lucide-react'
 import { FileUpload } from '@/components/ui/fileUpload'
 import ImageModal from './ImageModal'
 import { saveUserImage, saveUserVideo } from '@/lib/userMedia'
@@ -26,7 +26,7 @@ export default function ClipDetailDrawer() {
   const aspectRatio = currentProject?.story?.aspectRatio || '16:9'
   
   const [activeTab, setActiveTab] = useState<'image' | 'video' | 'elements' | 'settings'>('image')
-  const [imageModel, setImageModel] = useState<'openai' | 'fal-ai' | 'nano-banana' | 'remix'>('openai')
+  const [imageModel, setImageModel] = useState<'flux-2-pro' | 'nano-banana' | 'reeve'>((currentProject?.settings?.imageModel as any) || 'flux-2-pro')
   const [nanoBananaMode, setNanoBananaMode] = useState<'text-to-image' | 'multi-image-edit'>('text-to-image')
   const [remixMode, setRemixMode] = useState<'edit' | 'remix' | 'text-to-image'>('remix')
   const [isGeneratingImage, setIsGeneratingImage] = useState(false)
@@ -51,6 +51,11 @@ export default function ClipDetailDrawer() {
       setLocalImagePrompt(selectedClip.imagePrompt || '')
       setLocalVideoPrompt(selectedClip.videoPrompt || '')
       
+      // Update image model from project settings if not manually changed
+      if (currentProject?.settings?.imageModel) {
+        setImageModel(currentProject.settings.imageModel as any)
+      }
+      
       // Sync generating status from global state
       const currentStatus = clipGeneratingStatus[selectedClip.id]
       if (currentStatus === 'image') {
@@ -63,7 +68,7 @@ export default function ClipDetailDrawer() {
         setIsGeneratingVideo(false)
       }
     }
-  }, [selectedClip?.id, selectedClip?.imagePrompt, selectedClip?.videoPrompt, clipGeneratingStatus])
+  }, [selectedClip?.id, selectedClip?.imagePrompt, selectedClip?.videoPrompt, clipGeneratingStatus, currentProject?.settings?.imageModel])
 
   // Auto-switch to image-to-video when image is generated
   useEffect(() => {
@@ -125,321 +130,65 @@ export default function ClipDetailDrawer() {
     let lastError: { model: string; error: string } | null = null
 
     try {
-      if (imageModel === 'openai') {
-        // OpenAI DALL-E - uses pixel dimensions, not aspect ratio strings
-        // Map aspect ratio to DALL-E size
-        const aspectRatioToUse = aspectRatio || '16:9'
-        let dallESize = '1024x1024' // default 1:1
-        if (aspectRatioToUse === '16:9') {
-          dallESize = '1792x1024' // landscape
-        } else if (aspectRatioToUse === '9:16') {
-          dallESize = '1024x1792' // portrait
-        } else if (aspectRatioToUse === '1:1') {
-          dallESize = '1024x1024' // square
-        }
-        
-        console.log('🎨 OpenAI DALL-E - Mapped aspect ratio:', { aspectRatio: aspectRatioToUse, size: dallESize })
+      // Handle flux-2-pro, nano-banana, or reeve via the unified remix API
+      const aspectRatioToUse = aspectRatio || '16:9'
+      const validReferences = referenceImageUrls.filter(url => url.trim() !== '')
 
-        const response = await fetch('/api/generate-image', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            prompt: promptToUse,
-            model: 'dall-e-3',
-            size: dallESize,
-            quality: 'hd',
-          }),
-        })
-
-        if (!response.ok) {
-          const errorData = await response.json()
-          lastError = { model: 'OpenAI DALL-E', error: errorData.error || 'Failed to generate image' }
-          throw new Error(errorData.error || 'Failed to generate image')
-        }
-
-        const { imageUrl } = await response.json()
-        handleUpdateClip({ generatedImage: imageUrl, previewImage: imageUrl })
-        if (selectedClip?.id) {
-          setClipGeneratingStatus(selectedClip.id, null)
-        }
-        // Save to user_images table and store in Supabase Storage
-        await saveUserImage({
-          image_url: imageUrl,
-          prompt: promptToUse,
-          model: 'openai',
-          aspect_ratio: aspectRatio,
-          project_id: currentProject?.id,
-          clip_id: selectedClip?.id,
-          storeExternally: true // Automatically download and store in Supabase Storage
-        })
-      } else if (imageModel === 'fal-ai') {
-        // Fal AI Vidu with reference images
-        const validReferences = referenceImageUrls.filter(url => url.trim() !== '')
-        
-        if (validReferences.length === 0) {
-          alert(
-            '📷 Reference Images Required\n\n' +
-            'Fal AI Vidu requires at least one reference image to generate.\n\n' +
-            'Please:\n' +
-            '1. Click "Add Reference Image" below\n' +
-            '2. Upload an image file OR paste an image URL\n' +
-            '3. Try generating again'
-          )
-          setIsGeneratingImage(false)
-          if (selectedClip?.id) {
-            setClipGeneratingStatus(selectedClip.id, null)
-          }
-          return
-        }
-
-        const aspectRatioToUse = aspectRatio || '16:9'
-        console.log('🎨 Fal AI Vidu - Aspect ratio:', aspectRatioToUse)
-        
-        const response = await fetch('/api/generate-image-fal', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            prompt: promptToUse,
-            reference_image_urls: validReferences,
-            aspect_ratio: aspectRatioToUse, // String format: "16:9", "9:16", "1:1"
-          }),
-        })
-
-        if (!response.ok) {
-          const errorData = await response.json()
-          lastError = { model: 'Fal AI Vidu', error: errorData.error || 'Failed to generate image' }
-          throw new Error(errorData.error || 'Failed to generate image')
-        }
-
-        const { imageUrl } = await response.json()
-        handleUpdateClip({ generatedImage: imageUrl, previewImage: imageUrl })
-        if (selectedClip?.id) {
-          setClipGeneratingStatus(selectedClip.id, null)
-        }
-        // Save to user_images table and store in Supabase Storage
-        await saveUserImage({
-          image_url: imageUrl,
-          prompt: promptToUse,
-          model: 'fal-ai',
-          aspect_ratio: aspectRatio,
-          project_id: currentProject?.id,
-          clip_id: selectedClip?.id,
-          storeExternally: true // Automatically download and store in Supabase Storage
-        })
-      } else if (imageModel === 'remix') {
-        const aspectRatioToUse = aspectRatio || '16:9'
-        console.log('🎨 Fal AI Reve Remix - Mode:', remixMode, 'Aspect ratio:', aspectRatioToUse)
-
-        // Validate inputs based on mode
-        if (remixMode === 'edit') {
-          // Edit mode: requires reference images, prompt is optional
-          const validReferences = referenceImageUrls.filter(url => url.trim() !== '')
-          if (validReferences.length === 0) {
-            alert(
-              '📷 Reference Images Required for Edit Mode\n\n' +
-              'Reve Remix Edit mode requires at least one reference image.\n\n' +
-              'To fix this:\n' +
-              '1. Scroll down to the "Reference Images" section\n' +
-              '2. Upload an image or paste an image URL\n' +
-              '3. The prompt is optional - you can generate with just images\n' +
-              '4. Try generating again'
-            )
-            setIsGeneratingImage(false)
-            return
-          }
-        } else if (remixMode === 'remix') {
-          // Remix mode: requires both prompt and reference images
-          const validReferences = referenceImageUrls.filter(url => url.trim() !== '')
-          if (validReferences.length === 0) {
-            alert(
-              '📷 Reference Images Required for Remix Mode\n\n' +
-              'Reve Remix mode needs both:\n' +
-              '✓ Your text prompt (you have this ✓)\n' +
-              '✗ Reference images (missing)\n\n' +
-              'To fix this:\n' +
-              '1. Scroll down to "Reference Images" section\n' +
-              '2. Upload 1-3 images or paste image URLs\n' +
-              '3. These images will be blended/transformed based on your prompt\n' +
-              '4. Try generating again'
-            )
-            setIsGeneratingImage(false)
-            return
-          }
-          if (!promptToUse) {
-            alert(
-              '✍️ Prompt Required for Remix Mode\n\n' +
-              'Reve Remix mode needs both:\n' +
-              '✗ Text prompt (missing)\n' +
-              '✓ Reference images (you have this ✓)\n\n' +
-              'To fix this:\n' +
-              '1. Enter a prompt in the "Image Prompt" field above\n' +
-              '2. Describe how you want to blend or transform the reference images\n' +
-              '3. Example: "Blend the style of the first image with the content of the second"\n' +
-              '4. Try generating again'
-            )
-            setIsGeneratingImage(false)
-            return
-          }
-        } else if (remixMode === 'text-to-image') {
-          // Text-to-image mode: Uses fal-ai/reve/text-to-image endpoint
-          // Only requires prompt, no reference images needed
-          if (!promptToUse) {
-            alert(
-              '✍️ Prompt Required for Text-to-Image Mode\n\n' +
-              'Text-to-Image mode only needs a text prompt.\n' +
-              'No reference images required - this is pure text-to-image generation!\n\n' +
-              'To fix this:\n' +
-              '1. Enter a prompt in the "Image Prompt" field above\n' +
-              '2. Describe the image you want to generate\n' +
-              '3. Example: "A futuristic cityscape at sunset with neon lights"\n' +
-              '4. Try generating again'
-            )
-            setIsGeneratingImage(false)
-            return
-          }
-          // No reference images validation needed for text-to-image mode
-        }
-
-        // Prepare request body based on mode
-        const validReferences = referenceImageUrls.filter(url => url.trim() !== '')
-        const requestBody: any = {
-          mode: remixMode,
-          aspect_ratio: aspectRatioToUse, // String format: "16:9", "9:16", "1:1"
-        }
-
-        // Add prompt for remix and text-to-image modes
-        if (remixMode === 'remix' || remixMode === 'text-to-image') {
-          requestBody.prompt = promptToUse
-        }
-
-        // Add reference images - REQUIRED for edit and remix modes only
-        // Text-to-image mode uses fal-ai/reve/text-to-image endpoint which doesn't need reference images
-        if (remixMode === 'edit' || remixMode === 'remix') {
-          requestBody.reference_image_urls = validReferences
-        }
-        
-        // Get session token for authentication
-        const { supabase } = await import('@/lib/supabase')
-        const { data: { session } } = await supabase.auth.getSession()
-        const headers: HeadersInit = { 'Content-Type': 'application/json' }
-        if (session?.access_token) {
-          headers['Authorization'] = `Bearer ${session.access_token}`
-        }
-        
-        const response = await fetch('/api/generate-image-remix', {
-          method: 'POST',
-          headers,
-          body: JSON.stringify(requestBody),
-        })
-
-        if (!response.ok) {
-          const errorData = await response.json()
-          
-          // Parse error details for better user experience
-          let errorMessage = errorData.error || 'Failed to generate image'
-          let errorDetails = errorData.details || ''
-          const errorHint = errorData.hint || ''
-          const statusCode = errorData.statusCode || response.status
-          
-          // For ValidationError (422), format the details nicely
-          if (statusCode === 422 && errorDetails) {
-            errorMessage = 'Validation Error: Invalid Parameters'
-            if (typeof errorDetails === 'string') {
-              errorDetails = errorDetails
-            } else {
-              errorDetails = JSON.stringify(errorDetails)
-            }
-          }
-          
-          // Combine message and details
-          let fullErrorMessage = errorMessage
-          if (errorDetails && errorDetails !== errorMessage) {
-            fullErrorMessage += `\n\nDetails: ${errorDetails}`
-          }
-          if (errorHint) {
-            fullErrorMessage += `\n\n💡 ${errorHint}`
-          }
-          
-          lastError = { 
-            model: 'Fal AI Reve Remix', 
-            error: fullErrorMessage
-          }
-          throw new Error(errorMessage)
-        }
-
-        const { imageUrl } = await response.json()
-        handleUpdateClip({ generatedImage: imageUrl, previewImage: imageUrl })
-        if (selectedClip?.id) {
-          setClipGeneratingStatus(selectedClip.id, null)
-        }
-        // Save to user_images table and store in Supabase Storage
-        await saveUserImage({
-          image_url: imageUrl,
-          prompt: promptToUse,
-          model: 'remix',
-          aspect_ratio: aspectRatioToUse,
-          project_id: currentProject?.id,
-          clip_id: selectedClip?.id,
-          storeExternally: true // Automatically download and store in Supabase Storage
-        })
-      } else if (imageModel === 'nano-banana') {
-        // Fal AI Nano Banana - supports two modes
-        const aspectRatioToUse = aspectRatio || '16:9'
-        console.log('🎨 Fal AI Nano Banana - Aspect ratio:', aspectRatioToUse, 'Mode:', nanoBananaMode)
-        
-        let requestBody: any = {
-          prompt: promptToUse,
-          mode: nanoBananaMode,
-          aspect_ratio: aspectRatioToUse, // String format: "16:9", "9:16", "1:1"
-        }
-
-        // Multi-image-edit mode requires input images
-        if (nanoBananaMode === 'multi-image-edit') {
-          const validInputImages = nanoBananaInputImages.filter(url => url.trim() !== '')
-          
-          if (validInputImages.length === 0) {
-            alert('Please add at least one input image for Multi-image-edit mode')
-            setIsGeneratingImage(false)
-            return
-          }
-          
-          requestBody.input_images = validInputImages
-        }
-
-        const response = await fetch('/api/generate-image-nano-banana', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(requestBody),
-        })
-
-        if (!response.ok) {
-          const errorData = await response.json()
-          lastError = { model: 'Fal AI Nano Banana', error: errorData.error || 'Failed to generate image' }
-          throw new Error(errorData.error || 'Failed to generate image')
-        }
-
-        const { imageUrl } = await response.json()
-        handleUpdateClip({ generatedImage: imageUrl, previewImage: imageUrl })
-        if (selectedClip?.id) {
-          setClipGeneratingStatus(selectedClip.id, null)
-        }
-        // Save to user_images table and store in Supabase Storage
-        await saveUserImage({
-          image_url: imageUrl,
-          prompt: promptToUse,
-          model: 'nano-banana',
-          aspect_ratio: aspectRatio,
-          project_id: currentProject?.id,
-          clip_id: selectedClip?.id,
-          storeExternally: true // Automatically download and store in Supabase Storage
-        })
+      // Prepare request body
+      const requestBody: any = {
+        imageModel,
+        mode: remixMode,
+        aspect_ratio: aspectRatioToUse,
+        prompt: promptToUse,
+        project_id: currentProject?.id,
+        clip_id: selectedClip?.id,
       }
+
+      if (validReferences.length > 0) {
+        requestBody.reference_image_urls = validReferences
+        if (imageModel === 'flux-2-pro') {
+          requestBody.mode = 'edit' // Best for consistency
+        }
+      }
+      
+      // Get session token for authentication
+      const { supabase } = await import('@/lib/supabase')
+      const { data: { session } } = await supabase.auth.getSession()
+      const headers: HeadersInit = { 'Content-Type': 'application/json' }
+      if (session?.access_token) {
+        headers['Authorization'] = `Bearer ${session.access_token}`
+      }
+      
+      const response = await fetch('/api/generate-image-remix', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(requestBody),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        lastError = { 
+          model: imageModel.toUpperCase(), 
+          error: errorData.error || 'Failed to generate image'
+        }
+        throw new Error(errorData.error || 'Failed to generate image')
+      }
+
+      const { imageUrl } = await response.json()
+      handleUpdateClip({ generatedImage: imageUrl, previewImage: imageUrl })
+      if (selectedClip?.id) {
+        setClipGeneratingStatus(selectedClip.id, null)
+      }
+      // Save to user_images table
+      await saveUserImage({
+        image_url: imageUrl,
+        prompt: promptToUse,
+        model: imageModel,
+        aspect_ratio: aspectRatioToUse,
+        project_id: currentProject?.id,
+        clip_id: selectedClip?.id,
+        storeExternally: true
+      })
     } catch (error: any) {
       console.error('Image generation error:', error)
       
@@ -840,14 +589,14 @@ export default function ClipDetailDrawer() {
         <div className="flex-1 p-6 overflow-y-auto">
           {activeTab === 'image' && (
             <div className="space-y-4">
-              {/* General Help Info for Remix */}
-              {imageModel === 'remix' && (
+              {/* General Help Info for Reeve/Remix */}
+              {imageModel === 'reeve' && (
                 <div className="p-3 bg-gradient-to-r from-blue-500/10 to-purple-500/10 rounded-lg border border-blue-500/30 mb-4">
                   <p className="text-sm text-blue-300 font-medium mb-2">
-                    🎨 About Reve Remix
+                    🎨 About Reeve Remix
                   </p>
                   <p className="text-xs text-blue-200/90 leading-relaxed">
-                    Reve Remix offers three modes: <strong>Edit</strong> and <strong>Remix</strong> require reference images, 
+                    Reeve offers three modes: <strong>Edit</strong> and <strong>Remix</strong> require reference images, 
                     while <strong>Text-to-Image</strong> uses a dedicated endpoint for pure text-to-image generation (no reference images needed).
                   </p>
                   <div className="mt-2 pt-2 border-t border-blue-500/20">
@@ -863,44 +612,44 @@ export default function ClipDetailDrawer() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Image Model
+                  Cinematography Engine
                 </label>
                 <div className="grid grid-cols-1 gap-2 mb-4">
                   <Button
-                    variant={imageModel === 'openai' ? 'default' : 'outline'}
-                    onClick={() => setImageModel('openai')}
-                    className={imageModel === 'openai' 
-                      ? 'bg-[#00FFF0] text-black' 
-                      : 'border-[#3AAFA9] text-[#3AAFA9] hover:bg-[#3AAFA9] hover:text-black'}
+                    variant={imageModel === 'flux-2-pro' ? 'default' : 'outline'}
+                    onClick={() => setImageModel('flux-2-pro')}
+                    className={imageModel === 'flux-2-pro' 
+                      ? 'bg-[#00FFF0] text-black border-[#00FFF0]' 
+                      : 'border-[#3AAFA9]/50 text-gray-400 hover:text-white hover:border-[#00FFF0]'}
                   >
-                    OpenAI DALL-E
-                  </Button>
-                  <Button
-                    variant={imageModel === 'fal-ai' ? 'default' : 'outline'}
-                    onClick={() => setImageModel('fal-ai')}
-                    className={imageModel === 'fal-ai' 
-                      ? 'bg-[#00FFF0] text-black' 
-                      : 'border-[#3AAFA9] text-[#3AAFA9] hover:bg-[#3AAFA9] hover:text-black'}
-                  >
-                    Fal AI Vidu
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>Premium (FLUX.2 Pro)</span>
+                    </div>
                   </Button>
                   <Button
                     variant={imageModel === 'nano-banana' ? 'default' : 'outline'}
                     onClick={() => setImageModel('nano-banana')}
                     className={imageModel === 'nano-banana' 
-                      ? 'bg-[#00FFF0] text-black' 
-                      : 'border-[#3AAFA9] text-[#3AAFA9] hover:bg-[#3AAFA9] hover:text-black'}
+                      ? 'bg-[#00FFF0] text-black border-[#00FFF0]' 
+                      : 'border-[#3AAFA9]/50 text-gray-400 hover:text-white hover:border-[#00FFF0]'}
                   >
-                    Ultra Mode
+                    <div className="flex items-center gap-2">
+                      <Zap className="w-3.5 h-3.5" />
+                      <span>Hyper-Fast (Nano Banana)</span>
+                    </div>
                   </Button>
                   <Button
-                    variant={imageModel === 'remix' ? 'default' : 'outline'}
-                    onClick={() => setImageModel('remix')}
-                    className={imageModel === 'remix' 
-                      ? 'bg-[#00FFF0] text-black' 
-                      : 'border-[#3AAFA9] text-[#3AAFA9] hover:bg-[#3AAFA9] hover:text-black'}
+                    variant={imageModel === 'reeve' ? 'default' : 'outline'}
+                    onClick={() => setImageModel('reeve')}
+                    className={imageModel === 'reeve' 
+                      ? 'bg-[#00FFF0] text-black border-[#00FFF0]' 
+                      : 'border-[#3AAFA9]/50 text-gray-400 hover:text-white hover:border-[#00FFF0]'}
                   >
-                    Remix
+                    <div className="flex items-center gap-2">
+                      <Palette className="w-3.5 h-3.5" />
+                      <span>Artistic (Reeve)</span>
+                    </div>
                   </Button>
                 </div>
               </div>
@@ -950,8 +699,8 @@ export default function ClipDetailDrawer() {
                 </div>
               )}
 
-              {/* Mode Selection for Remix - Sub-selection */}
-              {imageModel === 'remix' && (
+              {/* Mode Selection for Reeve/Remix - Sub-selection */}
+              {imageModel === 'reeve' && (
                 <div className="ml-4 pl-4 border-l-2 border-[#00FFF0]/30">
                   <label className="block text-xs font-medium text-gray-400 mb-2">
                     Mode Selection
@@ -1021,15 +770,15 @@ export default function ClipDetailDrawer() {
                 </div>
               )}
 
-              {/* Image Prompt - Hidden for Remix Edit mode, shown for others */}
-              {(imageModel !== 'remix' || remixMode !== 'edit') && (
+              {/* Image Prompt - Hidden for Reeve Edit mode, shown for others */}
+              {(imageModel !== 'reeve' || remixMode !== 'edit') && (
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">
                   Image Prompt
-                    {imageModel === 'remix' && remixMode === 'remix' && (
+                    {imageModel === 'reeve' && remixMode === 'remix' && (
                       <span className="text-xs text-gray-400 ml-2">(Required for Remix mode)</span>
                     )}
-                    {imageModel === 'remix' && remixMode === 'text-to-image' && (
+                    {imageModel === 'reeve' && remixMode === 'text-to-image' && (
                       <span className="text-xs text-gray-400 ml-2">(Required for Text-to-Image mode)</span>
                     )}
                 </label>
@@ -1039,9 +788,9 @@ export default function ClipDetailDrawer() {
                     placeholder={
                       imageModel === 'nano-banana' && nanoBananaMode === 'multi-image-edit'
                         ? "Describe how to manipulate and combine the input images (e.g., 'Blend the first image's style with the second image's subject')..."
-                        : imageModel === 'remix' && remixMode === 'text-to-image'
+                        : imageModel === 'reeve' && remixMode === 'text-to-image'
                         ? "Describe the image you want to generate from text..."
-                        : imageModel === 'remix' && remixMode === 'remix'
+                        : imageModel === 'reeve' && remixMode === 'remix'
                         ? "Describe how to combine and transform the reference images (e.g., 'Blend the style of the first image with the content of the second')..."
                         : "Describe the image you want to generate..."
                     }
@@ -1052,14 +801,14 @@ export default function ClipDetailDrawer() {
               </div>
               )}
 
-              {/* Reference Images - Required for Fal AI Vidu and Remix (Edit/Remix modes only, not Text-to-Image) */}
-              {(imageModel === 'fal-ai' || (imageModel === 'remix' && remixMode !== 'text-to-image')) && (
+              {/* Reference Images - Required for Reeve (Edit/Remix modes only, not Text-to-Image) */}
+              {imageModel === 'reeve' && remixMode !== 'text-to-image' && (
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">
                     Reference Images
                   </label>
                   <div className="mb-3 space-y-2">
-                    {imageModel === 'remix' && remixMode === 'edit' && (
+                    {remixMode === 'edit' && (
                       <div className="p-2 bg-[#1E1F22] rounded-lg border border-[#3AAFA9]/20">
                         <p className="text-xs text-gray-300 mb-1">
                           <strong>Edit Mode:</strong> Upload reference images to edit and transform them.
@@ -1071,7 +820,7 @@ export default function ClipDetailDrawer() {
                         </p>
                       </div>
                     )}
-                    {imageModel === 'remix' && remixMode === 'remix' && (
+                    {remixMode === 'remix' && (
                       <div className="p-2 bg-[#1E1F22] rounded-lg border border-[#3AAFA9]/20">
                         <p className="text-xs text-gray-300 mb-1">
                           <strong>Remix Mode:</strong> Combine and transform reference images with your prompt.
@@ -1082,11 +831,6 @@ export default function ClipDetailDrawer() {
                           • Perfect for style transfers and creative combinations
                         </p>
                       </div>
-                    )}
-                    {imageModel === 'fal-ai' && (
-                      <p className="text-xs text-gray-400">
-                        Upload reference images to maintain consistent character appearance across generations. Add 1-3 images.
-                      </p>
                     )}
                   </div>
                   <div className="space-y-3">
@@ -1115,7 +859,7 @@ export default function ClipDetailDrawer() {
                               className="flex-1 bg-[#0C0C0C] border-[#3AAFA9] text-white text-sm"
                             />
                             {referenceImageUrls.length > 1 && (
-              <Button
+                              <Button
                                 variant="ghost"
                                 size="icon"
                                 onClick={() => removeReferenceImageUrl(index)}
@@ -1138,7 +882,7 @@ export default function ClipDetailDrawer() {
                       Add Reference Image
                     </Button>
                   </div>
-                  {imageModel === 'remix' && remixMode === 'edit' && (
+                  {remixMode === 'edit' && (
                     <div className="mt-3 p-2 bg-[#1E1F22] rounded text-xs text-gray-400">
                       <p className="font-medium text-gray-300 mb-1">About Edit Mode:</p>
                       <p className="ml-2">
@@ -1146,7 +890,7 @@ export default function ClipDetailDrawer() {
                       </p>
                     </div>
                   )}
-                  {imageModel === 'remix' && remixMode === 'remix' && (
+                  {remixMode === 'remix' && (
                     <div className="mt-3 p-2 bg-[#1E1F22] rounded text-xs text-gray-400">
                       <p className="font-medium text-gray-300 mb-1">About Remix Mode:</p>
                       <p className="ml-2">
@@ -1242,10 +986,10 @@ export default function ClipDetailDrawer() {
                 disabled={
                   isGeneratingImage || 
                   clipGeneratingStatus[selectedClip.id] === 'image' ||
-                  (imageModel === 'remix' && remixMode === 'edit' && referenceImageUrls.filter(url => url.trim() !== '').length === 0) ||
-                  (imageModel === 'remix' && remixMode === 'remix' && (!localImagePrompt?.trim() || referenceImageUrls.filter(url => url.trim() !== '').length === 0)) ||
-                  (imageModel === 'remix' && remixMode === 'text-to-image' && !localImagePrompt?.trim()) ||
-                  (imageModel !== 'remix' && !localImagePrompt?.trim())
+                  (imageModel === 'reeve' && remixMode === 'edit' && referenceImageUrls.filter(url => url.trim() !== '').length === 0) ||
+                  (imageModel === 'reeve' && remixMode === 'remix' && (!localImagePrompt?.trim() || referenceImageUrls.filter(url => url.trim() !== '').length === 0)) ||
+                  (imageModel === 'reeve' && remixMode === 'text-to-image' && !localImagePrompt?.trim()) ||
+                  (imageModel !== 'reeve' && !localImagePrompt?.trim())
                 }
                 className="w-full bg-[#00FFF0] hover:bg-[#00FFF0]/90 text-black font-semibold py-2 rounded-lg
                          disabled:opacity-50 disabled:cursor-not-allowed"

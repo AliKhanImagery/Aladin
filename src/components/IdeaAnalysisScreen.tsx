@@ -99,7 +99,7 @@ export default function IdeaAnalysisScreen({ analysis, onContinue, onBack }: Ide
 
     console.log(`📤 Starting upload for asset ${assetId}:`, { fileName: file.name, fileSize: file.size })
     setUploadStatus(prev => ({ ...prev, [assetId]: 'uploading' }))
-    
+
     try {
       const fileExt = file.name.split('.').pop()
       const fileName = `${user.id}/assets/${assetId}/${Date.now()}.${fileExt}`
@@ -292,7 +292,7 @@ export default function IdeaAnalysisScreen({ analysis, onContinue, onBack }: Ide
       if (session?.access_token) {
         headers['Authorization'] = `Bearer ${session.access_token}`
       }
-      
+
       const response = await fetch('/api/generate-image-remix', {
         method: 'POST',
         headers,
@@ -351,32 +351,32 @@ export default function IdeaAnalysisScreen({ analysis, onContinue, onBack }: Ide
   const finalizeAndContinue = () => {
     const assetContext: AssetContext = {
       characters: assets.filter(a => a.type === 'character').map(a => ({
-        id: a.assetId,
-        name: a.name,
-        description: analysis.analysis.detectedItems.find(item => item.id === a.assetId)?.description || '',
+          id: a.assetId,
+          name: a.name,
+          description: analysis.analysis.detectedItems.find(item => item.id === a.assetId)?.description || '',
         role: (a.role as any) || 'supporting',
-        assetUrl: a.resultImageUrl,
-        assetAction: a.action || 'auto',
+          assetUrl: a.resultImageUrl,
+          assetAction: a.action || 'auto',
         appearanceDetails: a.prompt || '',
-        createdAt: new Date()
-      })),
+          createdAt: new Date()
+        })),
       products: assets.filter(a => a.type === 'product').map(a => ({
-        id: a.assetId,
-        name: a.name,
-        description: analysis.analysis.detectedItems.find(item => item.id === a.assetId)?.description || '',
-        assetUrl: a.resultImageUrl,
-        assetAction: a.action || 'auto',
-        needsExactMatch: analysis.analysis.detectedItems.find(item => item.id === a.assetId)?.needsExactMatch || false,
-        createdAt: new Date()
-      })),
+          id: a.assetId,
+          name: a.name,
+          description: analysis.analysis.detectedItems.find(item => item.id === a.assetId)?.description || '',
+          assetUrl: a.resultImageUrl,
+          assetAction: a.action || 'auto',
+          needsExactMatch: analysis.analysis.detectedItems.find(item => item.id === a.assetId)?.needsExactMatch || false,
+          createdAt: new Date()
+        })),
       locations: assets.filter(a => a.type === 'location').map(a => ({
-        id: a.assetId,
-        name: a.name,
-        description: analysis.analysis.detectedItems.find(item => item.id === a.assetId)?.description || '',
-        assetUrl: a.resultImageUrl,
-        assetAction: a.action || 'auto',
-        createdAt: new Date()
-      })),
+          id: a.assetId,
+          name: a.name,
+          description: analysis.analysis.detectedItems.find(item => item.id === a.assetId)?.description || '',
+          assetUrl: a.resultImageUrl,
+          assetAction: a.action || 'auto',
+          createdAt: new Date()
+        })),
       settings: {
         tone,
         brandCues,
@@ -395,13 +395,13 @@ export default function IdeaAnalysisScreen({ analysis, onContinue, onBack }: Ide
 
     const pendingAutoAssets = assets.filter(a => a.action === 'auto' && !a.resultImageUrl)
     if (pendingAutoAssets.length > 0) {
-      setIsGeneratingAutoAssets(true)
+    setIsGeneratingAutoAssets(true)
       for (const asset of pendingAutoAssets) {
-        await handleGenerateImage(asset)
+          await handleGenerateImage(asset)
       }
       setIsGeneratingAutoAssets(false)
     }
-    finalizeAndContinue()
+      finalizeAndContinue()
   }
 
   return (
@@ -422,8 +422,8 @@ export default function IdeaAnalysisScreen({ analysis, onContinue, onBack }: Ide
             <h3 className="text-xl font-bold text-white flex items-center gap-3">
               <Palette className="w-5 h-5 text-brand-emerald" />
               Visual Tone
-            </h3>
-            
+        </h3>
+
             <div className="space-y-6">
               <div>
                 <label className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3 block">Visual Atmosphere</label>
@@ -432,38 +432,38 @@ export default function IdeaAnalysisScreen({ analysis, onContinue, onBack }: Ide
                     <span key={idx} className="inline-flex items-center gap-1 px-3 py-1 bg-brand-emerald/10 border border-brand-emerald/20 rounded-lg text-xs font-bold text-brand-emerald">
                       {t}
                       <X className="w-3 h-3 cursor-pointer hover:text-white" onClick={() => setTone(tone.filter((_, i) => i !== idx))} />
-                    </span>
-                  ))}
-                </div>
-                <div className="flex gap-2">
+              </span>
+            ))}
+          </div>
+          <div className="flex gap-2">
                   <Input value={toneInput} onChange={(e) => setToneInput(e.target.value)} onKeyPress={(e) => e.key === 'Enter' && addTone()} placeholder="Add tone..." className="bg-brand-obsidian/40 border-white/10 text-white rounded-xl h-10" />
                   <Button onClick={addTone} className="bg-white/5 hover:bg-white/10 text-white border border-white/10 h-10 px-4">Add</Button>
-                </div>
-              </div>
+          </div>
+        </div>
 
               <div>
                 <label className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3 block">Identity Cues</label>
                 <div className="flex flex-wrap gap-2 mb-3">
                   {brandCues.map((cue, idx) => (
                     <span key={idx} className="inline-flex items-center gap-1 px-3 py-1 bg-brand-amber/10 border border-brand-amber/20 rounded-lg text-xs font-bold text-brand-amber">
-                      {cue}
+                {cue}
                       <X className="w-3 h-3 cursor-pointer hover:text-white" onClick={() => setBrandCues(brandCues.filter((_, i) => i !== idx))} />
-                    </span>
-                  ))}
-                </div>
-                <div className="flex gap-2">
+              </span>
+            ))}
+          </div>
+          <div className="flex gap-2">
                   <Input value={brandCueInput} onChange={(e) => setBrandCueInput(e.target.value)} onKeyPress={(e) => e.key === 'Enter' && addBrandCue()} placeholder="Add cue..." className="bg-brand-obsidian/40 border-white/10 text-white rounded-xl h-10" />
                   <Button onClick={addBrandCue} className="bg-white/5 hover:bg-white/10 text-white border border-white/10 h-10 px-4">Add</Button>
-                </div>
-              </div>
-            </div>
+          </div>
+        </div>
+        </div>
 
             <div className="pt-6 border-t border-white/5 flex items-center gap-3">
               <Checkbox id="confirm-briefing" checked={settingsConfirmed} onChange={(e) => setSettingsConfirmed(e.target.checked)} className="border-white/20" />
               <label htmlFor="confirm-briefing" className="text-sm font-medium text-gray-400 cursor-pointer">Confirm briefing parameters</label>
             </div>
-          </div>
         </div>
+      </div>
 
         {/* Asset Grid */}
         <div className="lg:col-span-2 space-y-6">
@@ -476,23 +476,23 @@ export default function IdeaAnalysisScreen({ analysis, onContinue, onBack }: Ide
           </div>
 
           <div className="grid sm:grid-cols-2 gap-4">
-            {assets.map((asset) => {
+          {assets.map((asset) => {
               const Icon = asset.type === 'character' ? User : asset.type === 'product' ? Package : MapPin
-              const status = uploadStatus[asset.assetId] || 'idle'
-              const hasImage = !!asset.resultImageUrl
+            const status = uploadStatus[asset.assetId] || 'idle'
+            const hasImage = !!asset.resultImageUrl
 
-              return (
+            return (
                 <div key={asset.assetId} className="glass-card rounded-3xl p-6 border-white/5 group relative">
                   <div className="aspect-video rounded-2xl bg-brand-obsidian/60 border border-white/5 mb-6 overflow-hidden relative group/image-container">
-                    {hasImage ? (
-                      <>
-                        <img 
-                          src={asset.resultImageUrl} 
-                          alt={asset.name} 
+                  {hasImage ? (
+                    <>
+                      <img 
+                        src={asset.resultImageUrl} 
+                        alt={asset.name} 
                           className="w-full h-full object-cover cursor-pointer transition-transform duration-300 group-hover/image-container:scale-105" 
                           onClick={() => setSelectedImageModal({ 
                             assetId: asset.assetId, 
-                            imageUrl: asset.resultImageUrl, 
+                            imageUrl: asset.resultImageUrl || '', 
                             assetName: asset.name 
                           })}
                           onError={(e) => {
@@ -512,14 +512,14 @@ export default function IdeaAnalysisScreen({ analysis, onContinue, onBack }: Ide
                             <ZoomIn className="w-5 h-5 text-white" />
                             <span className="text-xs font-bold text-white uppercase tracking-wider">Click to View</span>
                           </div>
-                        </div>
-                      </>
-                    ) : (
+                      </div>
+                    </>
+                  ) : (
                       <div className="w-full h-full flex flex-col items-center justify-center text-gray-600">
                         <ImageIcon className="w-8 h-8 mb-2 opacity-20" />
                         <span className="text-[10px] uppercase font-bold tracking-widest opacity-40">Awaiting Visualization</span>
-                      </div>
-                    )}
+                        </div>
+                      )}
                     {(status === 'uploading' || status === 'generating') && !hasImage ? (
                       <div className="absolute inset-0 bg-brand-obsidian/80 backdrop-blur-sm flex items-center justify-center z-10">
                         <div className="text-center">
@@ -528,7 +528,7 @@ export default function IdeaAnalysisScreen({ analysis, onContinue, onBack }: Ide
                             {status === 'uploading' ? 'Uploading...' : 'Generating...'}
                           </span>
                         </div>
-                      </div>
+                    </div>
                     ) : null}
                     {/* Show loader overlay only if image is loading (not if image exists) */}
                     {(status === 'uploading' || status === 'generating') && hasImage ? (
@@ -541,17 +541,17 @@ export default function IdeaAnalysisScreen({ analysis, onContinue, onBack }: Ide
                         </div>
                       </div>
                     ) : null}
-                  </div>
+                </div>
 
                   <div className="flex items-start gap-4 mb-6">
                     <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center text-gray-400 group-hover:text-brand-emerald transition-colors">
                       <Icon className="w-5 h-5" />
-                    </div>
-                    <div className="flex-1 min-w-0">
+                  </div>
+                  <div className="flex-1 min-w-0">
                       <h4 className="text-sm font-bold text-white truncate">{asset.name}</h4>
                       <p className="text-[10px] text-gray-500 uppercase font-bold tracking-tighter mt-1">{asset.type} {asset.role ? `• ${asset.role}` : ''}</p>
-                    </div>
                   </div>
+                </div>
 
                   {/* Character Detail Prompt Editor */}
                   {asset.type === 'character' && (
@@ -573,7 +573,7 @@ export default function IdeaAnalysisScreen({ analysis, onContinue, onBack }: Ide
                     </div>
                   )}
 
-                  {/* Action Buttons */}
+                {/* Action Buttons */}
                   <div className="grid grid-cols-2 gap-2 mb-3">
                     <button 
                       onClick={() => handleAssetAction(asset.assetId, 'auto')}
@@ -582,10 +582,10 @@ export default function IdeaAnalysisScreen({ analysis, onContinue, onBack }: Ide
                       Auto
                     </button>
                     <button 
-                      onClick={() => handleAssetAction(asset.assetId, 'generate')}
+                    onClick={() => handleAssetAction(asset.assetId, 'generate')}
                       className={`h-9 rounded-xl text-[10px] font-bold uppercase transition-all ${asset.action === 'generate' ? 'bg-brand-emerald/10 border-brand-emerald/40 text-brand-emerald border' : 'bg-white/5 text-gray-500 hover:text-white border border-white/5'}`}
                     >
-                      Generate
+                    Generate
                     </button>
                     <button 
                       onClick={() => handleAssetAction(asset.assetId, 'upload')}
@@ -594,43 +594,43 @@ export default function IdeaAnalysisScreen({ analysis, onContinue, onBack }: Ide
                       Upload
                     </button>
                     <button 
-                      onClick={() => handleAssetAction(asset.assetId, 'remix')}
+                    onClick={() => handleAssetAction(asset.assetId, 'remix')}
                       disabled={!asset.resultImageUrl && !asset.uploadedFile && !asset.baseImageUrl}
                       className={`h-9 rounded-xl text-[10px] font-bold uppercase transition-all ${asset.action === 'remix' ? 'bg-brand-emerald/10 border-brand-emerald/40 text-brand-emerald border' : 'bg-white/5 text-gray-500 hover:text-white border border-white/5'} ${!asset.resultImageUrl && !asset.uploadedFile && !asset.baseImageUrl ? 'opacity-50 cursor-not-allowed' : ''}`}
                     >
-                      Remix
+                    Remix
                     </button>
-                  </div>
+                </div>
 
-                  {/* Action-specific UI */}
-                  {asset.action === 'upload' && (
+                {/* Action-specific UI */}
+                {asset.action === 'upload' && (
                     <div className="mt-2 pt-3 border-t border-white/5">
-                      <input 
-                        type="file" 
+                    <input
+                      type="file"
                         id={`up-${asset.assetId}`} 
                         className="hidden" 
-                        accept="image/*"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0]
+                      accept="image/*"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0]
                           if (file) {
                             handleFileUpload(asset.assetId, file)
                           }
-                        }} 
-                      />
-                      <label 
+                      }}
+                    />
+                    <label
                         htmlFor={`up-${asset.assetId}`} 
                         className="flex items-center justify-center gap-2 h-10 bg-brand-obsidian/60 border border-white/10 rounded-xl text-xs font-bold text-white cursor-pointer hover:bg-white/5 transition-all"
-                      >
-                        <Upload className="w-3 h-3" /> 
+                    >
+                      <Upload className="w-3 h-3" />
                         {status === 'uploading' ? 'Uploading...' : 'Select Frame'}
-                      </label>
-                    </div>
-                  )}
+                    </label>
+                  </div>
+                )}
 
-                  {asset.action === 'generate' && (
+                {asset.action === 'generate' && (
                     <div className="mt-2 pt-3 border-t border-white/5">
                       <button
-                        onClick={() => handleGenerateImage(asset)}
+                      onClick={() => handleGenerateImage(asset)}
                         disabled={!asset.prompt || status === 'generating'}
                         className="w-full flex items-center justify-center gap-2 h-10 bg-brand-obsidian/60 border border-white/10 rounded-xl text-xs font-bold text-white cursor-pointer hover:bg-white/5 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                       >
@@ -644,13 +644,13 @@ export default function IdeaAnalysisScreen({ analysis, onContinue, onBack }: Ide
                           </>
                         )}
                       </button>
-                    </div>
-                  )}
+                  </div>
+                )}
 
-                  {asset.action === 'remix' && (
+                {asset.action === 'remix' && (
                     <div className="mt-2 pt-3 border-t border-white/5">
                       <button
-                        onClick={() => handleRemixImage(asset)}
+                      onClick={() => handleRemixImage(asset)}
                         disabled={(!asset.resultImageUrl && !asset.uploadedFile && !asset.baseImageUrl) || status === 'generating' || !asset.prompt}
                         className="w-full flex items-center justify-center gap-2 h-10 bg-brand-obsidian/60 border border-white/10 rounded-xl text-xs font-bold text-white cursor-pointer hover:bg-white/5 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                       >
@@ -664,11 +664,11 @@ export default function IdeaAnalysisScreen({ analysis, onContinue, onBack }: Ide
                           </>
                         )}
                       </button>
-                    </div>
-                  )}
-                </div>
-              )
-            })}
+                  </div>
+                )}
+              </div>
+            )
+          })}
           </div>
         </div>
       </div>
@@ -690,43 +690,41 @@ export default function IdeaAnalysisScreen({ analysis, onContinue, onBack }: Ide
       {/* Image Zoom Modal */}
       {selectedImageModal && (
         <div 
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4"
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 backdrop-blur-xl animate-in fade-in duration-300"
           onClick={() => setSelectedImageModal(null)}
         >
+          {/* Action Header */}
+          <div className="absolute top-4 right-4 sm:top-6 sm:right-6 flex items-center gap-3 z-[110]">
+            <button
+              onClick={() => setSelectedImageModal(null)}
+              className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 flex items-center justify-center text-white transition-all duration-300 backdrop-blur-xl shadow-lg hover:text-red-400"
+            >
+              <X className="w-5 h-5 sm:w-6 sm:h-6" />
+            </button>
+          </div>
+
+          {/* Image Container - Properly constrained */}
           <div 
-            className="relative max-w-4xl max-h-[90vh] w-full bg-brand-obsidian rounded-3xl border border-white/10 overflow-hidden"
+            className="w-full h-full flex flex-col items-center justify-center p-4 sm:p-8 pointer-events-none"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Header */}
-            <div className="flex items-center justify-between p-6 border-b border-white/10">
-              <div>
-                <h3 className="text-xl font-bold text-white">{selectedImageModal.assetName}</h3>
-                <p className="text-sm text-gray-400 mt-1">Click outside to close</p>
-              </div>
-              <button
-                onClick={() => setSelectedImageModal(null)}
-                className="w-10 h-10 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 flex items-center justify-center text-white transition-all"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Image */}
-            <div className="relative bg-brand-obsidian/60 p-8 flex items-center justify-center min-h-[400px]">
-              <img 
-                src={selectedImageModal.imageUrl} 
-                alt={selectedImageModal.assetName}
-                className="max-w-full max-h-[60vh] object-contain rounded-xl"
-              />
-            </div>
-
-            {/* Actions */}
-            <div className="p-6 border-t border-white/10 flex items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={async () => {
-                    const asset = assets.find(a => a.assetId === selectedImageModal.assetId)
-                    if (asset) {
+            <img 
+              src={selectedImageModal.imageUrl} 
+              alt={selectedImageModal.assetName}
+              className="max-w-[calc(100vw-2rem)] max-h-[calc(100vh-8rem)] sm:max-w-[calc(100vw-4rem)] sm:max-h-[calc(100vh-12rem)] w-auto h-auto object-contain rounded-2xl shadow-2xl animate-in zoom-in-95 duration-500 ease-out pointer-events-auto"
+            />
+            
+            {/* Info Badge */}
+            <div className="mt-4 sm:mt-6 px-4 py-2 sm:px-6 sm:py-3 bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl animate-in slide-in-from-bottom-2 duration-500 pointer-events-auto">
+              <div className="flex items-center gap-3 sm:gap-4 flex-wrap">
+                <div>
+                  <h3 className="text-xs sm:text-sm font-bold text-white uppercase tracking-widest">{selectedImageModal.assetName}</h3>
+                  <p className="text-[9px] sm:text-[10px] text-gray-500 font-bold uppercase mt-0.5">Project Asset • Resolution Verified</p>
+                </div>
+                <div className="h-6 sm:h-8 w-[1px] bg-white/10 mx-1 sm:mx-2" />
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={async () => {
                       // Delete the image
                       setAssets(assets.map(a => 
                         a.assetId === selectedImageModal.assetId 
@@ -735,40 +733,28 @@ export default function IdeaAnalysisScreen({ analysis, onContinue, onBack }: Ide
                       ))
                       toast.success('Image removed')
                       setSelectedImageModal(null)
-                    }
-                  }}
-                  className="flex items-center gap-2 px-4 py-2 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-400 rounded-xl text-sm font-bold transition-all"
-                >
-                  <Trash2 className="w-4 h-4" />
-                  Delete Image
-                </button>
-                <button
-                  onClick={() => {
-                    const asset = assets.find(a => a.assetId === selectedImageModal.assetId)
-                    if (asset) {
+                    }}
+                    className="p-2 hover:bg-red-500/10 text-gray-400 hover:text-red-400 transition-colors rounded-lg"
+                    title="Delete Image"
+                  >
+                    <Trash2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                  </button>
+                  <button
+                    onClick={() => {
                       handleAssetAction(selectedImageModal.assetId, 'upload')
                       setSelectedImageModal(null)
-                      // Trigger file input
                       setTimeout(() => {
                         const fileInput = document.getElementById(`up-${selectedImageModal.assetId}`) as HTMLInputElement
-                        if (fileInput) {
-                          fileInput.click()
-                        }
+                        if (fileInput) fileInput.click()
                       }, 100)
-                    }
-                  }}
-                  className="flex items-center gap-2 px-4 py-2 bg-brand-emerald/10 hover:bg-brand-emerald/20 border border-brand-emerald/30 text-brand-emerald rounded-xl text-sm font-bold transition-all"
-                >
-                  <Upload className="w-4 h-4" />
-                  Upload New
-                </button>
+                    }}
+                    className="p-2 hover:bg-brand-emerald/10 text-gray-400 hover:text-brand-emerald transition-colors rounded-lg"
+                    title="Upload New"
+                  >
+                    <Upload className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                  </button>
+                </div>
               </div>
-              <button
-                onClick={() => setSelectedImageModal(null)}
-                className="px-6 py-2 bg-white/5 hover:bg-white/10 border border-white/10 text-white rounded-xl text-sm font-bold transition-all"
-              >
-                Close
-              </button>
             </div>
           </div>
         </div>

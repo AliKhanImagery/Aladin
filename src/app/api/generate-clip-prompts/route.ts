@@ -7,7 +7,16 @@ const openai = new OpenAI({
 
 export async function POST(request: NextRequest) {
   try {
-    const { sceneDescription, clipDescription, storyContext, tone, brandCues, sceneStyle, assetContext } = await request.json()
+    const { 
+      sceneDescription, 
+      clipDescription, 
+      storyContext, 
+      tone, 
+      brandCues, 
+      sceneStyle, 
+      assetContext,
+      imageModel = 'flux-2-pro' 
+    } = await request.json()
     
     // Handle brandCues as array or string
     const brandCuesFormatted = Array.isArray(brandCues) 
@@ -36,52 +45,43 @@ export async function POST(request: NextRequest) {
             description: string; 
             assetUrl?: string;
             roleInClip?: string;
-            confidence?: string;
-            matchReason?: string;
           }
-          if (char.assetUrl) {
-            // STRONG emphasis on using reference image for character consistency
-            characterStrings.push(
-              `CRITICAL CHARACTER REFERENCE - ${char.name} (${char.roleInClip || 'character'}): ` +
-              `You MUST use the provided reference image URL to maintain EXACT character appearance consistency. ` +
-              `The reference image shows: ${char.appearanceDetails || char.description}. ` +
-              `The character in this clip MUST match the reference image in facial features, appearance, build, and style. ` +
-              `Reference image URL is provided in the generation request. ` +
-              `This is ESSENTIAL for visual continuity across clips. ` +
-              `Match the character from the reference image exactly, maintaining the same look, facial structure, and appearance.`
-            )
-          } else {
-            characterStrings.push(`${char.name}: ${char.appearanceDetails || char.description}. Generate based on description, but maintain consistency if this character appears in other clips.`)
-          }
+          const identityToken = `[[IDENTITY:${char.name.toUpperCase().replace(/\s+/g, '_')}]]`
+          characterStrings.push(`${identityToken} - ${char.name}: ${char.appearanceDetails || char.description}. ${char.assetUrl ? 'USE PROVIDED REFERENCE IMAGE.' : ''}`)
         }
       }
       
       if (assetContext.products && Array.isArray(assetContext.products) && assetContext.products.length > 0) {
         for (const p of assetContext.products) {
           const product = p as { name: string; description: string; assetUrl?: string }
-          productStrings.push(`${product.name}: ${product.description}. ${product.assetUrl ? 'Use provided reference image for exact match.' : 'Generate based on description.'}`)
+          const productToken = `[[PRODUCT:${product.name.toUpperCase().replace(/\s+/g, '_')}]]`
+          productStrings.push(`${productToken} - ${product.name}: ${product.description}. ${product.assetUrl ? 'USE PROVIDED REFERENCE IMAGE.' : ''}`)
         }
       }
       
       if (assetContext.locations && Array.isArray(assetContext.locations) && assetContext.locations.length > 0) {
         for (const l of assetContext.locations) {
           const location = l as { name: string; description: string; assetUrl?: string }
-          locationStrings.push(`${location.name}: ${location.description}. ${location.assetUrl ? 'Use provided reference image.' : 'Generate based on description.'}`)
+          locationStrings.push(`${location.name}: ${location.description}.`)
         }
       }
       
       if (characterStrings.length > 0 || productStrings.length > 0 || locationStrings.length > 0) {
         assetContextString = `
-ASSET REFERENCES FOR THIS CLIP:
-${characterStrings.length > 0 ? `Characters: ${characterStrings.join('\n')}` : ''}
-${productStrings.length > 0 ? `Products: ${productStrings.join('\n')}` : ''}
-${locationStrings.length > 0 ? `Locations: ${locationStrings.join('\n')}` : ''}
+ASSET BIBLE & IDENTITY TOKENS:
+${characterStrings.length > 0 ? `Characters: \n${characterStrings.join('\n')}` : ''}
+${productStrings.length > 0 ? `Products: \n${productStrings.join('\n')}` : ''}
+${locationStrings.length > 0 ? `Locations: \n${locationStrings.join('\n')}` : ''}
 `
       }
     }
 
+    const isFlux = imageModel.includes('flux');
+
     // Story Boarding Expert & AI Prompting Expert role
-    const prompt = `You are an elite Story Boarding Expert and AI Prompting Expert. Your task is to create ultra-detailed, cinematic, production-ready prompts that dilivery story ,continuty, scene, characters detail and location inheriited and matching across clips and scenes based onstorry idea, generate stunning, professional-quality visuals.
+    const prompt = `You are an elite Visual Director and Lead Cinematographer. Your task is to create ultra-detailed, production-ready image and video prompts that ensure subject integration, lighting consistency, and technical accuracy.
+
+TARGET ENGINE: ${imageModel.toUpperCase()}
 
 STORY CONTEXT:
 ${storyContext}
@@ -94,7 +94,7 @@ ${clipDescription}
 ${Array.isArray(tone) ? `\nTONE/MOOD: ${tone.join(', ')}` : tone ? `\nTONE/MOOD: ${tone}` : ''}
 ${brandCuesFormatted ? `\nBRAND CUES: ${brandCuesFormatted}` : ''}
 ${sceneStyle ? `
-SCENE STYLE (Apply consistently to this clip):
+SCENE STYLE:
 - Mood: ${sceneStyle.mood || 'dramatic'}
 - Lighting: ${sceneStyle.lighting || 'natural'}
 - Color Palette: ${sceneStyle.colorPalette || 'warm'}
@@ -102,79 +102,42 @@ SCENE STYLE (Apply consistently to this clip):
 - Post Processing: ${sceneStyle.postProcessing?.join(', ') || 'none'}
 ` : ''}${assetContextString}
 
-CRITICAL REQUIREMENTS FOR PROMPT QUALITY:
-1. IMAGE PROMPT must be EXTREMELY DETAILED (minimum 50-250 words) including:
-   - Contextualy correct scene detailes with story and scene description for every clip, location details, and tone/mood of the scene.
-   - Check and matchCharacter visual details, expressions, wardrobe details, based on current clip requirements, story and scene description, location details, and tone/mood of the scene.
-   - Precise composition and framing (rule of thirds, leading lines, symmetry)
-   - Specific lighting setup (key light position, fill light, rim light, color temperature, intensity)
-   - Exact color palette (hex colors or specific color names, color grading style)
-   - Camera specifications (lens type, focal length, aperture, ISO, shutter speed if relevant)
-   - Depth of field and focus (what's in focus, what's blurred, bokeh quality)
-   - Atmospheric details (time of day, weather, particle effects, lens flares, god rays)
-   - Character/appearance details (facial expressions, body language, clothing texture, fabric details)
-   - Contextualy correct Scene or clip Environmental specifics (architecture style, material textures, spatial relationships, scale)
-   - Professional terminology (establishing shot, medium shot, close-up, extreme close-up, over-the-shoulder, etc.)
-   - Quality descriptors: "4K, 8K, ultra-high resolution, professional photography, cinematic quality, award-winning cinematography"
+${isFlux ? `
+CRITICAL INSTRUCTIONS FOR FLUX INTEGRATION (TO AVOID "STICKER" LOOK):
+1. SUBJECT ANCHORING: Use [[IDENTITY:NAME]] or [[PRODUCT:NAME]]. Describe exactly how they touch, lean on, or interact with the environment. Mention CONTACT SHADOWS and ambient occlusion.
+2. POSTURE & PHYSICS: Specify weight distribution, muscular tension, and how the subject fits the perspective of the frame.
+3. LIGHTING PHYSICS: Describe how specific light colors (from Brand Cues or Tone) hit the subject (reflections, rim lights, subsurface scattering on skin). Use HEX CODES if colors are specific.
+4. BRIDGE INSTRUCTIONS: Every prompt MUST include a "Bridge Instruction" that connects the subject to the scene (e.g., "The emerald #10B981 light from the neon sign reflects accurately off the subject's metallic surface").
+5. NO NEGATIVE PROMPTS: Focus on descriptive, positive detail.
+` : ''}
 
-2. VIDEO PROMPT must be EXTREMELY DETAILED (minimum 150-250 words) including:
-   - aligned prompt with kling video prompt writing guidlines.
-   - Contextualy correct scene detailes with story and scene description for every clip, location details, and tone/mood of the scene.
-   - Check and matchCharacter visual details, expressions, wardrobe details, based on current clip requirements, story and scene description, location details, and tone/mood of the scene.
-   - Precise camera movement (dolly, crane, handheld, steadicam, tracking shot, push-in, pull-out, orbit)
-   - Movement speed and easing (slow start/stop, constant speed, acceleration/deceleration)
-   - Subject motion (character actions, gestures, expressions, transitions)
-   - Shot transitions (match cut, jump cut, cross-fade, wipe, seamless transition)
-   - Dynamic elements (particle systems, environmental changes, light shifts)
-   - Temporal pacing (slow motion, real-time, time-lapse, duration of specific actions)
-   - Visual effects (if any: color grading changes, focus pulls, lens effects)
+PROMPT STRUCTURE HIERARCHY (Follow strictly):
+1. SUBJECT & ACTION: Who/what and exactly what they are doing, including posture and expression.
+2. ENVIRONMENTAL ANCHORING: Physical relationship between subject and scene (contact, shadows, perspective).
+3. LIGHTING & COLOR GRADE: Detailed lighting setup and color grade locking (mention specific HEX codes for consistency).
+4. CAMERA & TECHNICALS: Lens choice (e.g., 85mm prime), aperture (e.g., f/1.8), camera movement, and framing details.
 
-
-3. Both prompts MUST:
-   - Character, Character motion, Character Expression, scene, scene details, sub scene an  gle details per clip.
-   - Use professional cinematography and filmmaking terminology
-   - Include specific technical camera details
-   - Describe exact lighting scenarios with color temperatures
-   - Specify exact color palettes and grading styles
-   - Mention visual style references (cinematic, commercial, documentary, etc.)
-   - Include quality keywords: "professional", "cinematic", "high-end", "award-winning", "commercial quality"
-   - Be optimized for AI generation (avoid ambiguous terms, be extremely specific)
-   - Be production-ready for immediate use
-
-Generate EXCEPTIONALLY DETAILED prompts for this clip. Return a JSON object:
+Generate a JSON object:
 {
-  "imagePrompt": "[ULTRA-DETAILED image prompt - minimum 150 words, include ALL technical and aesthetic details listed above]",
-  "videoPrompt": "[ULTRA-DETAILED video prompt for kling 1.6 - minimum 150 words, include ALL motion, camera, and technical details listed above]",
-  "framing": "Specific camera framing with technical details (e.g., 'Medium close-up at 85mm, eye level, f/1.8 aperture, shallow depth of field, subject positioned at left third line, soft natural key light from 45-degree angle')",
+  "imagePrompt": "[Detailed instructional prompt following the hierarchy above - minimum 150 words]",
+  "videoPrompt": "[Motion-focused prompt for Kling 1.6, detailing movement and subject action - minimum 150 words]",
+  "framing": "Detailed technical framing (e.g., '85mm prime, f/1.8, medium close-up at eye level')",
   "cameraAngle": "wide|medium|close|insert|extreme-wide|extreme-close",
-  "shotType": "Detailed description of shot type with technical specifications"
+  "shotType": "Technical cinematography shot type (e.g., 'Three-quarter profile tracking shot')"
 }
-
-REMEMBER: Quality is paramount. These prompts will be used to generate professional content. Every detail matters.`
+`
 
     const completion = await openai.chat.completions.create({
       model: 'gpt-4-turbo-preview',
       messages: [
         {
           role: 'system',
-          content: `You are an elite Story Boarding Expert and AI Prompting Expert with decades of experience in cinematography, visual storytelling, and AI image/video generation. 
-
-Your expertise includes:
-- Professional cinematography (lighting, composition, camera techniques)
-- Film production (shot types, camera movements, editing transitions)
-- Visual storytelling (narrative structure, emotional beats, visual metaphors)
-- AI prompt engineering (optimizing prompts for maximum quality and detail)
-- Commercial and cinematic production standards
-
-Your prompts are used by professional content creators. You MUST create ultra-detailed, production-ready prompts that include:
-- Specific technical camera details (lens, aperture, ISO, focal length)
-- Exact lighting setups (position, color temperature, intensity, shadows)
-- Precise color palettes and grading styles
-- Professional cinematography terminology
-- High-quality visual descriptors
-- Optimized keywords for AI generation quality
-
-Quality standards: Each prompt should be 150-250 words minimum, extremely specific, and ready for professional production use.`,
+          content: `You are an elite Visual Director and Cinematographer. You specialize in ${imageModel} prompting. 
+          Your goals:
+          - PERFECT subject integration into scene physics (contact shadows, reflections).
+          - EXACT color grade locking using technical descriptions and HEX codes.
+          - CINEMATIC consistency across sequential clips using identity tokens.
+          - BRIDGE INSTRUCTIONS to prevent subjects looking like "stickers" or "overlays".`,
         },
         {
           role: 'user',
@@ -182,7 +145,7 @@ Quality standards: Each prompt should be 150-250 words minimum, extremely specif
         },
       ],
       response_format: { type: 'json_object' },
-      temperature: 0.8, // Slightly higher for more creative and detailed prompts
+      temperature: 0.7,
     })
 
     const content = completion.choices[0]?.message?.content

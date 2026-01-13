@@ -465,34 +465,7 @@ export function onAuthStateChange(callback: (user: AuthUser | null) => void) {
     } catch (error: any) {
       // Handle any errors gracefully
       console.error('❌ Auth state change handler error (catch block):', error)
-      
-      // For SIGNED_IN events, ALWAYS try to use session user even on error
-      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
-        if (session?.user) {
-          console.warn('⚠️ Error in SIGNED_IN handler but session exists - using session user as fallback')
-          const authUser = createUserFromSession(session.user)
-          callback(authUser)
-        } else {
-          // Even if no session, try to get it one more time
-          console.warn('⚠️ Error in SIGNED_IN handler and no session - attempting final retry...')
-          try {
-            const { data: { session: finalSession } } = await supabase.auth.getSession()
-            if (finalSession?.user) {
-              const authUser = createUserFromSession(finalSession.user)
-              callback(authUser)
-            } else {
-              // Last resort - don't call callback(null) for SIGNED_IN, just log
-              console.error('❌ SIGNED_IN event but cannot get session - skipping callback to avoid logout')
-            }
-          } catch (finalError) {
-            console.error('❌ Final session retry failed:', finalError)
-            // Don't call callback(null) - just log
-          }
-        }
-      } else {
-        // For other events (like SIGNED_OUT), it's safe to call null
-        callback(null)
-      }
+      callback(null)
     }
   })
 }

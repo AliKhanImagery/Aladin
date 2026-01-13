@@ -433,6 +433,7 @@ export default function IdeaTab() {
                   brandCues: confirmedAssetContext.settings.brandCues,
                   sceneStyle: scene.style,
                   assetContext: matchedAssets,
+                  imageModel: currentProject?.settings.imageModel || 'flux-2-pro'
                 }),
               })
 

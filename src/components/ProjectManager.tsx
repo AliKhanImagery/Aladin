@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useAppStore } from '@/lib/store'
 import { Button } from '@/components/ui/button'
-import { X, Plus, FolderOpen, Calendar, Clock, Image as ImageIcon, Video, ChevronRight, RefreshCw, Trash2 } from 'lucide-react'
+import { X, Plus, FolderOpen, Calendar, Clock, Image as ImageIcon, Video, ChevronRight, RefreshCw, Trash2, Layout } from 'lucide-react'
 import { Project } from '@/types'
 import CreateProjectModal from './CreateProjectModal'
 import Link from 'next/link'

@@ -41,6 +41,12 @@ const PERSONAS = [
   }
 ]
 
+const IMAGE_MODELS = [
+  { id: 'flux-2-pro', label: 'Premium', engine: 'FLUX.2 Pro' },
+  { id: 'nano-banana', label: 'Fast', engine: 'Nano Banana' },
+  { id: 'reeve', label: 'Artistic', engine: 'Reeve' }
+]
+
 export default function IdeaPromptScreen() {
   const { 
     createProject, 
@@ -54,15 +60,20 @@ export default function IdeaPromptScreen() {
   
   const [idea, setIdea] = useState('')
   const [dontGenerateImages, setDontGenerateImages] = useState(false)
+  const [selectedImageModel, setSelectedImageModel] = useState<'flux-2-pro' | 'nano-banana' | 'reeve'>('flux-2-pro')
   const [isCreating, setIsCreating] = useState(false)
   const [activePersona, setActivePersona] = useState(PERSONAS[0])
   
   useEffect(() => {
     const savedIdea = localStorage.getItem('pendingIdea')
     const savedDontGenerateImages = localStorage.getItem('pendingDontGenerateImages')
+    const savedImageModel = localStorage.getItem('pendingImageModel')
+    
     if (savedIdea) { setIdea(savedIdea); setPendingIdea(savedIdea); }
     else if (pendingIdea) { setIdea(pendingIdea); }
+    
     if (savedDontGenerateImages === 'true') setDontGenerateImages(true)
+    if (savedImageModel) setSelectedImageModel(savedImageModel as any)
   }, [setPendingIdea, pendingIdea])
   
   useEffect(() => {
@@ -78,6 +89,7 @@ export default function IdeaPromptScreen() {
     try {
       localStorage.removeItem('pendingIdea')
       localStorage.removeItem('pendingDontGenerateImages')
+      localStorage.removeItem('pendingImageModel')
       setPendingIdea(null)
       const projectName = ideaToUse.length > 50 ? ideaToUse.substring(0, 50).trim() + '...' : ideaToUse.trim()
     const newProject: Project = {
@@ -87,14 +99,15 @@ export default function IdeaPromptScreen() {
       createdAt: new Date(),
       updatedAt: new Date(),
         createdBy: user?.id || 'anonymous',
-      settings: {
+        settings: {
         defaultDuration: 5,
         defaultQuality: 'standard',
         autoRetry: true,
         maxRetries: 3,
         consentRequired: true,
         offlineMode: false,
-        dontGenerateImages: dontGenerateImages
+        dontGenerateImages: dontGenerateImages,
+        imageModel: selectedImageModel
       },
       story: {
         id: crypto.randomUUID(),
@@ -132,7 +145,9 @@ export default function IdeaPromptScreen() {
   const handleCreateFromIdea = async () => {
     if (!idea.trim() || isCreating) return
     if (!isAuthenticated || !user?.id) {
-      localStorage.setItem('pendingIdea', idea); localStorage.setItem('pendingDontGenerateImages', dontGenerateImages.toString());
+      localStorage.setItem('pendingIdea', idea)
+      localStorage.setItem('pendingDontGenerateImages', dontGenerateImages.toString())
+      localStorage.setItem('pendingImageModel', selectedImageModel)
       setPendingIdea(idea); setShowAuthModal(true); return
     }
     await createProjectFromIdea(idea)
@@ -206,26 +221,52 @@ export default function IdeaPromptScreen() {
                 </div>
 
                 <div className="flex flex-col md:flex-row items-center justify-between p-4 gap-4 bg-white/[0.02] rounded-[1.8rem] border border-white/[0.04]">
-                  <div className="flex items-center gap-8 px-6">
+                  <div className="flex flex-wrap items-center gap-6 px-6">
                     <div className="flex items-center gap-3 group/cb cursor-pointer">
-              <Checkbox
+                      <Checkbox
                         id="text-only"
-                checked={dontGenerateImages}
-                onChange={(e) => setDontGenerateImages(e.target.checked)}
-                        className="w-5 h-5 rounded-full border-white/10"
-              />
+                        checked={dontGenerateImages}
+                        onChange={(e) => setDontGenerateImages(e.target.checked)}
+                        className="w-5 h-5 rounded-full border-white/10 data-[state=checked]:bg-brand-emerald"
+                      />
                       <label htmlFor="text-only" className="text-[10px] font-black uppercase tracking-[0.2em] text-white/20 cursor-pointer group-hover/cb:text-white/40 transition-colors">
                         Script Only
-              </label>
+                      </label>
                     </div>
+                    <div className="h-4 w-[1px] bg-white/5" />
+                    
+                    {/* Model Selector */}
+                    <div className="flex items-center gap-4">
+                      <span className="text-[9px] font-black uppercase tracking-[0.3em] text-white/10">Engine:</span>
+                      <div className="flex items-center gap-2 p-1 bg-white/[0.02] rounded-full border border-white/[0.05]">
+                        {[
+                          { id: 'flux-2-pro', label: 'Premium' },
+                          { id: 'nano-banana', label: 'Fast' },
+                          { id: 'reeve', label: 'Artistic' }
+                        ].map((m) => (
+                          <button
+                            key={m.id}
+                            onClick={() => setSelectedImageModel(m.id as any)}
+                            className={`px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest transition-all duration-500 ${
+                              selectedImageModel === m.id 
+                                ? 'bg-white text-black shadow-lg shadow-white/5' 
+                                : 'text-white/20 hover:text-white/40'
+                            }`}
+                          >
+                            {m.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
                     <div className="h-4 w-[1px] bg-white/5" />
                     <div className="flex items-center gap-2.5 text-[10px] font-black uppercase tracking-[0.2em] text-brand-emerald/40">
                       <div className="w-1.5 h-1.5 rounded-full bg-brand-emerald animate-pulse" />
                       System Ready
                     </div>
-            </div>
+                  </div>
             
-              <Button
+                  <Button
                     onClick={handleCreateFromIdea}
                 disabled={!idea.trim() || isCreating}
                     className="w-full md:w-auto h-16 px-12 rounded-[1.4rem] bg-white text-black hover:bg-brand-emerald hover:text-white transition-all duration-700 flex items-center justify-center gap-5 group/btn overflow-hidden relative"

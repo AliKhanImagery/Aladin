@@ -51,10 +51,6 @@ export async function getServerSupabaseClient(accessToken?: string) {
           const { error: sessionError } = await client.auth.setSession({
             access_token: accessToken,
             refresh_token: '',
-            expires_at: user.exp || Math.floor(Date.now() / 1000) + 3600,
-            expires_in: 3600,
-            token_type: 'bearer',
-            user: user,
           })
           
           if (!sessionError) {

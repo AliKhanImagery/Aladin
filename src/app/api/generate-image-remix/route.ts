@@ -117,7 +117,7 @@ export async function POST(request: NextRequest) {
     }
 
     const {
-      mode: requestMode = 'remix', // 'edit', 'remix', or 'text-to-image' - used for UI logic only
+      mode: requestMode = 'remix', // 'edit', 'remix', or 'text-to-image'
       prompt,
       reference_image_urls = [],
       aspect_ratio = '16:9',
@@ -125,19 +125,15 @@ export async function POST(request: NextRequest) {
       seed,
       project_id,
       clip_id,
+      imageModel = 'flux-2-pro' // New parameter for multi-model dispatching
     } = requestBody
     
     mode = requestMode
 
     // Step 2: Quick Storage Check (warning only, don't block generation)
-    // Storage will handle its own errors gracefully with fallback to Fal.ai URLs
     const storageReady = await quickStorageCheck(userId)
     if (!storageReady) {
       console.warn('⚠️ Image generation API: Storage check failed, but proceeding with generation.')
-      console.warn('⚠️ Images will be generated but may not be stored permanently. Storage will attempt with fallback.')
-      // Don't block generation - storage will handle errors gracefully
-    } else {
-      console.log('✅ Storage system ready - images will be stored in Supabase Storage')
     }
 
     if (!process.env.FAL_KEY) {
@@ -147,16 +143,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Validate mode value
-    const validModes = ['edit', 'remix', 'text-to-image']
-    if (!validModes.includes(mode)) {
-      return NextResponse.json(
-        { error: `Invalid mode: ${mode}. Must be one of: ${validModes.join(', ')}` },
-        { status: 400 }
-      )
-    }
-
-    // Validate and sanitize inputs based on mode
+    // Sanitize inputs early
     const sanitizedPrompt = typeof prompt === 'string' ? prompt.trim() : ''
     const sanitizedReferenceUrls = Array.isArray(reference_image_urls)
       ? reference_image_urls
@@ -171,140 +158,48 @@ export async function POST(request: NextRequest) {
         ? aspect_ratio
         : '16:9'
 
-    // Validate num_images
-    const numImagesValid = typeof num_images === 'number' && num_images >= 1 && num_images <= 4
-    const numImagesToUse = numImagesValid ? Math.floor(num_images) : 1
-
-    // Validate seed if provided
-    const seedValid = seed === undefined || (typeof seed === 'number' && seed >= 0)
-
-    // Mode-specific validation
-    if (mode === 'remix') {
-      // Remix mode requires both prompt and reference images
-      if (!sanitizedPrompt) {
-        return NextResponse.json(
-          { error: 'Prompt is required for Remix mode', details: 'Please provide a text prompt' },
-          { status: 400 }
-        )
-      }
-      if (sanitizedReferenceUrls.length === 0) {
-        return NextResponse.json(
-          { error: 'At least one reference image URL is required for Remix mode', details: 'Please provide reference images' },
-          { status: 400 }
-        )
-      }
-    } else if (mode === 'edit') {
-      // Edit mode: FLUX.2 Pro edit can work with prompt OR image_urls (or both)
-      // Don't require image_urls - it's optional for FLUX.2 Pro edit
-      // But we should have at least a prompt or reference images
-      if (!sanitizedPrompt && sanitizedReferenceUrls.length === 0) {
-        return NextResponse.json(
-          { error: 'Edit mode requires either a prompt or reference images', details: 'Please provide a prompt or reference images' },
-          { status: 400 }
-        )
-      }
-    } else if (mode === 'text-to-image') {
-      // Text-to-image mode: Uses fal-ai/reve/text-to-image endpoint
-      // This endpoint only requires a prompt (no reference images needed)
-      if (!sanitizedPrompt) {
-        return NextResponse.json(
-          { error: 'Prompt is required for Text-to-Image mode', details: 'Please provide a text prompt' },
-          { status: 400 }
-        )
-      }
-      // Note: text-to-image endpoint doesn't require reference images
-    }
-
-    // Build Fal AI input object based on mode
+    // Build Fal AI input object based on mode and model
     let falInput: any = {
       aspect_ratio: aspectRatioFormatted,
     }
     
     let endpoint = ''
 
-    if (mode === 'text-to-image') {
-      endpoint = 'fal-ai/reve/text-to-image'
+    // Model-Specific Dispatching Logic
+    if (imageModel === 'nano-banana') {
+      // Nano Banana Strategy: Hyper-fast, instruction-dense
+      endpoint = 'fal-ai/nano-banana'
       falInput.prompt = sanitizedPrompt
-      falInput.num_images = numImagesToUse
-      if (seedValid && seed !== undefined) {
-        falInput.seed = Math.floor(seed)
+      if (mode === 'remix' || mode === 'edit') {
+        falInput.image_url = sanitizedReferenceUrls[0]
       }
-      // REVE models use aspect_ratio - it generates 1024x1024 for 1:1 by default
-      // width/height parameters are not supported and cause conflicts
-    } else if (mode === 'remix') {
-      endpoint = 'fal-ai/reve/remix'
+    } else if (imageModel === 'reeve') {
+      // Reeve Strategy: Naturalistic, story-driven
+      endpoint = 'fal-ai/reve/text-to-image' // Defaulting to Reve for Reeve artistic style
+      if (mode === 'remix') endpoint = 'fal-ai/reve/remix'
+      
       falInput.prompt = sanitizedPrompt
-      falInput.image_url = sanitizedReferenceUrls[0]
-      if (seedValid && seed !== undefined) {
-        falInput.seed = Math.floor(seed)
-      }
-      // REVE remix uses aspect_ratio - it generates 1024x1024 for 1:1 by default
-      // width/height parameters are not supported and cause conflicts
+      if (mode === 'remix') falInput.image_url = sanitizedReferenceUrls[0]
     } else {
-      // Use fal-ai/flux-2-pro/edit endpoint for edit mode
-      endpoint = 'fal-ai/flux-2-pro/edit'
-      if (sanitizedPrompt) falInput.prompt = sanitizedPrompt
-      if (sanitizedReferenceUrls.length > 0) {
-        falInput.image_urls = sanitizedReferenceUrls.slice(0, 10)
-      }
-      if (seedValid && seed !== undefined) {
-        falInput.seed = Math.floor(seed)
+      // Default / FLUX.2 Pro Strategy
+      if (mode === 'text-to-image') {
+        endpoint = 'fal-ai/flux-2-pro'
+        falInput.prompt = sanitizedPrompt
+      } else {
+        // Use flux-2-pro/edit for remix and edit modes for best instruction following
+        endpoint = 'fal-ai/flux-2-pro/edit'
+        falInput.prompt = sanitizedPrompt
+        if (sanitizedReferenceUrls.length > 0) {
+          falInput.image_urls = sanitizedReferenceUrls.slice(0, 8)
+          falInput.strength = 0.85 // Maintain high consistency
+        }
       }
       falInput.num_inference_steps = 50
       falInput.guidance_scale = 9.0
-      
-      // FLUX.2 Pro ONLY supports aspect_ratio, not width/height
-      // aspect_ratio: "1:1" generates 1024x1024 by default
-      // aspect_ratio: "16:9" generates appropriate landscape dimensions
-      // aspect_ratio: "9:16" generates appropriate portrait dimensions
-      // width/height parameters cause conflicts and result in 250x250 images
-      
-      // Strengthen reference image consistency for face matching
-      if (sanitizedReferenceUrls.length > 0) {
-        falInput.strength = 0.85 // Higher strength for better consistency (0.0-1.0)
-        console.log(`🎯 Using ${sanitizedReferenceUrls.length} reference images with strength 0.85 for face consistency`)
-      }
-    }
-
-    // Log validation results
-    console.log(`🎨 Generating image with ${endpoint}:`, {
-      mode,
-      hasPrompt: !!sanitizedPrompt,
-      promptPreview: sanitizedPrompt ? sanitizedPrompt.substring(0, 50) + '...' : '(no prompt)',
-      referenceUrlsCount: sanitizedReferenceUrls.length,
-      aspectRatio: aspectRatioFormatted,
-      validatedInput: Object.keys(falInput).join(', '),
-    })
-
-    // Validate that we have all required parameters based on mode
-    if (mode === 'text-to-image') {
-      if (!falInput.prompt) {
-        return NextResponse.json(
-          { error: 'Invalid request: Prompt is required for text-to-image mode', details: 'Please provide a text prompt' },
-          { status: 400 }
-        )
-      }
-    } else if (mode === 'remix') {
-      if (!falInput.image_url) {
-        return NextResponse.json(
-          { error: 'Invalid request: Reference image is required for remix', details: 'Please provide a reference image' },
-          { status: 400 }
-        )
-      }
-    } else {
-      // FLUX.2 Pro edit can work with just prompt (text-to-image) OR with image_urls (edit)
-      // Don't require image_urls - it's optional for FLUX.2 Pro
-      if (!falInput.prompt && (!falInput.image_urls || falInput.image_urls.length === 0)) {
-        return NextResponse.json(
-          { error: 'Invalid request: Either prompt or reference images are required for edit mode', details: 'Please provide a prompt or reference images' },
-          { status: 400 }
-        )
-      }
-      // Note: FLUX.2 Pro can work with just prompt (text-to-image) or with image_urls (multi-image consistency)
     }
 
     // Call Fal AI
-    console.log(`📤 Sending request to Fal AI (${endpoint}) with input:`, JSON.stringify(falInput, null, 2))
+    console.log(`📤 Sending request to Fal AI (${endpoint}) [Model: ${imageModel}] with input:`, JSON.stringify(falInput, null, 2))
     
     const result = await fal.subscribe(endpoint as any, {
       input: falInput,
