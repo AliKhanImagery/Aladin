@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { Button } from './ui/button'
-import { X, Mail, ArrowLeft, Eye, EyeOff } from 'lucide-react'
+import { X, Mail, ArrowLeft, Eye, EyeOff, Sparkles, ShieldCheck, Lock, User } from 'lucide-react'
 import { signUp, signIn, resetPasswordForEmail } from '@/lib/auth'
 import toast from 'react-hot-toast'
 
@@ -57,38 +57,27 @@ export default function AuthModal({ isOpen, onClose, onSuccess, context = 'gener
     setError(null)
     setIsLoading(true)
 
-    // Set timeout (90 seconds - increased for slow connections)
     const TIMEOUT_MS = 90000
     isRequestPendingRef.current = true
     
-    // Create a promise that rejects after timeout
     const timeoutPromise = new Promise<never>((_, reject) => {
       timeoutRef.current = setTimeout(() => {
         if (isRequestPendingRef.current) {
           isRequestPendingRef.current = false
           setIsLoading(false)
           const errorMessage = view === 'signin' 
-            ? 'Sign-in request timed out. Please check your connection and try again.'
+            ? 'Access synchronization timed out. Please verify your connection.'
             : view === 'signup'
-            ? 'Sign-up request timed out. Please check your connection and try again.'
-            : 'Request timed out. Please try again.'
+            ? 'Account initialization timed out. Please verify your connection.'
+            : 'Request synchronization timed out.'
           
           setError(errorMessage)
-          
-          // Show toast with helpful message
           toast.error(
-            <div>
-              <p className="font-semibold">Request Timeout</p>
-              <p className="text-sm mt-1">{errorMessage}</p>
-              <p className="text-xs mt-2 text-gray-400">
-                💡 Help: Check your internet connection, verify Supabase is accessible, or try again in a moment.
-              </p>
-            </div>,
-            {
-              duration: 6000,
-            }
+            <div className="font-medium">
+              <p className="font-bold">Sync Timeout</p>
+              <p className="text-xs mt-1">{errorMessage}</p>
+            </div>
           )
-          
           reject(new Error(errorMessage))
         }
       }, TIMEOUT_MS)
@@ -103,35 +92,20 @@ export default function AuthModal({ isOpen, onClose, onSuccess, context = 'gener
         ])
         
         isRequestPendingRef.current = false
-        if (timeoutRef.current) {
-          clearTimeout(timeoutRef.current)
-          timeoutRef.current = null
-        }
+        if (timeoutRef.current) { clearTimeout(timeoutRef.current); timeoutRef.current = null; }
         
-        // If we got here, it wasn't a timeout
         if (result.type === 'result') {
           const { error } = result.result
           if (error) {
-            const errorMsg = error.message || 'Failed to sign up'
-            setError(errorMsg)
-            toast.error(
-              <div>
-                <p className="font-semibold">Sign Up Failed</p>
-                <p className="text-sm mt-1">{errorMsg}</p>
-                <p className="text-xs mt-2 text-gray-400">
-                  💡 Help: Check your email format, ensure password is at least 6 characters, or try signing in if you already have an account.
-                </p>
-              </div>,
-              { duration: 5000 }
-            )
+            setError(error.message)
+            toast.error(error.message)
           } else {
-            toast.success('Account created successfully!')
+            toast.success('Foundry identity initialized.')
             onSuccess()
             onClose()
           }
         }
       } else if (view === 'signin') {
-        console.log('🔐 Attempting sign in for:', email)
         const signInPromise = signIn(email, password)
         const result = await Promise.race([
           signInPromise.then(result => ({ type: 'result' as const, result })),
@@ -139,56 +113,15 @@ export default function AuthModal({ isOpen, onClose, onSuccess, context = 'gener
         ])
         
         isRequestPendingRef.current = false
-        if (timeoutRef.current) {
-          clearTimeout(timeoutRef.current)
-          timeoutRef.current = null
-        }
+        if (timeoutRef.current) { clearTimeout(timeoutRef.current); timeoutRef.current = null; }
         
-        // If we got here, it wasn't a timeout
         if (result.type === 'result') {
           const { error } = result.result
             if (error) {
-            let errorMsg = error.message || 'Failed to sign in'
-            
-            // Handle schema/database errors specifically
-            if (errorMsg.toLowerCase().includes('schema') || 
-                errorMsg.toLowerCase().includes('querying') ||
-                errorMsg.toLowerCase().includes('does not exist') ||
-                error.code === '42P01') {
-              errorMsg = 'Database configuration error. Please contact support or check your database setup.'
-              console.error('❌ Database schema error during sign in:', {
-                message: error.message,
-                code: error.code,
-                hint: 'Database migrations may not have been run. Check Supabase setup.'
-              })
-            }
-            
-            setError(errorMsg)
-            
-            // Provide helpful error messages based on error type
-            let helpText = '💡 Help: '
-            if (errorMsg.toLowerCase().includes('database') || errorMsg.toLowerCase().includes('schema')) {
-              helpText += 'Database setup issue detected. Please ensure database migrations have been run in Supabase.'
-            } else if (errorMsg.toLowerCase().includes('invalid') || errorMsg.toLowerCase().includes('credentials')) {
-              helpText += 'Check your email and password. Use "Forgot password?" if you need to reset it.'
-            } else if (errorMsg.toLowerCase().includes('email')) {
-              helpText += 'Verify your email address is correct and try again.'
-            } else if (errorMsg.toLowerCase().includes('network') || errorMsg.toLowerCase().includes('fetch')) {
-              helpText += 'Check your internet connection and ensure Supabase is accessible.'
-            } else {
-              helpText += 'Please try again. If the problem persists, check your internet connection.'
-            }
-            
-            toast.error(
-              <div>
-                <p className="font-semibold">Sign In Failed</p>
-                <p className="text-sm mt-1">{errorMsg}</p>
-                <p className="text-xs mt-2 text-gray-400">{helpText}</p>
-              </div>,
-              { duration: 6000 }
-            )
+            setError(error.message)
+            toast.error(error.message)
           } else {
-            toast.success('Signed in successfully!')
+            toast.success('Identity synchronized.')
             onSuccess()
             onClose()
           }
@@ -201,59 +134,24 @@ export default function AuthModal({ isOpen, onClose, onSuccess, context = 'gener
         ])
         
         isRequestPendingRef.current = false
-        if (timeoutRef.current) {
-          clearTimeout(timeoutRef.current)
-          timeoutRef.current = null
-        }
+        if (timeoutRef.current) { clearTimeout(timeoutRef.current); timeoutRef.current = null; }
         
-        // If we got here, it wasn't a timeout
         if (result.type === 'result') {
           const { error } = result.result
           if (error) {
-            const errorMsg = error.message || 'Failed to send reset email'
-            setError(errorMsg)
-            toast.error(
-              <div>
-                <p className="font-semibold">Reset Email Failed</p>
-                <p className="text-sm mt-1">{errorMsg}</p>
-                <p className="text-xs mt-2 text-gray-400">
-                  💡 Help: Verify your email address is correct and try again.
-                </p>
-              </div>,
-              { duration: 5000 }
-            )
+            setError(error.message)
+            toast.error(error.message)
           } else {
-            toast.success('Password reset email sent! Check your inbox.')
+            toast.success('Recovery blueprint sent.')
             setResetEmailSent(true)
             setView('reset-sent')
           }
         }
       }
     } catch (err: any) {
-      isRequestPendingRef.current = false
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current)
-        timeoutRef.current = null
+      if (!err.message?.includes('timed out')) {
+        setError(err.message || 'An unexpected error occurred.')
       }
-      
-      // Don't show error if it was a timeout (already handled)
-      if (err.message && err.message.includes('timed out')) {
-        return
-      }
-      
-      console.error('❌ Auth error:', err)
-      const errorMsg = err.message || 'An unexpected error occurred'
-      setError(errorMsg)
-      toast.error(
-        <div>
-          <p className="font-semibold">Error</p>
-          <p className="text-sm mt-1">{errorMsg}</p>
-          <p className="text-xs mt-2 text-gray-400">
-            💡 Help: Please try again. If the problem persists, check your connection or contact support.
-          </p>
-        </div>,
-        { duration: 5000 }
-      )
     } finally {
       setIsLoading(false)
     }
@@ -263,235 +161,206 @@ export default function AuthModal({ isOpen, onClose, onSuccess, context = 'gener
     setView('signin')
     setError(null)
     setResetEmailSent(false)
-    setEmail('')
-    setPassword('')
     setIsLoading(false)
-    isRequestPendingRef.current = false
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current)
-      timeoutRef.current = null
-    }
   }
 
   return (
-    <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-      <div className="bg-[#1A1A24] rounded-2xl border border-[#00FFF0]/30 shadow-[0_0_20px_rgba(0,255,240,0.2)] w-full max-w-md">
-        <div className="flex items-center justify-between p-6 border-b border-[#00FFF0]/20">
-          <div className="flex items-center gap-3">
+    <div className="fixed inset-0 z-[999] flex items-center justify-center bg-[#020617]/90 backdrop-blur-2xl p-4 animate-in fade-in duration-500">
+      {/* Background Accents */}
+      <div className="fixed inset-0 pointer-events-none">
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-brand-emerald/5 blur-[120px] rounded-full" />
+      </div>
+
+      <div className="bg-[#09090b] w-full max-w-xl rounded-[3rem] border border-white/[0.08] shadow-[0_0_80px_rgba(0,0,0,0.6)] flex flex-col overflow-hidden relative z-10">
+        
+        {/* Header */}
+        <div className="flex items-center justify-between p-10 border-b border-white/[0.03] relative">
+          <div className="flex items-center gap-6">
             {view === 'forgot-password' || view === 'reset-sent' ? (
-              <Button
-                variant="ghost"
-                size="icon"
+              <button
                 onClick={handleBackToSignIn}
-                className="text-gray-400 hover:text-white"
+                className="w-12 h-12 rounded-full border border-white/5 flex items-center justify-center text-white/20 hover:text-white hover:bg-white/5 transition-all"
               >
                 <ArrowLeft className="w-5 h-5" />
-              </Button>
-            ) : null}
-            <h2 className="text-xl font-bold text-white">
-              {view === 'signup' ? 'Sign Up' : 
-               view === 'forgot-password' ? 'Reset Password' :
-               view === 'reset-sent' ? 'Check Your Email' :
-               'Sign In'}
+              </button>
+            ) : (
+              <div className="w-14 h-14 rounded-2xl bg-white/[0.03] border border-white/[0.05] flex items-center justify-center">
+                <ShieldCheck className="w-7 h-7 text-brand-emerald" />
+              </div>
+            )}
+            <div>
+              <h2 className="text-2xl font-bold tracking-tight text-white uppercase tracking-widest italic serif">
+                {view === 'signup' ? 'Identity Initialization' : 
+                 view === 'forgot-password' ? 'Access Recovery' :
+                 view === 'reset-sent' ? 'Transmission Sent' :
+                 'Secure Access'}
             </h2>
+              <p className="text-[10px] font-bold text-white/20 uppercase tracking-[0.2em] mt-1.5">Foundry Authentication Protocol</p>
+            </div>
           </div>
-          <Button
-            variant="ghost"
-            size="icon"
+          <button
             onClick={() => {
-              setIsLoading(false)
-              isRequestPendingRef.current = false
-              if (timeoutRef.current) {
-                clearTimeout(timeoutRef.current)
-                timeoutRef.current = null
-              }
-              setError(null)
-              setPassword('')
-              setEmail('')
-              setFullName('')
-              setShowPassword(false)
-              onClose()
+              setPassword(''); setEmail(''); setFullName('');
+              setShowPassword(false); onClose();
             }}
-            className="text-gray-400 hover:text-white"
+            className="w-12 h-12 rounded-full border border-white/5 flex items-center justify-center text-white/20 hover:text-white hover:bg-white/5 transition-all"
           >
-            <X className="w-5 h-5" />
-          </Button>
+            <X className="w-6 h-6" />
+          </button>
         </div>
 
-        {/* Context-specific messaging */}
+        {/* Content */}
+        <div className="p-10 custom-scrollbar max-h-[70vh] overflow-y-auto">
+          {/* Context Messaging */}
         {context === 'project-creation' && view === 'signin' && (
-          <div className="px-6 pt-6 pb-0">
-            <div className="bg-[#00FFF0]/10 border border-[#00FFF0]/30 rounded-lg p-4 mb-4">
-              <p className="text-sm text-[#00FFF0] font-medium mb-2">
-                {message || 'Sign up to save your project and continue creating'}
+            <div className="mb-10 bg-brand-emerald/[0.03] border border-brand-emerald/10 rounded-[1.5rem] p-6">
+              <div className="flex items-center gap-3 mb-3 text-brand-emerald">
+                <Sparkles className="w-4 h-4" />
+                <span className="text-[11px] font-black uppercase tracking-widest">Premium Provisioning</span>
+              </div>
+              <p className="text-sm text-white/60 font-medium leading-relaxed">
+                {message || 'Synchronize your identity to preserve your current orchestration and unlock unlimited foundry assets.'}
               </p>
-              <ul className="text-xs text-gray-400 space-y-1">
-                <li>✓ Save your work automatically</li>
-                <li>✓ Access from anywhere</li>
-                <li>✓ Generate unlimited stories</li>
-              </ul>
-            </div>
           </div>
         )}
 
-        {/* Reset Email Sent Success View */}
         {view === 'reset-sent' ? (
-          <div className="p-6 space-y-4">
-            <div className="flex flex-col items-center text-center space-y-4">
-              <div className="w-16 h-16 bg-[#00FFF0]/10 rounded-full flex items-center justify-center">
-                <Mail className="w-8 h-8 text-[#00FFF0]" />
+            <div className="flex flex-col items-center text-center space-y-8 py-6">
+              <div className="w-24 h-24 bg-brand-emerald/10 rounded-full flex items-center justify-center animate-pulse">
+                <Mail className="w-10 h-10 text-brand-emerald" />
               </div>
               <div>
-                <h3 className="text-lg font-semibold text-white mb-2">Check Your Email</h3>
-                <p className="text-sm text-gray-400">
-                  We've sent a password reset link to <strong className="text-white">{email}</strong>
-                </p>
-              </div>
-              <div className="bg-[#00FFF0]/10 border border-[#00FFF0]/30 rounded-lg p-4 w-full">
-                <p className="text-xs text-gray-400">
-                  Click the link in the email to reset your password. The link will expire in 1 hour.
+                <h3 className="text-xl font-bold text-white mb-3">Sync Sent.</h3>
+                <p className="text-sm text-white/30 font-medium leading-relaxed max-w-sm">
+                  We've transmitted a recovery blueprint to <br />
+                  <strong className="text-white font-black">{email}</strong>
                 </p>
               </div>
               <Button
                 onClick={handleBackToSignIn}
-                variant="outline"
-                className="w-full border-[#00FFF0]/30 text-gray-300 hover:bg-[#00FFF0]/10 hover:border-[#00FFF0]/50 hover:shadow-[0_0_5px_rgba(0,255,240,0.2)] transition-all duration-300"
+                className="w-full h-16 rounded-2xl bg-white text-black hover:bg-brand-emerald hover:text-white transition-all duration-500 font-black uppercase tracking-widest text-[11px]"
               >
-                Back to Sign In
+                Return to Access
               </Button>
-            </div>
           </div>
         ) : (
-          <form onSubmit={handleSubmit} className="p-6 space-y-4">
+            <form onSubmit={handleSubmit} className="space-y-8">
+              <div className="space-y-6">
             {view === 'signup' && (
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Full Name
-                </label>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase tracking-[0.3em] text-white/30 ml-1">Full Identity</label>
+                    <div className="relative">
+                      <div className="absolute left-6 top-1/2 -translate-y-1/2 text-white/10"><User className="w-4 h-4" /></div>
                 <input
                   type="text"
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
-                  className="w-full px-4 py-2 bg-[#0C0C0C] border border-[#00FFF0]/30 rounded-lg text-white placeholder:text-gray-500 focus:border-[#00FFF0] focus:outline-none focus:shadow-[0_0_10px_rgba(0,255,240,0.2)] transition-all duration-300"
-                  placeholder="John Doe"
+                        className="w-full h-16 bg-white/[0.02] border border-white/10 rounded-2xl px-14 text-white placeholder:text-white/5 focus:border-brand-emerald/40 focus:ring-0 transition-all font-medium"
+                        placeholder="Director Name"
                 />
+                    </div>
               </div>
             )}
 
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Email
-              </label>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase tracking-[0.3em] text-white/30 ml-1">Email Terminal</label>
+                  <div className="relative">
+                    <div className="absolute left-6 top-1/2 -translate-y-1/2 text-white/10"><Mail className="w-4 h-4" /></div>
               <input
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                className="w-full px-4 py-2 bg-[#0C0C0C] border border-[#3AAFA9]/30 rounded-lg text-white placeholder:text-gray-500 focus:border-[#00FFF0] focus:outline-none"
-                placeholder="you@example.com"
+                      className="w-full h-16 bg-white/[0.02] border border-white/10 rounded-2xl px-14 text-white placeholder:text-white/5 focus:border-brand-emerald/40 focus:ring-0 transition-all font-medium"
+                      placeholder="address@studio.com"
               />
+                  </div>
             </div>
 
             {view !== 'forgot-password' && (
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Password
-                </label>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase tracking-[0.3em] text-white/30 ml-1">Security Key</label>
                 <div className="relative">
+                      <div className="absolute left-6 top-1/2 -translate-y-1/2 text-white/10"><Lock className="w-4 h-4" /></div>
                   <input
                     type={showPassword ? 'text' : 'password'}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     required
                     minLength={6}
-                    className="w-full px-4 py-2 pr-10 bg-[#0C0C0C] border border-[#3AAFA9]/30 rounded-lg text-white placeholder:text-gray-500 focus:border-[#00FFF0] focus:outline-none"
+                        className="w-full h-16 bg-white/[0.02] border border-white/10 rounded-2xl px-14 pr-16 text-white placeholder:text-white/5 focus:border-brand-emerald/40 focus:ring-0 transition-all font-medium"
                     placeholder="••••••••"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-[#00FFF0] transition-colors focus:outline-none"
-                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                        className="absolute right-6 top-1/2 -translate-y-1/2 text-white/10 hover:text-white/40 transition-colors"
                   >
-                    {showPassword ? (
-                      <EyeOff className="w-5 h-5" />
-                    ) : (
-                      <Eye className="w-5 h-5" />
-                    )}
+                        {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                   </button>
                 </div>
               </div>
             )}
-
-            {view === 'forgot-password' && (
-              <div className="bg-[#00FFF0]/10 border border-[#00FFF0]/30 rounded-lg p-4">
-                <p className="text-sm text-gray-400">
-                  Enter your email address and we'll send you a link to reset your password.
-                </p>
               </div>
-            )}
 
             {error && (
-              <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
-                <p className="text-sm text-red-400">{error}</p>
+                <div className="p-5 bg-red-500/5 border border-red-500/10 rounded-2xl">
+                  <p className="text-xs text-red-400 font-bold uppercase tracking-widest">{error}</p>
               </div>
             )}
 
             <Button
               type="submit"
               disabled={isLoading}
-              className="w-full bg-[#00FFF0] hover:bg-[#00FFF0]/90 text-black font-semibold py-2 rounded-lg 
-                       shadow-[0_0_15px_rgba(0,255,240,0.5)] hover:shadow-[0_0_25px_rgba(0,255,240,0.8)]
-                       transition-all duration-300 disabled:opacity-50 disabled:shadow-none"
+                className="w-full h-16 rounded-2xl bg-white text-black hover:bg-brand-emerald hover:text-white transition-all duration-700 font-black uppercase tracking-widest text-[11px] shadow-2xl"
             >
               {isLoading 
-                ? 'Loading...' 
+                  ? <div className="w-6 h-6 border-2 border-black/30 border-t-black rounded-full animate-spin" />
                 : view === 'signup' 
-                  ? 'Sign Up' 
+                    ? 'Initialize Identity' 
                   : view === 'forgot-password'
-                    ? 'Send Reset Link'
-                    : 'Sign In'}
+                      ? 'Transmit Recovery'
+                      : 'Grant Access'}
             </Button>
 
-            <div className="text-center space-y-2">
+              <div className="flex flex-col gap-4 text-center">
               {view === 'signin' && (
                 <button
                   type="button"
-                  onClick={() => {
-                    setView('forgot-password')
-                    setError(null)
-                    setIsLoading(false)
-                    isRequestPendingRef.current = false
-                    if (timeoutRef.current) {
-                      clearTimeout(timeoutRef.current)
-                      timeoutRef.current = null
-                    }
-                  }}
-                  className="block w-full text-sm text-[#00FFF0] hover:text-[#00FFF0]/80"
+                    onClick={() => { setView('forgot-password'); setError(null); }}
+                    className="text-[10px] font-black uppercase tracking-[0.3em] text-white/20 hover:text-white transition-colors"
                 >
-                  Forgot password?
+                    Key Recovery
                 </button>
               )}
               <button
                 type="button"
-                onClick={() => {
-                  setView(view === 'signup' ? 'signin' : 'signup')
-                  setError(null)
-                  setIsLoading(false)
-                  isRequestPendingRef.current = false
-                  if (timeoutRef.current) {
-                    clearTimeout(timeoutRef.current)
-                    timeoutRef.current = null
-                  }
-                }}
-                className="text-sm text-gray-400 hover:text-[#00FFF0]"
+                  onClick={() => { setView(view === 'signup' ? 'signin' : 'signup'); setError(null); }}
+                  className="text-[10px] font-black uppercase tracking-[0.3em] text-white/40 hover:text-brand-emerald transition-colors"
               >
-                {view === 'signup' ? 'Already have an account? Sign in' : "Don't have an account? Sign up"}
+                  {view === 'signup' ? 'Switch to Existing Identity' : 'Initialize New Identity'}
               </button>
             </div>
           </form>
         )}
       </div>
+
+        {/* Footer Protocol */}
+        <div className="px-10 py-6 bg-brand-emerald/[0.02] border-t border-white/[0.03] flex items-center justify-between">
+          <span className="text-[9px] font-bold text-white/10 uppercase tracking-[0.4em]">Auth Protocol v2.6.0</span>
+          <div className="flex gap-1">
+            <div className="w-1 h-1 rounded-full bg-brand-emerald/40" />
+            <div className="w-1 h-1 rounded-full bg-brand-emerald/20" />
+            <div className="w-1 h-1 rounded-full bg-brand-emerald/10" />
+          </div>
+        </div>
+      </div>
+
+      <style jsx global>{`
+        @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;1,700&family=Inter:wght@400;500;700;900&display=swap');
+        .serif { font-family: 'Playfair Display', serif; }
+        body { font-family: 'Inter', sans-serif; }
+      `}</style>
     </div>
   )
 }

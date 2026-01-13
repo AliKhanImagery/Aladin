@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { Button } from './ui/button'
 import { Input } from './ui/input'
 import { Textarea } from './ui/textarea'
-import { X } from 'lucide-react'
+import { X, Sparkles, Layout } from 'lucide-react'
 import { Project } from '@/types'
 import { useAppStore } from '@/lib/store'
 
@@ -23,7 +23,7 @@ export default function CreateProjectModal({ isOpen, onClose, onSuccess }: Creat
   // Auto-generate project name from current idea
   useEffect(() => {
     if (isOpen && !projectName) {
-      const idea = localStorage.getItem('currentIdea')
+      const idea = localStorage.getItem('pendingIdea')
       if (idea) {
         const words = idea.split(' ').slice(0, 3).join(' ')
         setProjectName(`${words} - ${new Date().toLocaleDateString()}`)
@@ -55,7 +55,7 @@ export default function CreateProjectModal({ isOpen, onClose, onSuccess }: Creat
         description: projectDescription,
         createdAt: new Date(),
         updatedAt: new Date(),
-        createdBy: 'current-user', // TODO: Get from auth
+        createdBy: user?.id || 'anonymous',
         settings: {
           defaultDuration: 5,
           defaultQuality: 'standard',
@@ -63,11 +63,11 @@ export default function CreateProjectModal({ isOpen, onClose, onSuccess }: Creat
           maxRetries: 3,
           consentRequired: true,
           offlineMode: false,
-          dontGenerateImages: false // Default to generating images for manually created projects
+          dontGenerateImages: false 
         },
         story: {
           id: crypto.randomUUID(),
-          originalIdea: localStorage.getItem('currentIdea') || '',
+          originalIdea: localStorage.getItem('pendingIdea') || '',
           generatedStory: '',
           targetRuntime: 60,
           actualRuntime: 0,
@@ -87,7 +87,7 @@ export default function CreateProjectModal({ isOpen, onClose, onSuccess }: Creat
           totalCost: 0
         },
         permissions: {
-          owner: 'current-user',
+          owner: user?.id || 'anonymous',
           collaborators: [],
           roles: []
         },
@@ -109,7 +109,6 @@ export default function CreateProjectModal({ isOpen, onClose, onSuccess }: Creat
           console.log('✅ Project saved to database:', newProject.name)
         } catch (error) {
           console.error('Error saving project to database:', error)
-          // Continue anyway - project is in local state
         }
       }
       
@@ -124,67 +123,93 @@ export default function CreateProjectModal({ isOpen, onClose, onSuccess }: Creat
   }
 
   return (
-    <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-      <div className="bg-[#1E1F22] rounded-2xl border border-[#3AAFA9]/30 shadow-2xl w-full max-w-md">
-        <div className="flex items-center justify-between p-6 border-b border-[#3AAFA9]/20">
-          <h2 className="text-xl font-bold text-white">Create New Project</h2>
-          <Button
-            variant="ghost"
-            size="icon"
+    <div className="fixed inset-0 z-[999] flex items-center justify-center bg-[#020617]/90 backdrop-blur-xl p-4 animate-in fade-in duration-300">
+      <div className="bg-[#09090b] rounded-[2.5rem] border border-white/[0.08] shadow-[0_0_50px_rgba(0,0,0,0.5)] w-full max-w-xl overflow-hidden relative">
+        {/* Subtle Background Glow */}
+        <div className="absolute top-0 right-0 w-64 h-64 bg-brand-emerald/5 blur-[80px] rounded-full -translate-y-1/2 translate-x-1/2" />
+        
+        <div className="flex items-center justify-between p-8 border-b border-white/[0.03] relative z-10">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-2xl bg-white/[0.03] border border-white/[0.05] flex items-center justify-center">
+              <Layout className="w-6 h-6 text-brand-emerald" />
+            </div>
+            <div>
+              <h2 className="text-xl font-bold tracking-tight text-white uppercase tracking-widest">Initialize Production</h2>
+              <p className="text-[10px] font-bold text-white/20 uppercase tracking-[0.2em] mt-1">Configure New Foundry Project</p>
+            </div>
+          </div>
+          <button
             onClick={onClose}
-            className="text-gray-400 hover:text-white"
+            className="w-10 h-10 rounded-full border border-white/5 flex items-center justify-center text-white/20 hover:text-white hover:bg-white/5 transition-all"
           >
             <X className="w-5 h-5" />
-          </Button>
+          </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">
-              Project Name *
+        <form onSubmit={handleSubmit} className="p-10 space-y-8 relative z-10">
+          <div className="space-y-3">
+            <label className="text-[10px] font-black uppercase tracking-[0.3em] text-white/30 ml-1">
+              Production Identity
             </label>
             <Input
               value={projectName}
               onChange={(e) => setProjectName(e.target.value)}
-              placeholder="Enter project name..."
+              placeholder="e.g. Project Neo-Noir Campaign"
               required
-              className="bg-[#0C0C0C] border-[#3AAFA9]/30 text-white placeholder:text-gray-500 focus:border-[#00FFF0] focus:outline-none"
+              className="h-16 bg-white/[0.02] border-white/10 text-xl font-bold tracking-tight text-white placeholder:text-white/5 
+                       focus:border-brand-emerald/40 focus:ring-0 rounded-2xl px-6 transition-all duration-500"
             />
           </div>
           
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">
-              Description (Optional)
+          <div className="space-y-3">
+            <label className="text-[10px] font-black uppercase tracking-[0.3em] text-white/30 ml-1">
+              Mission Parameters (Optional)
             </label>
             <Textarea
               value={projectDescription}
               onChange={(e) => setProjectDescription(e.target.value)}
-              placeholder="Describe your project..."
-              rows={3}
-              className="bg-[#0C0C0C] border-[#3AAFA9]/30 text-white placeholder:text-gray-500 focus:border-[#00FFF0] focus:outline-none"
+              placeholder="Describe the objective of this production..."
+              rows={4}
+              className="bg-white/[0.02] border-white/10 text-white placeholder:text-white/5 
+                       focus:border-brand-emerald/40 focus:ring-0 rounded-2xl p-6 transition-all duration-500 resize-none leading-relaxed"
             />
           </div>
           
-          <div className="flex gap-3 pt-4">
-            <Button
+          <div className="flex gap-4 pt-4">
+            <button
               type="button"
-              variant="outline"
               onClick={onClose}
-              className="flex-1 border-[#3AAFA9]/30 text-gray-300 hover:bg-[#3AAFA9]/10"
+              className="flex-1 h-16 rounded-2xl border border-white/5 text-[11px] font-black uppercase tracking-[0.2em] text-white/40 hover:text-white hover:bg-white/5 transition-all duration-500"
             >
-              Cancel
-            </Button>
+              Abort
+            </button>
             <Button
               type="submit"
               disabled={!projectName.trim() || isCreating}
-              className="flex-1 bg-[#00FFF0] hover:bg-[#00FFF0]/90 text-black font-semibold disabled:opacity-50"
+              className="flex-[2] h-16 rounded-2xl bg-white text-black hover:bg-brand-emerald hover:text-white transition-all duration-700 font-black uppercase tracking-widest text-[11px] shadow-2xl group"
             >
-              {isCreating ? 'Creating...' : 'Create Project'}
+              {isCreating ? (
+                <div className="w-6 h-6 border-2 border-black/30 border-t-black rounded-full animate-spin" />
+              ) : (
+                <div className="flex items-center gap-3">
+                  <Sparkles className="w-4 h-4 group-hover:rotate-12 transition-transform" />
+                  <span>Construct Production</span>
+                </div>
+              )}
             </Button>
           </div>
         </form>
+        
+        {/* Footer Protocol */}
+        <div className="px-10 py-6 bg-brand-emerald/[0.02] border-t border-white/[0.03] flex items-center justify-between">
+          <span className="text-[9px] font-bold text-white/10 uppercase tracking-[0.4em]">Engine Protocol v2.6.0</span>
+          <div className="flex gap-1">
+            <div className="w-1 h-1 rounded-full bg-brand-emerald/40" />
+            <div className="w-1 h-1 rounded-full bg-brand-emerald/20" />
+            <div className="w-1 h-1 rounded-full bg-brand-emerald/10" />
+          </div>
+        </div>
       </div>
     </div>
   )
 }
-

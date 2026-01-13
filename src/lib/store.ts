@@ -470,12 +470,17 @@ export const useAppStore = create<AppState>((set, get) => ({
   setGeneratingStory: (isGenerating) => set({ isGeneratingStory: isGenerating }),
   setGenerationStatus: (status) => set({ generationStatus: status }),
   setGenerationProgress: (progress) => set({ generationProgress: progress }),
-  setClipGeneratingStatus: (clipId, status) => set((state) => ({
-    clipGeneratingStatus: {
-      ...state.clipGeneratingStatus,
-      [clipId]: status
+  setClipGeneratingStatus: (clipId, status) => set((state) => {
+    const newStatus = { ...state.clipGeneratingStatus }
+    if (status === null) {
+      // Remove the key entirely when clearing status
+      delete newStatus[clipId]
+    } else {
+      // Set the status when generating
+      newStatus[clipId] = status
     }
-  })),
+    return { clipGeneratingStatus: newStatus }
+  }),
   
   // Manual save trigger (for immediate saves after critical operations)
   saveProjectNow: async (projectId, immediate = false) => {

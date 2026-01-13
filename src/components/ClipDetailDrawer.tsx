@@ -164,14 +164,15 @@ export default function ClipDetailDrawer() {
         if (selectedClip?.id) {
           setClipGeneratingStatus(selectedClip.id, null)
         }
-        // Save to user_images table
+        // Save to user_images table and store in Supabase Storage
         await saveUserImage({
           image_url: imageUrl,
           prompt: promptToUse,
           model: 'openai',
           aspect_ratio: aspectRatio,
           project_id: currentProject?.id,
-          clip_id: selectedClip?.id
+          clip_id: selectedClip?.id,
+          storeExternally: true // Automatically download and store in Supabase Storage
         })
       } else if (imageModel === 'fal-ai') {
         // Fal AI Vidu with reference images
@@ -219,14 +220,15 @@ export default function ClipDetailDrawer() {
         if (selectedClip?.id) {
           setClipGeneratingStatus(selectedClip.id, null)
         }
-        // Save to user_images table
+        // Save to user_images table and store in Supabase Storage
         await saveUserImage({
           image_url: imageUrl,
           prompt: promptToUse,
-          model: 'openai',
+          model: 'fal-ai',
           aspect_ratio: aspectRatio,
           project_id: currentProject?.id,
-          clip_id: selectedClip?.id
+          clip_id: selectedClip?.id,
+          storeExternally: true // Automatically download and store in Supabase Storage
         })
       } else if (imageModel === 'remix') {
         const aspectRatioToUse = aspectRatio || '16:9'
@@ -320,11 +322,17 @@ export default function ClipDetailDrawer() {
           requestBody.reference_image_urls = validReferences
         }
         
+        // Get session token for authentication
+        const { supabase } = await import('@/lib/supabase')
+        const { data: { session } } = await supabase.auth.getSession()
+        const headers: HeadersInit = { 'Content-Type': 'application/json' }
+        if (session?.access_token) {
+          headers['Authorization'] = `Bearer ${session.access_token}`
+        }
+        
         const response = await fetch('/api/generate-image-remix', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          headers,
           body: JSON.stringify(requestBody),
         })
 
@@ -368,14 +376,15 @@ export default function ClipDetailDrawer() {
         if (selectedClip?.id) {
           setClipGeneratingStatus(selectedClip.id, null)
         }
-        // Save to user_images table
+        // Save to user_images table and store in Supabase Storage
         await saveUserImage({
           image_url: imageUrl,
           prompt: promptToUse,
           model: 'remix',
           aspect_ratio: aspectRatioToUse,
           project_id: currentProject?.id,
-          clip_id: selectedClip?.id
+          clip_id: selectedClip?.id,
+          storeExternally: true // Automatically download and store in Supabase Storage
         })
       } else if (imageModel === 'nano-banana') {
         // Fal AI Nano Banana - supports two modes
@@ -420,14 +429,15 @@ export default function ClipDetailDrawer() {
         if (selectedClip?.id) {
           setClipGeneratingStatus(selectedClip.id, null)
         }
-        // Save to user_images table
+        // Save to user_images table and store in Supabase Storage
         await saveUserImage({
           image_url: imageUrl,
           prompt: promptToUse,
           model: 'nano-banana',
           aspect_ratio: aspectRatio,
           project_id: currentProject?.id,
-          clip_id: selectedClip?.id
+          clip_id: selectedClip?.id,
+          storeExternally: true // Automatically download and store in Supabase Storage
         })
       }
     } catch (error: any) {
@@ -696,7 +706,7 @@ export default function ClipDetailDrawer() {
       if (selectedClip?.id) {
         setClipGeneratingStatus(selectedClip.id, null)
       }
-      // Save to user_videos table
+      // Save to user_videos table and store in Supabase Storage
       await saveUserVideo({
         video_url: videoUrl,
         prompt: promptToUse,
@@ -705,7 +715,8 @@ export default function ClipDetailDrawer() {
         aspect_ratio: aspectRatio,
         project_id: currentProject?.id,
         clip_id: selectedClip?.id,
-        thumbnail_url: selectedClip.generatedImage || undefined
+        thumbnail_url: selectedClip.generatedImage || undefined,
+        storeExternally: true // Automatically download and store in Supabase Storage
       })
     } catch (error: any) {
       console.error('❌ Video generation error:', {

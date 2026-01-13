@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Select, SelectOption } from '@/components/ui/select'
 import { Play, Pause, Download, Volume2, VolumeX, Settings, Sparkles, Loader2, Clock, Zap } from 'lucide-react'
 import { Clip } from '@/types'
-import { saveUserVideo } from '@/lib/userMedia'
+// Note: saveUserVideo removed - API now handles storage automatically
 import toast from 'react-hot-toast'
 
 // Video model options
@@ -392,7 +392,25 @@ export default function TimelineTab() {
           }
         }
 
-        // Create timeout controller
+        // Get session token for authentication BEFORE creating AbortController
+        // This prevents abort signals from interfering with Supabase's internal auth locks
+        let headers: HeadersInit = { 'Content-Type': 'application/json' }
+        try {
+          const { supabase } = await import('@/lib/supabase')
+          const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+          if (sessionError) {
+            console.warn(`⚠️ [${index + 1}/${clipsNeedingVideo.length}] Session error for "${clipName}":`, sessionError.message)
+          }
+          if (session?.access_token) {
+            headers['Authorization'] = `Bearer ${session.access_token}`
+          }
+        } catch (authError: any) {
+          // Handle auth errors gracefully - don't block video generation
+          // If auth fails, the API will handle it and return appropriate error
+          console.warn(`⚠️ [${index + 1}/${clipsNeedingVideo.length}] Auth error for "${clipName}":`, authError.message)
+        }
+
+        // Create timeout controller AFTER auth is complete
         const controller = new AbortController()
         const timeoutId = setTimeout(() => {
           console.warn(`⏱️ [${index + 1}/${clipsNeedingVideo.length}] Timeout triggered for "${clipName}" after 5 minutes`)
@@ -402,12 +420,18 @@ export default function TimelineTab() {
         let videoResponse
         try {
           console.log(`📤 [${index + 1}/${clipsNeedingVideo.length}] Sending request to /api/generate-video for "${clipName}"`)
+          
+          // Add project_id and clip_id to request body for storage
+          const requestBodyWithIds = {
+            ...requestBody,
+            project_id: currentProject.id,
+            clip_id: clipId,
+          }
+          
           videoResponse = await fetch('/api/generate-video', {
             method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(requestBody),
+            headers,
+            body: JSON.stringify(requestBodyWithIds),
             signal: controller.signal,
           })
 
@@ -477,6 +501,25 @@ export default function TimelineTab() {
         })
 
         // Update clip with generated video
+        // API now handles storage automatically - check if storage succeeded
+        if (responseData.storageSuccess) {
+          console.log(`✅ [${index + 1}/${clipsNeedingVideo.length}] Video generated and stored in Supabase Storage for "${clipName}"`, {
+            videoUrl: videoUrl.substring(0, 50) + '...',
+            storagePath: responseData.storagePath,
+            model: responseData.model
+          })
+        } else if (responseData.fallbackUrl) {
+          console.warn(`⚠️ [${index + 1}/${clipsNeedingVideo.length}] Video generated but storage failed, using Fal.ai URL as fallback for "${clipName}"`, {
+            videoUrl: videoUrl.substring(0, 50) + '...',
+            warning: 'Video URL is temporary (7-day expiry)'
+          })
+        } else {
+          console.log(`✅ [${index + 1}/${clipsNeedingVideo.length}] Video generated successfully for "${clipName}"`, {
+            videoUrl: videoUrl.substring(0, 50) + '...',
+            model: responseData.model
+          })
+        }
+        
         console.log(`💾 [${index + 1}/${clipsNeedingVideo.length}] Updating clip "${clipName}" with generated video...`)
         updateClip(clipId, {
           generatedVideo: videoUrl,
@@ -485,46 +528,7 @@ export default function TimelineTab() {
         })
         console.log(`✓ [${index + 1}/${clipsNeedingVideo.length}] Clip "${clipName}" updated successfully`)
         
-        // CRITICAL: Wait a tick to ensure Zustand store has updated before saving
-        await new Promise(resolve => setTimeout(resolve, 100))
-
-        // CRITICAL: Save to user_videos table if authenticated
-        if (user?.id) {
-          try {
-            console.log(`💾 [${index + 1}/${clipsNeedingVideo.length}] Saving video to database for "${clipName}"...`)
-            const savedVideo = await saveUserVideo({
-              video_url: videoUrl,
-              prompt: clip.videoPrompt,
-              model: selectedVideoModel, // Save the model used
-              duration: responseData.duration || clip.duration,
-              aspect_ratio: aspectRatio,
-              project_id: currentProject.id,
-              clip_id: clipId,
-              thumbnail_url: clip.generatedImage || undefined,
-              storeExternally: true // Automatically download and store in Supabase Storage
-            })
-            
-            if (!savedVideo) {
-              throw new Error('saveUserVideo returned null - video was not saved to database')
-            }
-            
-            console.log(`✅ [${index + 1}/${clipsNeedingVideo.length}] Video saved to database for "${clipName}"`, {
-              videoId: savedVideo.id
-            })
-          } catch (err: any) {
-            const errorMsg = err?.message || 'Unknown error'
-            console.error(`❌ [${index + 1}/${clipsNeedingVideo.length}] CRITICAL: Failed to save video to database for "${clipName}"`, {
-              error: errorMsg,
-              videoUrl: videoUrl.substring(0, 50) + '...',
-              clipId,
-              projectId: currentProject.id
-            })
-            // Don't throw - continue with project save, but log as critical error
-            toast.error(`Video generated but failed to save to database: ${errorMsg}`, { duration: 5000 })
-          }
-        } else {
-          console.warn(`⚠️ [${index + 1}/${clipsNeedingVideo.length}] Skipping video database save - user not authenticated`)
-        }
+        // Note: API now handles storage automatically - no need for client-side saveUserVideo() call
 
         const totalDuration = Date.now() - requestStartTime
         console.log(`✅ [${index + 1}/${clipsNeedingVideo.length}] Video generation completed for "${clipName}"`, {
@@ -696,9 +700,9 @@ export default function TimelineTab() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-3xl font-bold text-white mb-2">Timeline & SFX</h2>
+          <h2 className="text-3xl font-bold text-white mb-2">Video Clips</h2>
           <p className="text-gray-400">
-            Review your final timeline and add audio effects
+            Review your final clips and generate the full video timeline.
           </p>
         </div>
         <div className="flex items-center gap-4">

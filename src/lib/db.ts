@@ -1,6 +1,6 @@
 import { supabase } from './supabase'
 import { Project, Clip } from '@/types'
-import { getUserVideos } from './userMedia'
+import { getUserVideos, getUserImages } from './userMedia'
 
 // Load projects for current user
 export async function loadUserProjects(userId: string): Promise<Project[]> {
@@ -78,6 +78,8 @@ export async function loadUserProjects(userId: string): Promise<Project[]> {
       story: project.story || {},
       scenes: project.scenes || [],
       characters: project.characters || [],
+      // Restore asset context if present (confirmed assets & settings from analysis)
+      assetContext: project.asset_context || project.assetContext || null,
       metadata: project.metadata || {},
       permissions: project.permissions || {},
       budget: project.budget || {},
@@ -85,12 +87,13 @@ export async function loadUserProjects(userId: string): Promise<Project[]> {
 
     // CRITICAL: Restore video URLs from user_videos table
     // This ensures videos persist even if project JSONB doesn't have them
-    console.log('🔗 loadUserProjects: Restoring video URLs from user_videos table...')
+    console.log('🔗 loadUserProjects: Restoring media URLs from database registry...')
+    
+    // 1. Restore Videos
     try {
       const allVideos = await getUserVideos()
       console.log('🔗 Found', allVideos.length, 'videos in user_videos table')
       
-      // Create a map of clip_id -> video_url for quick lookup
       const videoMap = new Map<string, { video_url: string; thumbnail_url?: string; duration?: number }>()
       allVideos.forEach(video => {
         if (video.clip_id && video.video_url) {
@@ -102,17 +105,12 @@ export async function loadUserProjects(userId: string): Promise<Project[]> {
         }
       })
       
-      console.log('🔗 Video map created with', videoMap.size, 'entries')
-      
-      // Restore videos to clips in each project
       transformed = transformed.map(project => {
         const updatedScenes = project.scenes.map(scene => ({
           ...scene,
           clips: scene.clips.map(clip => {
-            // Check if clip has a video URL in the map but not in the clip
             const videoData = videoMap.get(clip.id)
             if (videoData && !clip.generatedVideo) {
-              console.log(`🔗 Restoring video for clip "${clip.name}" (${clip.id})`)
               return {
                 ...clip,
                 generatedVideo: videoData.video_url,
@@ -121,29 +119,64 @@ export async function loadUserProjects(userId: string): Promise<Project[]> {
                 duration: videoData.duration || clip.duration
               } as Clip
             }
-            // If clip already has video URL, ensure it matches the one in database
-            if (clip.generatedVideo && videoData && clip.generatedVideo !== videoData.video_url) {
-              console.log(`⚠️ Clip "${clip.name}" has different video URL than database, using database version`)
+            return clip
+          })
+        }))
+        return { ...project, scenes: updatedScenes }
+      })
+    } catch (videoError) {
+      console.warn('⚠️ loadUserProjects: Failed to restore videos:', videoError)
+    }
+
+    // 2. Restore Images (Self-Healing)
+    try {
+      console.log('🖼️ loadUserProjects: Fetching images for self-healing...')
+      const allImages = await getUserImages()
+      
+      if (!allImages || !Array.isArray(allImages)) {
+        console.warn('⚠️ loadUserProjects: allImages is not an array:', allImages)
+      } else {
+        console.log(`🖼️ Found ${allImages.length} images in registry. Matching to clips...`)
+        
+        const imageMap = new Map<string, string>()
+        allImages.forEach(img => {
+          if (img.clip_id && img.image_url) {
+            imageMap.set(img.clip_id, img.image_url)
+          }
+        })
+
+        let restoredCount = 0
+        transformed = transformed.map(project => {
+          const updatedScenes = (project.scenes || []).map(scene => ({
+            ...scene,
+            clips: (scene.clips || []).map(clip => {
+              const storedImageUrl = imageMap.get(clip.id)
+              // If we have a stored image URL but the clip object doesn't have it, restore it
+              if (storedImageUrl && !clip.generatedImage) {
+                restoredCount++
+                console.log(`🖼️ Healing clip "${clip.name}" (${clip.id}) with image from registry`)
               return {
                 ...clip,
-                generatedVideo: videoData.video_url,
-                previewVideo: videoData.video_url
+                  generatedImage: storedImageUrl,
+                  previewImage: storedImageUrl,
+                  // Ensure status reflects completion if we found an image
+                  status: (clip.status === 'pending' || clip.status === 'generating') ? 'completed' : clip.status
               } as Clip
             }
             return clip
           })
         }))
-        
-        return {
-          ...project,
-          scenes: updatedScenes
-        }
+          return { ...project, scenes: updatedScenes }
       })
       
-      console.log('✅ loadUserProjects: Video URLs restored successfully')
-    } catch (videoError) {
-      console.error('⚠️ loadUserProjects: Failed to restore videos (continuing anyway):', videoError)
-      // Continue without video restoration - project data is still valid
+        if (restoredCount > 0) {
+          console.log(`✅ loadUserProjects: Self-healed ${restoredCount} clips across ${transformed.length} projects`)
+        } else {
+          console.log('ℹ️ loadUserProjects: No missing images found to heal.')
+        }
+      }
+    } catch (imageError) {
+      console.warn('⚠️ loadUserProjects: Failed to restore images during self-healing:', imageError)
     }
 
     console.log('✅ loadUserProjects: Returning', transformed.length, 'projects')
@@ -182,6 +215,8 @@ function serializeProjectForDB(project: Project): any {
     story: serializeValue(project.story),
     scenes: serializeValue(project.scenes),
     characters: serializeValue(project.characters),
+    // Persist asset context so detected assets & their actions survive reloads
+    asset_context: serializeValue((project as any).assetContext),
     metadata: serializeValue(project.metadata),
     permissions: serializeValue(project.permissions),
     budget: serializeValue(project.budget),
@@ -271,6 +306,36 @@ export async function saveProject(project: Project, userId: string): Promise<{ s
       throw saveError
     }
 
+    // CRITICAL: Verify save succeeded by reading back from database
+    const verifyStartTime = Date.now()
+    try {
+      const { data: verified, error: verifyError } = await supabase
+        .from('projects')
+        .select('id, updated_at')
+        .eq('id', project.id)
+        .single()
+
+      if (verifyError) {
+        console.error('❌ saveProject: Verification failed - could not read back saved project:', verifyError)
+        throw new Error(`Save verification failed: ${verifyError.message}`)
+      }
+
+      if (!verified) {
+        console.error('❌ saveProject: Verification failed - project not found after save')
+        throw new Error('Save verification failed: Project not found in database after save')
+      }
+
+      const verifyDuration = Date.now() - verifyStartTime
+      console.log(`✅ saveProject: Save verified successfully in ${verifyDuration}ms`, {
+        projectId: verified.id,
+        updatedAt: verified.updated_at
+      })
+    } catch (verifyError: any) {
+      console.error('❌ saveProject: Save verification error:', verifyError)
+      // Don't throw - save might have succeeded but verification failed
+      // Log as warning but return success if the save operation itself succeeded
+    }
+
     const lastSaved = new Date()
     return { success: true, lastSaved }
   } catch (error: any) {
@@ -282,6 +347,114 @@ export async function saveProject(project: Project, userId: string): Promise<{ s
     })
     return { success: false, error }
   }
+}
+
+// Background save queue for failed saves
+interface QueuedSave {
+  project: Project
+  userId: string
+  attempts: number
+  lastAttempt: Date
+  nextRetry: Date
+}
+
+const failedSaveQueue: QueuedSave[] = []
+const MAX_QUEUE_ATTEMPTS = 10
+const QUEUE_RETRY_DELAY = 30000 // 30 seconds
+
+/**
+ * Queue a failed save for retry in the background
+ */
+export function queueFailedSave(project: Project, userId: string): void {
+  const existingIndex = failedSaveQueue.findIndex(
+    q => q.project.id === project.id && q.userId === userId
+  )
+
+  if (existingIndex >= 0) {
+    // Update existing queue entry
+    failedSaveQueue[existingIndex] = {
+      project,
+      userId,
+      attempts: failedSaveQueue[existingIndex].attempts + 1,
+      lastAttempt: new Date(),
+      nextRetry: new Date(Date.now() + QUEUE_RETRY_DELAY * Math.pow(2, failedSaveQueue[existingIndex].attempts))
+    }
+    console.log(`📋 Updated failed save in queue (attempt ${failedSaveQueue[existingIndex].attempts}/${MAX_QUEUE_ATTEMPTS})`)
+  } else {
+    // Add new queue entry
+    failedSaveQueue.push({
+      project,
+      userId,
+      attempts: 1,
+      lastAttempt: new Date(),
+      nextRetry: new Date(Date.now() + QUEUE_RETRY_DELAY)
+    })
+    console.log(`📋 Added failed save to retry queue`)
+  }
+
+  // Start background processor if not already running
+  if (failedSaveQueue.length === 1) {
+    processFailedSaveQueue()
+  }
+}
+
+/**
+ * Process failed saves in the background
+ */
+async function processFailedSaveQueue(): Promise<void> {
+  while (failedSaveQueue.length > 0) {
+    const now = new Date()
+    const readyToRetry = failedSaveQueue.filter(q => q.nextRetry <= now && q.attempts < MAX_QUEUE_ATTEMPTS)
+
+    if (readyToRetry.length === 0) {
+      // Wait a bit before checking again
+      await new Promise(resolve => setTimeout(resolve, 5000))
+      continue
+    }
+
+    for (const queuedSave of readyToRetry) {
+      try {
+        console.log(`🔄 Retrying failed save from queue (attempt ${queuedSave.attempts}/${MAX_QUEUE_ATTEMPTS})...`)
+        const result = await saveProject(queuedSave.project, queuedSave.userId)
+
+        if (result.success) {
+          // Remove from queue on success
+          const index = failedSaveQueue.findIndex(
+            q => q.project.id === queuedSave.project.id && q.userId === queuedSave.userId
+          )
+          if (index >= 0) {
+            failedSaveQueue.splice(index, 1)
+            console.log(`✅ Failed save retry succeeded, removed from queue`)
+          }
+        } else {
+          // Update retry time for next attempt
+          queuedSave.nextRetry = new Date(Date.now() + QUEUE_RETRY_DELAY * Math.pow(2, queuedSave.attempts))
+          queuedSave.attempts++
+          queuedSave.lastAttempt = new Date()
+          
+          if (queuedSave.attempts >= MAX_QUEUE_ATTEMPTS) {
+            // Remove from queue after max attempts
+            const index = failedSaveQueue.findIndex(
+              q => q.project.id === queuedSave.project.id && q.userId === queuedSave.userId
+            )
+            if (index >= 0) {
+              failedSaveQueue.splice(index, 1)
+              console.error(`❌ Failed save exceeded max attempts, removed from queue`)
+            }
+          }
+        }
+      } catch (error: any) {
+        console.error(`❌ Error retrying failed save:`, error)
+        queuedSave.nextRetry = new Date(Date.now() + QUEUE_RETRY_DELAY * Math.pow(2, queuedSave.attempts))
+        queuedSave.attempts++
+      }
+    }
+
+    // Wait before next iteration
+    await new Promise(resolve => setTimeout(resolve, 1000))
+  }
+
+  console.log('✅ Failed save queue processor finished (no more items)')
 }
 
 // Delete project

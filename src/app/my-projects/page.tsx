@@ -1,22 +1,41 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
-import { X, FolderOpen, Plus, Calendar, Clock, Trash2 } from 'lucide-react'
+import { X, FolderOpen, Plus, Calendar, Clock, Trash2, RefreshCw, ArrowLeft, Layout, ChevronRight } from 'lucide-react'
 import { loadUserProjects, deleteProject as deleteProjectFromDb } from '@/lib/db'
 import { useAppStore } from '@/lib/store'
 import { Project } from '@/types'
 import toast from 'react-hot-toast'
+import Link from 'next/link'
 import CreateProjectModal from '@/components/CreateProjectModal'
 
 export default function MyProjectsPage() {
   const router = useRouter()
-  const { user, isAuthenticated, setCurrentProject, createProject, projects, setProjects } = useAppStore()
-  const [dbProjects, setDbProjects] = useState<Project[]>([])
+  const { user, isAuthenticated, setCurrentProject, projects, setProjects } = useAppStore()
   const [isLoading, setIsLoading] = useState(true)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
+
+  const loadProjects = useCallback(async (silent = false) => {
+    if (!user?.id) {
+      setIsLoading(false)
+      return
+    }
+    
+    if (!silent) setIsLoading(true)
+    
+    try {
+      const data = await loadUserProjects(user.id)
+      setProjects(data)
+    } catch (error: any) {
+      console.error('❌ Foundry Error:', error)
+      toast.error(error?.message || 'Failed to sync productions')
+    } finally {
+      setIsLoading(false)
+    }
+  }, [user?.id, setProjects])
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -26,47 +45,7 @@ export default function MyProjectsPage() {
     if (user?.id) {
       loadProjects()
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAuthenticated, router, user?.id])
-
-  const loadProjects = async () => {
-    if (!user?.id) {
-      console.log('⚠️ loadProjects: No user ID available')
-      setIsLoading(false)
-      return
-    }
-    
-    setIsLoading(true)
-    console.log('📁 loadProjects: Starting, user ID:', user.id)
-    
-    try {
-      // Add timeout to prevent infinite loading
-      const timeoutPromise = new Promise<never>((_, reject) => {
-        setTimeout(() => reject(new Error('Request timeout after 10 seconds')), 10000)
-      })
-
-      const dataPromise = loadUserProjects(user.id)
-      
-      const data = await Promise.race([dataPromise, timeoutPromise])
-      
-      console.log('📁 loadProjects: Received data, count:', data.length)
-      setDbProjects(data)
-      // Also update the store with loaded projects
-      setProjects(data)
-      if (data.length === 0) {
-        console.log('⚠️ No projects found. Create your first project!')
-      }
-    } catch (error: any) {
-      console.error('❌ loadProjects: Error caught:', error)
-      console.error('Error message:', error?.message)
-      console.error('Error stack:', error?.stack)
-      toast.error(error?.message || 'Failed to load projects')
-      setDbProjects([])
-    } finally {
-      console.log('📁 loadProjects: Setting isLoading to false')
-      setIsLoading(false)
-    }
-  }
+  }, [isAuthenticated, router, user?.id, loadProjects])
 
   const handleOpenProject = (project: Project) => {
     setCurrentProject(project)
@@ -74,7 +53,7 @@ export default function MyProjectsPage() {
   }
 
   const handleDelete = async (projectId: string) => {
-    if (!confirm('Are you sure you want to delete this project? This action cannot be undone.')) {
+    if (!confirm('Are you sure you want to deactivate this production? This cannot be undone.')) {
       return
     }
 
@@ -84,133 +63,160 @@ export default function MyProjectsPage() {
     try {
       const result = await deleteProjectFromDb(projectId, user.id)
       if (result.success) {
-        setDbProjects(dbProjects.filter(p => p.id !== projectId))
-        toast.success('Project deleted')
+        setProjects(projects.filter(p => p.id !== projectId))
+        toast.success('Production deactivated')
       } else {
-        throw new Error(result.error?.message || 'Failed to delete project')
+        throw new Error(result.error?.message || 'Failed to deactivate production')
       }
     } catch (error) {
       console.error('Error deleting project:', error)
-      toast.error('Failed to delete project')
+      toast.error('Failed to deactivate production')
     } finally {
       setDeletingId(null)
     }
   }
 
-  const handleCreateProjectSuccess = (project: Project) => {
-    // Reload projects to show the new one
-    loadProjects()
-    // Optionally navigate to the project
-    // setCurrentProject(project)
-    // router.push('/')
-  }
-
-  if (!isAuthenticated) {
-    return null
-  }
+  if (!isAuthenticated) return null
 
   return (
-    <>
-      <div className="min-h-screen bg-[#0C0C0C] text-white">
+    <div className="min-h-screen bg-brand-obsidian text-white flex flex-col relative overflow-x-hidden selection:bg-brand-emerald selection:text-brand-obsidian">
+      {/* Cinematic Background Layer */}
+      <div className="fixed inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-[-10%] right-[-5%] w-[60%] h-[60%] bg-brand-emerald/5 blur-[140px] rounded-full rotate-12" />
+        <div className="absolute bottom-[-10%] left-[-5%] w-[50%] h-[50%] bg-brand-amber/5 blur-[140px] rounded-full" />
+        <div className="absolute inset-0 opacity-[0.02] bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')]" />
+      </div>
+
         {/* Header */}
-        <div className="sticky top-0 z-40 bg-[#0C0C0C]/95 backdrop-blur-sm border-b border-[#3AAFA9]/20">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <FolderOpen className="w-6 h-6 text-[#00FFF0]" />
-                <h1 className="text-3xl font-bold text-white">My Projects</h1>
-                <span className="text-gray-400 text-sm">({dbProjects.length})</span>
+      <header className="sticky top-0 z-50 backdrop-blur-xl border-b border-white/[0.03]">
+        <div className="max-w-7xl mx-auto px-8 h-20 flex items-center justify-between">
+          <div className="flex items-center gap-6">
+            <Link href="/" className="flex items-center gap-2 group">
+              <div className="w-8 h-8 bg-white/5 rounded-full flex items-center justify-center border border-white/10 group-hover:bg-white/10 transition-all duration-500">
+                <ArrowLeft className="w-4 h-4 text-white/40 group-hover:text-white" />
               </div>
-              <div className="flex items-center gap-2">
+              <span className="text-[11px] font-black uppercase tracking-[0.3em] text-white/40 group-hover:text-white transition-colors">
+                Foundry
+              </span>
+            </Link>
+            <div className="h-4 w-[1px] bg-white/10" />
+              <div className="flex items-center gap-3">
+              <FolderOpen className="w-5 h-5 text-brand-emerald" />
+              <h1 className="text-xl font-bold tracking-tight text-white uppercase tracking-widest">Productions</h1>
+              <div className="px-2 py-0.5 rounded-md bg-white/5 border border-white/10">
+                <span className="text-[10px] font-black text-white/40 uppercase tracking-widest">{projects.length}</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-4">
                 <Button
                   onClick={() => setIsCreateModalOpen(true)}
-                  className="bg-[#00FFF0] hover:bg-[#00FFF0]/90 text-black font-semibold px-4 py-2 rounded-xl flex items-center gap-2"
+              className="h-10 px-6 rounded-full bg-white text-black hover:bg-brand-emerald hover:text-white transition-all duration-500 font-black uppercase tracking-widest text-[10px] flex items-center gap-2"
                 >
-                  <Plus className="w-4 h-4" />
-                  New Project
+              <Plus className="w-3.5 h-3.5" />
+              New Production
                 </Button>
                 <Button
                   variant="ghost"
                   size="icon"
                   onClick={() => router.back()}
-                  className="text-gray-400 hover:text-white"
+              className="w-10 h-10 rounded-full border border-white/5 hover:bg-white/10 text-white/40 hover:text-white"
                 >
-                  <X className="w-6 h-6" />
+              <X className="w-5 h-5" />
                 </Button>
-              </div>
-            </div>
           </div>
         </div>
+      </header>
 
         {/* Content */}
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="flex-1 max-w-7xl mx-auto w-full px-8 py-12 relative z-10">
           {isLoading ? (
-            <div className="text-center py-12 text-gray-400">
-              <div className="w-8 h-8 border-2 border-[#00FFF0] border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-              <p>Loading projects...</p>
+          <div className="flex flex-col items-center justify-center py-32 text-white/20">
+            <div className="w-12 h-12 border-2 border-brand-emerald/30 border-t-brand-emerald rounded-full animate-spin mb-6" />
+            <p className="text-[11px] font-black uppercase tracking-[0.4em]">Syncing Production Ledger...</p>
+          </div>
+        ) : projects.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-40 text-center max-w-md mx-auto">
+            <div className="w-20 h-20 bg-white/[0.02] border border-white/[0.05] rounded-[2rem] flex items-center justify-center mb-8">
+              <FolderOpen className="w-8 h-8 text-white/10" />
             </div>
-          ) : dbProjects.length === 0 ? (
-            <div className="text-center py-12 text-gray-400">
-              <FolderOpen className="w-16 h-16 mx-auto mb-4 opacity-50" />
-              <p>No projects yet.</p>
-              <p className="text-sm mt-2">Create your first project to get started!</p>
+            <h2 className="text-2xl font-bold tracking-tight mb-4 italic serif text-white/60">No Active Productions.</h2>
+            <p className="text-sm text-white/20 font-medium leading-relaxed mb-10">
+              The foundry is awaiting its first orchestration. <br />
+              Initialize a production to begin the creative process.
+            </p>
               <Button
                 onClick={() => setIsCreateModalOpen(true)}
-                className="mt-6 bg-[#00FFF0] hover:bg-[#00FFF0]/90 text-black font-semibold px-6 py-2 rounded-xl"
+              className="h-14 px-10 rounded-2xl bg-white text-black hover:bg-brand-emerald hover:text-white transition-all duration-500 font-black uppercase tracking-widest text-[11px]"
               >
-                <Plus className="w-4 h-4 mr-2" />
-                Create Project
+              Construct First Production
               </Button>
             </div>
           ) : (
-            <div className="grid gap-4">
-              {dbProjects.map((project) => (
+          <div className="grid gap-6">
+            {projects.map((project) => (
                 <div
                   key={project.id}
-                  className="bg-[#0C0C0C] rounded-xl p-6 border border-[#3AAFA9]/20 hover:border-[#00FFF0]/40 transition-colors group"
+                className="group relative flex flex-col glass-panel bg-white/[0.01] border-white/[0.08] rounded-[2rem] overflow-hidden transition-all duration-700 hover:border-brand-emerald/30 hover:shadow-2xl hover:shadow-brand-emerald/5"
                 >
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1 cursor-pointer" onClick={() => handleOpenProject(project)}>
-                      <h4 className="text-lg font-semibold text-white mb-2">
+                <div className="flex flex-col md:flex-row items-stretch">
+                  <div className="flex-1 p-8 md:p-10 flex flex-col justify-between cursor-pointer" onClick={() => handleOpenProject(project)}>
+                    <div>
+                      <div className="flex items-center gap-3 mb-4">
+                        <div className="w-1.5 h-1.5 rounded-full bg-brand-emerald shadow-[0_0_8px_rgba(16,185,129,0.4)]" />
+                        <span className="text-[10px] font-black text-white/40 uppercase tracking-[0.2em]">Active Identity</span>
+                      </div>
+                      <h2 className="text-2xl font-bold tracking-tight text-white group-hover:text-brand-emerald transition-colors duration-500 mb-3">
                         {project.name}
-                      </h4>
+                      </h2>
                       {project.description && (
-                        <p className="text-gray-400 text-sm mb-3 line-clamp-2">
+                        <p className="text-sm text-white/30 font-medium leading-relaxed line-clamp-2 max-w-2xl">
                           {project.description}
                         </p>
                       )}
-                      <div className="flex items-center gap-4 text-xs text-gray-500">
-                        <div className="flex items-center gap-1">
-                          <Calendar className="w-3 h-3" />
-                          {new Date(project.createdAt).toLocaleDateString()}
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-8 mt-10 pt-8 border-t border-white/[0.03]">
+                      <div className="flex items-center gap-2.5">
+                        <Calendar className="w-3.5 h-3.5 text-white/10" />
+                        <div>
+                          <p className="text-[9px] font-black text-white/10 uppercase tracking-widest leading-none">Initialized</p>
+                          <p className="text-[11px] font-bold text-white/40 mt-1">{new Date(project.createdAt).toLocaleDateString()}</p>
                         </div>
-                        <div className="flex items-center gap-1">
-                          <Clock className="w-3 h-3" />
-                          {project.scenes?.length || 0} scenes
+                      </div>
+                      <div className="flex items-center gap-2.5">
+                        <Layout className="w-3.5 h-3.5 text-white/10" />
+                        <div>
+                          <p className="text-[9px] font-black text-white/10 uppercase tracking-widest leading-none">Sequences</p>
+                          <p className="text-[11px] font-bold text-white/40 mt-1">{project.scenes?.length || 0} Blocks</p>
                         </div>
-                        {project.updatedAt && (
-                          <div className="text-gray-600">
-                            Updated {new Date(project.updatedAt).toLocaleDateString()}
+                      </div>
+                      <div className="flex items-center gap-2.5">
+                        <Clock className="w-3.5 h-3.5 text-white/10" />
+                        <div>
+                          <p className="text-[9px] font-black text-white/10 uppercase tracking-widest leading-none">Last Synced</p>
+                          <p className="text-[11px] font-bold text-white/40 mt-1">{new Date(project.updatedAt || project.createdAt).toLocaleDateString()}</p>
                           </div>
-                        )}
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
+                  </div>
+
+                  <div className="md:w-64 bg-white/[0.01] border-l border-white/[0.03] p-8 flex flex-col justify-center items-center gap-4">
                       <Button
-                        variant="outline"
-                        size="sm"
                         onClick={() => handleOpenProject(project)}
-                        className="border-[#3AAFA9] text-[#3AAFA9] hover:bg-[#3AAFA9] hover:text-black"
+                      className="w-full h-14 rounded-xl bg-white/5 border border-white/10 hover:bg-brand-emerald hover:text-brand-obsidian hover:border-brand-emerald text-white font-black uppercase tracking-widest text-[10px] transition-all duration-500 group/btn"
                       >
-                        Open
+                      <span>Open Production</span>
+                      <ChevronRight className="w-3.5 h-3.5 ml-2 group-hover/btn:translate-x-1 transition-transform" />
                       </Button>
                       <button
                         onClick={() => handleDelete(project.id)}
                         disabled={deletingId === project.id}
-                        className="p-2 hover:bg-red-500/20 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-50"
-                        title="Delete project"
+                      className="w-full h-10 rounded-xl text-[9px] font-black text-white/10 hover:text-red-400 hover:bg-red-400/5 uppercase tracking-[0.2em] transition-all duration-300 flex items-center justify-center gap-2"
                       >
-                        <Trash2 className="w-4 h-4 text-red-400" />
+                      <Trash2 className="w-3 h-3" />
+                      Deactivate
                       </button>
                     </div>
                   </div>
@@ -218,16 +224,34 @@ export default function MyProjectsPage() {
               ))}
             </div>
           )}
-        </div>
-      </div>
+      </main>
 
-      {/* Create Project Modal */}
+      <footer className="py-16 px-8 border-t border-white/[0.03] mt-auto">
+        <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-12 text-white/10">
+          <div className="flex items-center gap-4">
+            <div className="w-2 h-2 rounded-full bg-brand-emerald opacity-40" />
+            <span className="text-[10px] font-black uppercase tracking-[0.5em]">Protocol 2.6.0</span>
+          </div>
+          <div className="text-[10px] font-black uppercase tracking-[0.3em]">
+            Foundry Production Ledger
+          </div>
+          <div>
+            <span className="text-[10px] font-black uppercase tracking-[0.5em]">Flowboard © 2026</span>
+          </div>
+        </div>
+      </footer>
+
       <CreateProjectModal
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
-        onSuccess={handleCreateProjectSuccess}
+        onSuccess={() => loadProjects(false)}
       />
-    </>
+
+      <style jsx global>{`
+        @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;1,700&family=Inter:wght@400;500;700;900&display=swap');
+        .serif { font-family: 'Playfair Display', serif; }
+        body { font-family: 'Inter', sans-serif; }
+      `}</style>
+    </div>
   )
 }
-

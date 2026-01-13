@@ -99,19 +99,26 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
     let subscription: { unsubscribe: () => void } | null = null
     try {
       const { data: { subscription: sub } } = onAuthStateChange((authUser) => {
-        if (!mounted) return
+        if (!mounted) {
+          console.log('⚠️ Auth state change handler called but component unmounted')
+          return
+        }
         
-        console.log('🔄 Auth state changed:', authUser ? 'User logged in' : 'User logged out')
+        console.log('🔄 Auth state changed:', authUser ? `User logged in: ${authUser.email}` : 'User logged out')
         
         if (authUser) {
+          console.log('✅ Setting user state:', { id: authUser.id.substring(0, 8), email: authUser.email })
           setUser(authUser)
           setAuthenticated(true)
+          console.log('✅ User state updated in store')
         } else {
+          console.log('ℹ️ Clearing user state')
           setUser(null)
           setAuthenticated(false)
         }
       })
       subscription = sub
+      console.log('✅ Auth state change listener set up successfully')
     } catch (error) {
       console.warn('⚠️ Failed to set up auth state listener:', error)
     }
@@ -127,31 +134,126 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
     try {
       console.log('✅ Auth success callback called')
       
-      // Wait a moment for Supabase to fully process the auth state
-      await new Promise(resolve => setTimeout(resolve, 200))
+      // Close modal first to give immediate feedback
+      setShowAuthModal(false)
       
-      const currentUser = await getCurrentUser()
-      if (currentUser) {
-        console.log('✅ Auth success - user logged in:', currentUser.email)
-        setUser(currentUser)
-        setAuthenticated(true)
-        setShowAuthModal(false)
+      // Immediately check session and set user state - don't wait for auth state change handler
+      // This ensures the UI updates even if the auth state change handler has issues
+      try {
+        const { supabase } = await import('@/lib/supabase')
         
-        // Give the store a moment to update before continuing
-        // This ensures the auth state is propagated to all components
-        await new Promise(resolve => setTimeout(resolve, 100))
+        // Wait a short moment for Supabase to process the sign-in internally
+        await new Promise(resolve => setTimeout(resolve, 300))
         
-        console.log('✅ Auth state updated, ready for auto-continue')
-      } else {
-        console.warn('⚠️ Auth success but getCurrentUser returned null')
-        // Still close modal and set auth state to false
-        setShowAuthModal(false)
-        setUser(null)
-        setAuthenticated(false)
+        // Get session directly - this is the most reliable approach
+        console.log('🔐 handleAuthSuccess: Checking session directly...')
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+        
+        if (sessionError) {
+          console.warn('⚠️ handleAuthSuccess: Session check error:', sessionError.message)
+        }
+        
+        if (session?.user) {
+          console.log('✅ handleAuthSuccess: Session found:', {
+            userId: session.user.id.substring(0, 8),
+            email: session.user.email,
+          })
+          
+          // Get profile from database if available (non-blocking, with timeout)
+          let profile = null
+          try {
+            const profilePromise = supabase
+              .from('users')
+              .select('*')
+              .eq('id', session.user.id)
+              .single()
+            
+            const timeoutPromise = new Promise((_, reject) => 
+              setTimeout(() => reject(new Error('Profile fetch timeout')), 1500)
+            )
+            
+            const { data } = await Promise.race([profilePromise, timeoutPromise]) as any
+            profile = data
+            if (profile) {
+              console.log('✅ handleAuthSuccess: Profile fetched')
+            }
+          } catch (profileErr: any) {
+            // Profile fetch failed or timed out - continue with auth user only
+            if (!profileErr?.message?.includes('timeout')) {
+              console.warn('⚠️ handleAuthSuccess: Profile fetch failed (non-critical):', profileErr.message)
+            }
+          }
+          
+          const authUser = {
+            id: session.user.id,
+            email: session.user.email || '',
+            name: profile?.full_name || session.user.user_metadata?.full_name,
+            avatar: profile?.avatar_url || session.user.user_metadata?.avatar_url,
+          }
+          
+          console.log('✅ handleAuthSuccess: Setting user state directly:', {
+            id: authUser.id.substring(0, 8),
+            email: authUser.email,
+          })
+          setUser(authUser)
+          setAuthenticated(true)
+          
+          // Verify the state was set
+          await new Promise(resolve => setTimeout(resolve, 100))
+          const store = useAppStore.getState()
+          if (store.user && store.user.id === authUser.id) {
+            console.log('✅ handleAuthSuccess: User state confirmed in store:', store.user.email)
+          } else {
+            console.error('❌ handleAuthSuccess: User state NOT confirmed in store! Retrying...')
+            // Try setting again
+            setUser(authUser)
+            setAuthenticated(true)
+            
+            // Check one more time
+            await new Promise(resolve => setTimeout(resolve, 100))
+            const store2 = useAppStore.getState()
+            if (store2.user) {
+              console.log('✅ handleAuthSuccess: User state set on retry:', store2.user.email)
+            } else {
+              console.error('❌ handleAuthSuccess: User state still not set after retry!')
+            }
+          }
+          
+          console.log('✅ Auth success callback completed - user logged in:', authUser.email)
+          return // Success - exit
+        } else {
+          console.warn('⚠️ handleAuthSuccess: No session found after sign-in')
+          // Wait a bit longer and check again (auth state change handler might be processing)
+          let attempts = 0
+          const maxAttempts = 10 // 1 second
+          
+          while (attempts < maxAttempts) {
+            await new Promise(resolve => setTimeout(resolve, 100))
+            const store = useAppStore.getState()
+            if (store.user) {
+              console.log('✅ handleAuthSuccess: User state set by auth state change handler:', store.user.email)
+              return
+            }
+            attempts++
+          }
+          
+          console.error('❌ handleAuthSuccess: User state not set after all attempts')
+        }
+      } catch (error: any) {
+        // Handle any errors gracefully
+        console.error('❌ Error in handleAuthSuccess:', error.message || error)
+        // Don't throw - modal is already closed
       }
-    } catch (error) {
-      console.error('❌ Error in handleAuthSuccess:', error)
-      // Close modal even on error
+      
+      console.log('✅ Auth success callback completed')
+    } catch (error: any) {
+      // Handle AbortError gracefully
+      if (error?.name === 'AbortError' || error?.message?.includes('aborted')) {
+        console.warn('⚠️ Auth success callback aborted (likely race condition)')
+      } else {
+        console.error('❌ Error in handleAuthSuccess:', error)
+      }
+      // Ensure modal is closed even on error
       setShowAuthModal(false)
     }
   }

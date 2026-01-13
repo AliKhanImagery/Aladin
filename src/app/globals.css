@@ -4,11 +4,11 @@
 
 :root {
   --foreground-rgb: 255, 255, 255;
-  --background-start-rgb: 8, 8, 12; /* Slightly purple-tinted dark */
-  --background-end-rgb: 12, 12, 20; /* Dark with subtle blue */
-  --neon-cyan: 0, 255, 240; /* #00FFF0 */
-  --neon-purple: 138, 43, 226; /* #8A2BE2 */
-  --neon-pink: 255, 20, 147; /* #FF1493 */
+  --background-start-rgb: 2, 6, 23; /* Slate-950 */
+  --background-end-rgb: 15, 23, 42; /* Slate-900 */
+  --brand-emerald: 16, 185, 129; /* #10b981 */
+  --brand-amber: 251, 191, 36; /* #fbbf24 */
+  --brand-slate: 15, 23, 42; /* #0f172a */
 }
 
 body {
@@ -16,28 +16,16 @@ body {
   background: linear-gradient(
     135deg,
     rgb(var(--background-start-rgb)) 0%,
-    rgb(var(--background-end-rgb)) 50%,
-    rgb(var(--background-start-rgb)) 100%
+    rgb(var(--background-end-rgb)) 100%
   );
-  background-size: 200% 200%;
   background-attachment: fixed;
-  animation: gradientShift 15s ease infinite;
   position: relative;
   min-height: 100vh;
   margin: 0;
   padding: 0;
   overscroll-behavior: none;
   overflow-x: hidden;
-}
-
-/* Subtle animated gradient background */
-@keyframes gradientShift {
-  0%, 100% {
-    background-position: 0% 50%;
-  }
-  50% {
-    background-position: 100% 50%;
-  }
+  font-family: var(--font-geist-sans), Inter, system-ui, sans-serif;
 }
 
 /* Subtle background pattern overlay */
@@ -49,77 +37,91 @@ body::before {
   width: 100%;
   height: 100%;
   background: 
-    radial-gradient(circle at 20% 50%, rgba(var(--neon-cyan), 0.03) 0%, transparent 50%),
-    radial-gradient(circle at 80% 80%, rgba(var(--neon-purple), 0.03) 0%, transparent 50%),
-    radial-gradient(circle at 40% 20%, rgba(var(--neon-pink), 0.02) 0%, transparent 50%);
+    radial-gradient(circle at 20% 50%, rgba(var(--brand-emerald), 0.05) 0%, transparent 50%),
+    radial-gradient(circle at 80% 80%, rgba(var(--brand-amber), 0.03) 0%, transparent 50%);
   pointer-events: none;
   z-index: 0;
 }
 
-/* Ensure content is above background */
-body > * {
-  position: relative;
-  z-index: 1;
+/* Glassmorphism utility */
+.glass-panel {
+  background: rgba(15, 23, 42, 0.6);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
-/* Prevent scroll bounce on macOS/iOS that can show content above header */
-html {
-  overscroll-behavior: none;
-  overflow-x: hidden;
-  margin: 0;
-  padding: 0;
+.glass-card {
+  background: rgba(30, 41, 59, 0.4);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-@keyframes shimmer {
-  0% {
-    background-position: -200% 0;
-  }
-  100% {
-    background-position: 200% 0;
-  }
+.glass-card:hover {
+  border-color: rgba(16, 185, 129, 0.3);
+  background: rgba(30, 41, 59, 0.6);
+  box-shadow: 0 0 20px rgba(16, 185, 129, 0.1);
 }
 
-.animate-shimmer {
-  animation: shimmer 3s infinite;
+/* Brand glows */
+.glow-emerald {
+  box-shadow: 0 0 15px rgba(16, 185, 129, 0.3);
 }
 
-/* Neon glow effect utility */
-.neon-glow {
-  box-shadow: 
-    0 0 5px rgba(var(--neon-cyan), 0.5),
-    0 0 10px rgba(var(--neon-cyan), 0.3),
-    0 0 15px rgba(var(--neon-cyan), 0.2);
+.glow-amber {
+  box-shadow: 0 0 15px rgba(251, 191, 36, 0.3);
 }
 
-.neon-glow-strong {
-  box-shadow: 
-    0 0 10px rgba(var(--neon-cyan), 0.8),
-    0 0 20px rgba(var(--neon-cyan), 0.6),
-    0 0 30px rgba(var(--neon-cyan), 0.4),
-    0 0 40px rgba(var(--neon-cyan), 0.2);
+/* Button styles */
+.btn-primary {
+  background: rgb(var(--brand-emerald));
+  color: #020617;
+  font-weight: 600;
+  border-radius: 0.75rem;
+  padding: 0.75rem 1.5rem;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 14px 0 rgba(16, 185, 129, 0.39);
 }
 
-/* Neon text glow */
-.neon-text {
-  text-shadow: 
-    0 0 5px rgba(var(--neon-cyan), 0.8),
-    0 0 10px rgba(var(--neon-cyan), 0.6),
-    0 0 15px rgba(var(--neon-cyan), 0.4);
+.btn-primary:hover {
+  background: rgba(16, 185, 129, 0.9);
+  box-shadow: 0 6px 20px rgba(16, 185, 129, 0.45);
+  transform: translateY(-1px);
 }
 
-/* Pulsing neon effect */
-@keyframes neonPulse {
-  0%, 100% {
-    opacity: 1;
-    filter: brightness(1);
-  }
-  50% {
-    opacity: 0.8;
-    filter: brightness(1.2);
-  }
+.btn-secondary {
+  background: rgba(15, 23, 42, 0.8);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 0.75rem;
+  padding: 0.75rem 1.5rem;
+  transition: all 0.3s ease;
 }
 
-.neon-pulse {
-  animation: neonPulse 2s ease-in-out infinite;
+.btn-secondary:hover {
+  background: rgba(30, 41, 59, 0.9);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.6s ease-out forwards;
+}
+
+@keyframes pulse-emerald {
+  0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); }
+  70% { box-shadow: 0 0 0 10px rgba(16, 185, 129, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+}
+
+.pulse-emerald {
+  animation: pulse-emerald 2s infinite;
 }
 

@@ -148,9 +148,9 @@ export default function SequenceTab() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-3xl font-bold text-white mb-2">Storyboard Sequence</h2>
+          <h2 className="text-3xl font-bold text-white mb-2">Project Storyboard</h2>
           <p className="text-gray-400">
-            Organize your story into scenes with individual clips
+            Organize your storyboard into scenes and individual clips.
           </p>
         </div>
         <Button

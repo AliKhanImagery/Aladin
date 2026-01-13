@@ -6,7 +6,23 @@ import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Input } from '@/components/ui/input'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Sparkles, Users, Palette, Clock, Target, Square, Monitor, Smartphone } from 'lucide-react'
+import { 
+  Sparkles, 
+  Users, 
+  Palette, 
+  Clock, 
+  Target, 
+  Square, 
+  Monitor, 
+  Smartphone,
+  Package,
+  MapPin,
+  CheckCircle2,
+  Image as ImageIcon,
+  ChevronRight,
+  Layers,
+  Layout
+} from 'lucide-react'
 import { Scene, Clip, IdeaAnalysis, AssetContext } from '@/types'
 import IdeaAnalysisScreen from '@/components/IdeaAnalysisScreen'
 import toast from 'react-hot-toast'
@@ -85,10 +101,24 @@ async function generateVisualStyle(
 function matchAssetsToClip(clipDescription: string, assetContext: AssetContext) {
   const lowerDescription = clipDescription.toLowerCase()
   
+  const matchedCharacters = assetContext.characters.filter(char => 
+    lowerDescription.includes(char.name.toLowerCase()) ||
+    (char.role === 'protagonist' && (
+      lowerDescription.includes('he ') || 
+      lowerDescription.includes('she ') || 
+      lowerDescription.includes('they ') ||
+      lowerDescription.includes('the protagonist') ||
+      lowerDescription.includes('the main character')
+    ))
+  )
+
+  // If still no characters and only one character exists, match them for any action
+  if (matchedCharacters.length === 0 && assetContext.characters.length === 1) {
+    matchedCharacters.push(assetContext.characters[0])
+  }
+
   return {
-    characters: assetContext.characters.filter(char => 
-      lowerDescription.includes(char.name.toLowerCase())
-    ),
+    characters: matchedCharacters,
     products: assetContext.products.filter(product => 
       lowerDescription.includes(product.name.toLowerCase())
     ),
@@ -145,7 +175,7 @@ async function matchAssetsToClipAI(
 
 // Helper function to generate project name from idea
 function generateProjectNameFromIdea(idea: string): string {
-  if (!idea || !idea.trim()) return 'Untitled Project'
+  if (!idea || !idea.trim()) return 'Untitled Production'
   
   // Take first 50 chars or first sentence
   const firstSentence = idea.split(/[.!?]/)[0].trim()
@@ -177,9 +207,13 @@ export default function IdeaTab() {
     setClipGeneratingStatus
   } = useAppStore()
   const [isGenerating, setIsGenerating] = useState(false)
-  const [targetRuntime, setTargetRuntime] = useState(60)
-  const [tone, setTone] = useState('')
-  const [brandCues, setBrandCues] = useState('')
+  const [targetRuntime, setTargetRuntime] = useState(currentProject?.story?.targetRuntime || 60)
+  const [tone, setTone] = useState(currentProject?.story?.tone || '')
+  const [brandCues, setBrandCues] = useState(
+    Array.isArray(currentProject?.story?.brandCues) 
+      ? currentProject.story.brandCues.join(', ') 
+      : (typeof currentProject?.story?.brandCues === 'string' ? currentProject.story.brandCues : '')
+  )
   const [aspectRatio, setAspectRatio] = useState<'16:9' | '9:16' | '1:1'>(currentProject?.story?.aspectRatio || '16:9')
   const [showAnalysisScreen, setShowAnalysisScreen] = useState(false)
   const [ideaAnalysis, setIdeaAnalysis] = useState<IdeaAnalysis | null>(null)
@@ -193,94 +227,81 @@ export default function IdeaTab() {
     if (currentProject?.story?.aspectRatio) {
       setAspectRatio(currentProject.story.aspectRatio)
     } else if (currentProject) {
-      // Set default if not present
       setAspectRatio('16:9')
       updateProject(currentProject.id, {
-        story: {
-          ...currentProject.story,
-          aspectRatio: '16:9'
-        }
+        story: { ...currentProject.story, aspectRatio: '16:9' }
       })
     }
     
-    // Initialize previous idea ref
+    if (currentProject?.story?.targetRuntime !== undefined) {
+      setTargetRuntime(currentProject.story.targetRuntime)
+    }
+    
+    if (currentProject?.story?.tone) {
+      setTone(currentProject.story.tone)
+    }
+    
+    if (currentProject?.story?.brandCues) {
+      if (Array.isArray(currentProject.story.brandCues)) {
+        setBrandCues(currentProject.story.brandCues.join(', '))
+      } else if (typeof currentProject.story.brandCues === 'string') {
+        setBrandCues(currentProject.story.brandCues)
+      }
+    }
+    
+    if (currentProject?.assetContext) {
+      setAssetContext(currentProject.assetContext)
+    }
+    
     if (currentProject?.story?.originalIdea) {
       previousIdeaRef.current = currentProject.story.originalIdea
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentProject?.id, currentProject?.story?.aspectRatio])
+  }, [currentProject, updateProject])
   
   // Auto-update project name when idea changes
   useEffect(() => {
     if (!currentProject?.story?.originalIdea) return
-    
     const currentIdea = currentProject.story.originalIdea.trim()
     const previousIdea = previousIdeaRef.current.trim()
     
-    // Only update if idea actually changed and has meaningful content
     if (currentIdea !== previousIdea && currentIdea.length > 0) {
       const newProjectName = generateProjectNameFromIdea(currentIdea)
-      
-      // Only update if the new name is different from current name
-      // and the new name is meaningful (not just "Untitled Project")
-      if (newProjectName !== currentProject.name && newProjectName !== 'Untitled Project') {
-        console.log('📝 Auto-updating project name from idea:', {
-          oldName: currentProject.name,
-          newName: newProjectName,
-          ideaPreview: currentIdea.substring(0, 50) + '...'
-        })
-        
-        updateProject(currentProject.id, {
-          name: newProjectName
-        })
+      if (newProjectName !== currentProject.name && newProjectName !== 'Untitled Production') {
+        updateProject(currentProject.id, { name: newProjectName })
       }
-      
-      // Update the ref
       previousIdeaRef.current = currentIdea
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentProject?.story?.originalIdea, currentProject?.id, currentProject?.name])
+  }, [currentProject?.story?.originalIdea, currentProject?.id, currentProject?.name, updateProject])
 
   if (!currentProject) return null
 
-  // Handle continue from analysis screen
   const handleContinueFromAnalysis = async (confirmedAssetContext: AssetContext) => {
     if (!currentProject || !ideaAnalysis) return
-
-    // Dismiss any existing toasts before starting story generation
     toast.dismiss()
 
     setAssetContext(confirmedAssetContext)
     setShowAnalysisScreen(false)
-    
-    // Store asset context in project
-    updateProject(currentProject.id, {
-      assetContext: confirmedAssetContext
-    })
+    updateProject(currentProject.id, { assetContext: confirmedAssetContext })
 
     try {
       setIsGenerating(true)
       setGeneratingStory(true)
-      setGenerationStatus('Generating story structure...')
+      setGenerationStatus('Constructing Production Blueprint...')
       
       const originalIdea = currentProject.story.originalIdea
       const projectId = currentProject.id
       const storyId = currentProject.story.id
       
-      // Switch to Sequence tab to show generation in action
       setTimeout(() => {
         setActiveTab('sequence')
         window.scrollTo({ top: 0, behavior: 'smooth' })
       }, 100)
       
-      // Call OpenAI API for story generation with asset context
-      setGenerationStatus('Calling Story Writer AI...')
+      setGenerationStatus('Consulting Production AI...')
       
       const storyResponse = await fetch('/api/generate-story', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           idea: originalIdea,
           tone: confirmedAssetContext.settings.tone,
@@ -292,17 +313,13 @@ export default function IdeaTab() {
 
       if (!storyResponse.ok) {
         const errorData = await storyResponse.json()
-        throw new Error(errorData.error || 'Failed to generate story')
+        throw new Error(errorData.error || 'Failed to construct blueprint')
       }
 
       const { data: storyData } = await storyResponse.json()
-      
-      console.log('✅ Story generated:', storyData)
-      
-      setGenerationStatus('Processing story structure...')
+      setGenerationStatus('Mapping sequence orchestration...')
 
-      // Update project with generated story
-      const generatedStory = storyData.story || `Based on your idea: "${originalIdea}", here's a structured story.`
+      const generatedStory = storyData.story || `Blueprint for: "${originalIdea}"`
       
       updateProject(projectId, {
         story: {
@@ -312,22 +329,12 @@ export default function IdeaTab() {
           tone: confirmedAssetContext.settings.tone.join(', '),
           brandCues: confirmedAssetContext.settings.brandCues,
           aspectRatio: aspectRatio,
-          rationale: 'AI-generated story structure based on your input idea'
+          rationale: 'AI-constructed production blueprint'
         },
-        scenes: [], // Clear existing scenes
-        assetContext: confirmedAssetContext // Store asset context
+        scenes: [],
+        assetContext: confirmedAssetContext
       })
 
-      // Switch to Sequence tab to show generation in action
-      setTimeout(() => {
-        setActiveTab('sequence')
-        window.scrollTo({ top: 0, behavior: 'smooth' })
-      }, 100)
-
-      // Wait a bit for state to update
-      await new Promise(resolve => setTimeout(resolve, 100))
-
-      // Process scenes from AI response
       const scenes = storyData.scenes || []
       const totalClips = scenes.reduce((sum: number, scene: any) => sum + (scene.clips?.length || 0), 0)
       
@@ -338,21 +345,18 @@ export default function IdeaTab() {
         completedClips: 0
       })
 
-      // Generate scenes one by one from AI response
       for (let sceneIndex = 0; sceneIndex < scenes.length; sceneIndex++) {
         const sceneData = scenes[sceneIndex]
-        setGenerationStatus(`Creating Scene ${sceneIndex + 1}: ${sceneData.name}...`)
+        setGenerationStatus(`Directing Scene ${sceneIndex + 1}: ${sceneData.name}...`)
         
-        // Generate unique visual style for this scene using AI
-        setGenerationStatus(`Generating unique visual style for Scene ${sceneIndex + 1}...`)
         const sceneStyle = await generateVisualStyle(
           confirmedAssetContext.settings.brandCues,
           confirmedAssetContext.settings.tone,
           sceneData.type || 'establishing',
           sceneIndex + 1,
           scenes.length,
-          1, // clipOrder (not used for scene-level style)
-          1, // totalClipsInScene (not used for scene-level style)
+          1,
+          1,
           sceneData.purpose || ''
         )
         
@@ -367,7 +371,7 @@ export default function IdeaTab() {
           purpose: sceneData.purpose || '',
           duration: sceneData.duration || Math.floor(targetRuntime / scenes.length),
           style: {
-            mood: sceneStyle.mood || confirmedAssetContext.settings.tone.join(', ') || 'dramatic',
+            mood: sceneStyle.mood || confirmedAssetContext.settings.tone.join(', ') || 'professional',
             lighting: sceneStyle.lighting || 'natural',
             colorPalette: typeof sceneStyle.colorPalette === 'string' 
               ? sceneStyle.colorPalette 
@@ -379,24 +383,14 @@ export default function IdeaTab() {
           } as any,
           wardrobe: [],
           location: `Location ${sceneIndex + 1}`,
-          coverage: {
-            sceneId: sceneId,
-            requiredShots: [],
-            completedShots: [],
-            coverage: 0
-          },
+          coverage: { sceneId, requiredShots: [], completedShots: [], coverage: 0 },
           clips: [],
           status: 'planned',
           locked: false
         }
         
-        // Add scene
-        console.log(`➕ Adding scene ${sceneIndex + 1}:`, { sceneId: scene.id, name: scene.name })
         addScene(scene)
-        
-        // Wait a bit for scene to be added
         await new Promise(resolve => setTimeout(resolve, 200))
-        console.log(`✅ Scene ${sceneIndex + 1} added. Current scenes count should be ${sceneIndex + 1}`)
         
         const clipsInPreviousScenes = scenes.slice(0, sceneIndex).reduce((sum: number, s: any) => sum + (s.clips?.length || 0), 0)
         setGenerationProgress({
@@ -408,14 +402,11 @@ export default function IdeaTab() {
         
         await new Promise(resolve => setTimeout(resolve, 400))
 
-        // Process clips for this scene from AI response
         const sceneClips = sceneData.clips || []
         for (let clipIndex = 0; clipIndex < sceneClips.length; clipIndex++) {
           const clipData = sceneClips[clipIndex]
-          setGenerationStatus(`Creating clip ${clipIndex + 1} of ${sceneClips.length} for Scene ${sceneIndex + 1}...`)
+          setGenerationStatus(`Orchestrating clip ${clipIndex + 1}/${sceneClips.length}...`)
           
-          // Use AI-powered character matching for better accuracy
-          setGenerationStatus(`Matching characters to clip ${clipIndex + 1}...`)
           const matchedAssets = await matchAssetsToClipAI(
             clipData.description || clipData.name,
             clipIndex + 1,
@@ -426,26 +417,14 @@ export default function IdeaTab() {
             sceneClips.map((c: any) => ({ description: c.description, name: c.name }))
           )
           
-          console.log(`🎯 AI-matched assets for clip ${clipIndex + 1}:`, {
-            characters: matchedAssets.characters.map((c: any) => ({ name: c.name, confidence: c.confidence, reason: c.matchReason })),
-            products: matchedAssets.products.length,
-            locations: matchedAssets.locations.length
-          })
-          
-          // Optionally enhance clip prompts with Story Boarding Expert API
           let imagePrompt = clipData.imagePrompt || ''
           let videoPrompt = clipData.videoPrompt || ''
           
-          // Always enhance prompts with Story Boarding Expert for maximum quality
-          // Enhanced prompts are much more detailed and production-ready (150-250 words)
-          // Enhance if prompt is missing or too short
           if (!imagePrompt || imagePrompt.length < 100) {
             try {
               const clipPromptResponse = await fetch('/api/generate-clip-prompts', {
                 method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                   sceneDescription: scene.description,
                   clipDescription: clipData.description || clipData.name,
@@ -453,7 +432,7 @@ export default function IdeaTab() {
                   tone: confirmedAssetContext.settings.tone,
                   brandCues: confirmedAssetContext.settings.brandCues,
                   sceneStyle: scene.style,
-                  assetContext: matchedAssets, // Use AI-matched assets
+                  assetContext: matchedAssets,
                 }),
               })
 
@@ -469,74 +448,28 @@ export default function IdeaTab() {
           
           await new Promise(resolve => setTimeout(resolve, 300))
           
-          // Collect reference image URLs from matched assets with PRIORITY ORDERING
-          // Priority: Characters (highest) -> Products -> Locations (lowest)
-          // This ensures facial consistency gets maximum attention from FLUX.2 Pro
           const referenceImageUrls: string[] = []
           const assetsWithUrls = {
-            characters: matchedAssets.characters
-              .filter(char => char.assetUrl)
-              .map(char => ({
-                id: char.id,
-                name: char.name,
-                assetUrl: char.assetUrl!,
-                appearanceDetails: char.appearanceDetails
-              })),
-            products: matchedAssets.products
-              .filter(product => product.assetUrl)
-              .map(product => ({
-                id: product.id,
-                name: product.name,
-                assetUrl: product.assetUrl!
-              })),
-            locations: matchedAssets.locations
-              .filter(location => location.assetUrl)
-              .map(location => ({
-                id: location.id,
-                name: location.name,
-                assetUrl: location.assetUrl!
-              }))
+            characters: matchedAssets.characters.filter((char: any) => char.assetUrl).map((char: any) => ({
+              id: char.id, name: char.name, assetUrl: char.assetUrl!, appearanceDetails: char.appearanceDetails
+            })),
+            products: matchedAssets.products.filter((product: any) => product.assetUrl).map((product: any) => ({
+              id: product.id, name: product.name, assetUrl: product.assetUrl!
+            })),
+            locations: matchedAssets.locations.filter((location: any) => location.assetUrl).map((location: any) => ({
+              id: location.id, name: location.name, assetUrl: location.assetUrl!
+            }))
           }
           
-          // Collect URLs in PRIORITY ORDER (characters first for facial consistency)
-          // FLUX.2 Pro can handle up to 10 reference images, so we prioritize:
-          // 1. All character reference images (most critical for consistency)
-          // 2. Product reference images (important for brand consistency)
-          // 3. Location reference images (environmental consistency)
-          assetsWithUrls.characters.forEach(char => referenceImageUrls.push(char.assetUrl))
-          assetsWithUrls.products.forEach(product => referenceImageUrls.push(product.assetUrl))
-          assetsWithUrls.locations.forEach(location => referenceImageUrls.push(location.assetUrl))
+          assetsWithUrls.characters.forEach((char: any) => referenceImageUrls.push(char.assetUrl))
+          assetsWithUrls.products.forEach((product: any) => referenceImageUrls.push(product.assetUrl))
+          assetsWithUrls.locations.forEach((location: any) => referenceImageUrls.push(location.assetUrl))
           
-          // Limit to 10 reference images (FLUX.2 Pro maximum)
-          // If we exceed, prioritize characters (most important for facial consistency)
-          if (referenceImageUrls.length > 10) {
-            const characterUrls = assetsWithUrls.characters.map(c => c.assetUrl)
-            const productUrls = assetsWithUrls.products.map(p => p.assetUrl)
-            const locationUrls = assetsWithUrls.locations.map(l => l.assetUrl)
-            
-            // Prioritize: all characters, then products, then locations (up to 10 total)
-            referenceImageUrls.length = 0 // Clear array
-            referenceImageUrls.push(...characterUrls.slice(0, 10))
-            const remaining = 10 - referenceImageUrls.length
-            if (remaining > 0) {
-              referenceImageUrls.push(...productUrls.slice(0, remaining))
-            }
-            const stillRemaining = 10 - referenceImageUrls.length
-            if (stillRemaining > 0) {
-              referenceImageUrls.push(...locationUrls.slice(0, stillRemaining))
-            }
-          }
+          if (referenceImageUrls.length > 10) referenceImageUrls.length = 10
           
-          // Determine if remix should be used
           const shouldUseRemix = referenceImageUrls.length > 0
-          
-          // Create character references from matched characters
-          const characterReferences = matchedAssets.characters.map(char => ({
-            characterId: char.id,
-            role: char.role,
-            faceRefId: undefined,
-            assetUrl: char.assetUrl,
-            appearanceDetails: char.appearanceDetails
+          const characterReferences = matchedAssets.characters.map((char: any) => ({
+            characterId: char.id, role: char.role, faceRefId: undefined, assetUrl: char.assetUrl, appearanceDetails: char.appearanceDetails
           }))
           
           const clip: Clip = {
@@ -544,17 +477,11 @@ export default function IdeaTab() {
             sceneId: sceneId,
             order: clipData.order || clipIndex,
             name: clipData.name || `Scene ${sceneIndex + 1} - Clip ${clipIndex + 1}`,
-            imagePrompt: imagePrompt || `${originalIdea} - ${clipData.description || clipData.name}. ${confirmedAssetContext.settings.tone.join(', ')}`,
-            videoPrompt: videoPrompt || `${originalIdea} - ${clipData.description || clipData.name}, dynamic motion. ${confirmedAssetContext.settings.tone.join(', ')}`,
+            imagePrompt: imagePrompt || `${originalIdea} - ${clipData.description || clipData.name}`,
+            videoPrompt: videoPrompt || `${originalIdea} - ${clipData.description || clipData.name}`,
             duration: 5,
             quality: 'standard',
-            cameraPreset: {
-              id: 'default',
-              name: 'Default',
-              description: clipData.cameraAngle || 'Standard framing',
-              prompt: '',
-              examples: []
-            },
+            cameraPreset: { id: 'default', name: 'Default', description: clipData.cameraAngle || 'Standard framing', prompt: '', examples: [] },
             framing: clipData.framing || clipData.cameraAngle || 'medium shot',
             characters: characterReferences,
             klingElements: [],
@@ -567,24 +494,11 @@ export default function IdeaTab() {
             createdAt: new Date(),
             updatedAt: new Date(),
             lastRendered: new Date(),
-            // Add generation metadata for automatic remix mode
-            generationMetadata: {
-              shouldUseRemix,
-              referenceImageUrls,
-              assetContext: assetsWithUrls
-            }
+            generationMetadata: { shouldUseRemix, referenceImageUrls, assetContext: assetsWithUrls }
           }
           
-          // Add clip
-          console.log(`➕ Adding clip ${clipIndex + 1}/${sceneClips.length} to scene ${sceneIndex + 1}:`, { 
-            clipId: clip.id, 
-            sceneId, 
-            name: clip.name 
-          })
           addClip(sceneId, clip)
-          
           const currentCompletedClips = clipsInPreviousScenes + clipIndex + 1
-          console.log(`✅ Clip ${clipIndex + 1}/${sceneClips.length} added to scene ${sceneIndex + 1}. Total clips: ${currentCompletedClips}/${totalClips}`)
           setGenerationProgress({
             totalScenes: scenes.length,
             completedScenes: sceneIndex + 1,
@@ -592,505 +506,287 @@ export default function IdeaTab() {
             completedClips: currentCompletedClips
           })
         }
-
-        // Add characters if provided
-        if (storyData.characters && storyData.characters.length > 0) {
-          storyData.characters.forEach((charData: any) => {
-            // Character addition logic would go here if needed
-          })
-        }
       }
 
-      setGenerationStatus('Story pipeline generated successfully!')
+      setGenerationStatus('Production blueprint constructed successfully!')
       await new Promise(resolve => setTimeout(resolve, 1500))
       
-      // Continue with image generation (existing code continues...)
-      // Auto-generate images for all clips if dontGenerateImages is false
       const latestProject = useAppStore.getState().currentProject
-      console.log('🔍 Checking if auto-image generation is needed...', {
-        hasProject: !!latestProject,
-        dontGenerateImages: latestProject?.settings?.dontGenerateImages,
-        scenesCount: latestProject?.scenes?.length || 0
+      if (latestProject && !latestProject.settings.dontGenerateImages) {
+        setGenerationStatus('Launching parallel image orchestration...')
+        
+      const allClips: Array<{ clip: Clip; sceneId: string }> = []
+        latestProject.scenes.forEach((scene) => {
+          scene.clips.forEach((clip) => {
+            if (clip.imagePrompt && !clip.generatedImage) {
+            allClips.push({ clip, sceneId: scene.id })
+          }
+        })
       })
       
-      if (latestProject && !latestProject.settings.dontGenerateImages) {
-        console.log('✅ Auto-image generation enabled, starting process...')
-        setGenerationStatus('Starting image generation for all clips...')
-        
-        // Get all clips from all scenes that need images
-        const allClips: Array<{ clip: Clip; sceneId: string }> = []
-        latestProject.scenes.forEach((scene, sceneIndex) => {
-          console.log(`📋 Scanning scene ${sceneIndex + 1}: "${scene.name}" (${scene.clips.length} clips)`)
-          scene.clips.forEach((clip, clipIndex) => {
-            const needsImage = clip.imagePrompt && !clip.generatedImage
-            console.log(`  📎 Clip ${clipIndex + 1}: "${clip.name}"`, {
-              hasImagePrompt: !!clip.imagePrompt,
-              hasGeneratedImage: !!clip.generatedImage,
-              needsImage,
-              promptPreview: clip.imagePrompt?.substring(0, 50) + '...' || 'N/A'
-            })
-            if (needsImage) {
-              allClips.push({ clip, sceneId: scene.id })
-            }
-          })
-        })
-        
-        console.log(`📊 Image generation summary:`, {
-          totalClipsFound: allClips.length,
-          clips: allClips.map(({ clip, sceneId }) => ({
-            clipId: clip.id,
-            clipName: clip.name,
-            sceneId,
-            promptLength: clip.imagePrompt?.length || 0
-          }))
-        })
-        
-        if (allClips.length === 0) {
-          console.log('✅ No clips need image generation - all clips already have images or no prompts')
-        } else {
-          console.log(`🖼️ Starting parallel image generation for ${allClips.length} clips...`)
-          console.log(`⚙️ Configuration:`, {
-            aspectRatio: latestProject.story.aspectRatio || '16:9',
-            timeout: '120 seconds per image',
-            mode: 'parallel (all at once)'
-          })
+        if (allClips.length > 0) {
+          allClips.forEach(({ clip }) => setClipGeneratingStatus(clip.id, 'image'))
           
-          // Set generating status for ALL clips immediately
-          console.log('📝 Setting generating status for all clips...')
-          allClips.forEach(({ clip }) => {
-            setClipGeneratingStatus(clip.id, 'image')
-            console.log(`  ✓ Status set: "${clip.name}" → Generating image`)
-          })
-          
-          setGenerationStatus(`Generating ${allClips.length} images in parallel...`)
-          console.log('🚀 All image generation requests starting now...')
-          
-          // Generate all images in parallel
-          const startTime = Date.now()
           const imageGenerationPromises = allClips.map(async ({ clip }, index) => {
-            const clipName = clip.name
             const clipId = clip.id
-            const requestStartTime = Date.now()
+              const metadata = clip.generationMetadata
+            const referenceImageUrls = metadata?.referenceImageUrls || []
+            const hasReferenceImages = referenceImageUrls.length > 0 && referenceImageUrls.every((url: string) => url && url.trim().length > 0)
+            
+            // Use 'edit' mode (FLUX.2 Pro) for multi-image consistency, 'text-to-image' otherwise
+            // 'edit' mode supports up to 10 reference images for better consistency
+            const generationMode = hasReferenceImages ? 'edit' : 'text-to-image'
             
             try {
-              // Determine generation mode based on clip metadata
-              const metadata = clip.generationMetadata
-              const shouldUseRemix = metadata?.shouldUseRemix && metadata.referenceImageUrls.length > 0
-              const generationMode = shouldUseRemix ? 'remix' : 'text-to-image'
-              const referenceUrls = metadata?.referenceImageUrls || []
+              // Ensure we have a valid prompt
+              if (!clip.imagePrompt || clip.imagePrompt.trim().length === 0) {
+                console.warn(`⚠️ [${index + 1}/${allClips.length}] No prompt for "${clip.name}", using fallback`)
+                throw new Error('Image prompt is required for generation')
+              }
               
-              console.log(`\n🖼️ [${index + 1}/${allClips.length}] Starting image generation for clip: "${clipName}"`, {
-                clipId,
-                mode: generationMode,
-                hasAssets: referenceUrls.length > 0,
-                promptLength: clip.imagePrompt?.length || 0,
-                promptPreview: clip.imagePrompt?.substring(0, 100) + '...' || 'N/A',
-                aspectRatio: latestProject.story.aspectRatio || '16:9'
-              })
-              
-              // Create AbortController for timeout
-              const controller = new AbortController()
-              const timeoutId = setTimeout(() => {
-                console.warn(`⏱️ [${index + 1}/${allClips.length}] Timeout triggered for "${clipName}" after 120 seconds`)
-                controller.abort()
-              }, 120000) // 2 minute timeout
-              
-              let imageResponse
-              try {
-                // Sophisticated prompt enhancement for human-replacing realistic consistency
-                let enhancedPrompt = clip.imagePrompt || ''
-                
+              // Enhanced prompt with STRONG consistency instructions
+              let enhancedPrompt = clip.imagePrompt.trim()
                 if (metadata?.assetContext) {
                   const consistencyInstructions: string[] = []
-                  const assetDetails: string[] = []
                   
-                  // PRIORITY 1: Characters - Explicit facial consistency instructions
+                // Add STRONG character consistency instructions
                   if (metadata.assetContext.characters.length > 0) {
-                    const characterInstructions: string[] = []
-                    metadata.assetContext.characters.forEach(char => {
+                  metadata.assetContext.characters.forEach((char: any) => {
                       if (char.assetUrl) {
-                        // CRITICAL: Explicit instruction for facial consistency
-                        characterInstructions.push(
-                          `MAINTAIN THE EXACT FACIAL FEATURES, PHYSICAL LIKENESS, AND APPEARANCE OF ${char.name.toUpperCase()} as shown in the reference image. This is CRITICAL for character consistency. Do not alter their face, body type, or distinctive features.`
-                        )
-                        if (char.appearanceDetails) {
-                          characterInstructions.push(
-                            `Additional appearance details for ${char.name}: ${char.appearanceDetails}`
-                          )
-                        }
-                      } else if (char.appearanceDetails) {
-                        // Fallback: Use appearance details if no reference image
-                        characterInstructions.push(
-                          `${char.name} appearance: ${char.appearanceDetails}`
-                        )
-                      }
-                    })
-                    
-                    if (characterInstructions.length > 0) {
-                      consistencyInstructions.push(...characterInstructions)
-                      assetDetails.push(`Characters present: ${metadata.assetContext.characters.map(c => c.name).join(', ')}`)
+                      consistencyInstructions.push(
+                        `CRITICAL: ${char.name.toUpperCase()} MUST match the reference image EXACTLY - same face, same features, same appearance, same build, same skin tone, same hair, same eyes. The reference image is provided and must be followed precisely.`
+                      )
                     }
-                  }
-                  
-                  // PRIORITY 2: Products/Objects - Exact product consistency
+                  })
+                }
+                
+                // Add product consistency instructions
                   if (metadata.assetContext.products.length > 0) {
-                    const productInstructions: string[] = []
-                    metadata.assetContext.products.forEach(product => {
+                  metadata.assetContext.products.forEach((product: any) => {
                       if (product.assetUrl) {
-                        productInstructions.push(
-                          `DEPICT ${product.name.toUpperCase()} PRECISELY AS SHOWN IN THE REFERENCE IMAGE, maintaining its exact design, color, branding, and physical characteristics. This is CRITICAL for product consistency.`
-                        )
-                      } else {
-                        productInstructions.push(`Product: ${product.name}`)
-                      }
-                    })
-                    
-                    if (productInstructions.length > 0) {
-                      consistencyInstructions.push(...productInstructions)
-                      assetDetails.push(`Products present: ${metadata.assetContext.products.map(p => p.name).join(', ')}`)
+                      consistencyInstructions.push(
+                        `PRODUCT: ${product.name.toUpperCase()} must match reference exactly in shape, color, and design.`
+                      )
                     }
-                  }
-                  
-                  // PRIORITY 3: Locations - Environmental consistency
-                  if (metadata.assetContext.locations.length > 0) {
-                    const locationInstructions: string[] = []
-                    metadata.assetContext.locations.forEach(location => {
-                      if (location.assetUrl) {
-                        locationInstructions.push(
-                          `The environment MUST CONSISTENTLY REFLECT THE REFERENCE IMAGE'S architectural style, atmosphere, lighting, and key visual elements of ${location.name.toUpperCase()}. Maintain spatial consistency and environmental continuity.`
-                        )
-                      } else {
-                        locationInstructions.push(`Location: ${location.name}`)
-                      }
-                    })
-                    
-                    if (locationInstructions.length > 0) {
-                      consistencyInstructions.push(...locationInstructions)
-                      assetDetails.push(`Locations: ${metadata.assetContext.locations.map(l => l.name).join(', ')}`)
-                    }
-                  }
-                  
-                  // Combine all instructions with the original prompt
-                  // Place consistency instructions FIRST for maximum impact
+                  })
+                }
+                
                   if (consistencyInstructions.length > 0) {
                     enhancedPrompt = consistencyInstructions.join(' ') + '. ' + enhancedPrompt
                   }
                   
-                  // Add asset context summary at the end for additional guidance
-                  if (assetDetails.length > 0) {
-                    enhancedPrompt += '. Context: ' + assetDetails.join('. ')
-                  }
-                  
-                  // Add realism and quality instructions
-                  enhancedPrompt += '. Generate a photorealistic, human-replacing realistic image with professional cinematography, natural lighting, and high detail. Ensure all subjects appear natural and lifelike.'
-                }
+                enhancedPrompt = `Directing ${clip.name.toUpperCase()}. Maintain production consistency. ` + enhancedPrompt + '. Professional studio quality, 8k resolution, photorealistic, high detail.'
+              }
+              
+              // Final mode determination - if edit mode but no valid URLs, fallback to text-to-image
+              let finalMode = generationMode
+              const validReferenceUrls = referenceImageUrls.filter((url: string) => 
+                url && typeof url === 'string' && url.trim().length > 0 && url.startsWith('http')
+              )
+              
+              if (generationMode === 'edit' && validReferenceUrls.length === 0) {
+                console.warn(`⚠️ [${index + 1}/${allClips.length}] Edit mode requested but no valid reference URLs, falling back to text-to-image`)
+                finalMode = 'text-to-image'
+              }
+              
+              console.log(`🖼️ [${index + 1}/${allClips.length}] Generating image for "${clip.name}"`, {
+                mode: finalMode,
+                hasReferenceImages: validReferenceUrls.length > 0,
+                validReferenceCount: validReferenceUrls.length,
+                promptLength: enhancedPrompt.length,
+                promptPreview: enhancedPrompt.substring(0, 100) + '...'
+              })
                 
                 const requestPayload: any = {
-                  mode: generationMode,
+                mode: finalMode,
                   prompt: enhancedPrompt,
                   aspect_ratio: latestProject.story.aspectRatio || '16:9',
-                }
-                
-                // Add reference images for remix mode
-                if (shouldUseRemix && referenceUrls.length > 0) {
-                  requestPayload.reference_image_urls = referenceUrls
-                }
-                
-                console.log(`📤 [${index + 1}/${allClips.length}] Sending request to /api/generate-image-remix for "${clipName}"`, {
-                  mode: generationMode,
-                  hasReferenceImages: referenceUrls.length > 0,
-                  payload: { ...requestPayload, prompt: requestPayload.prompt?.substring(0, 50) + '...' }
-                })
-                
-                // Use Remix API - automatically uses remix mode when assets are available
-                imageResponse = await fetch('/api/generate-image-remix', {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                  },
-                  body: JSON.stringify(requestPayload),
-                  signal: controller.signal,
-                })
-                
-                const requestDuration = Date.now() - requestStartTime
-                console.log(`📥 [${index + 1}/${allClips.length}] Response received for "${clipName}"`, {
-                  status: imageResponse.status,
-                  statusText: imageResponse.statusText,
-                  ok: imageResponse.ok,
-                  duration: `${requestDuration}ms`,
-                  headers: Object.fromEntries(imageResponse.headers.entries())
-                })
-              } catch (fetchError: any) {
-                // Clear timeout on error
-                clearTimeout(timeoutId)
-                const requestDuration = Date.now() - requestStartTime
-                
-                console.error(`❌ [${index + 1}/${allClips.length}] Fetch error for "${clipName}"`, {
-                  errorName: fetchError.name,
-                  errorMessage: fetchError.message,
-                  duration: `${requestDuration}ms`,
-                  isAbort: fetchError.name === 'AbortError'
-                })
-                
-                // Re-throw abort errors with clearer message
-                if (fetchError.name === 'AbortError') {
-                  throw new Error('Image generation timed out after 2 minutes')
-                }
-                // Re-throw other fetch errors
-                throw fetchError
-              } finally {
-                // Ensure timeout is cleared even if no error occurred
-                clearTimeout(timeoutId)
+                project_id: latestProject.id,
+                clip_id: clipId,
               }
               
-              // Check if response exists before accessing properties
-              if (!imageResponse) {
-                throw new Error('No response received from image generation API')
+              // Add reference images for edit mode (FLUX.2 Pro supports multiple images)
+              // Only add if we have valid reference images
+              if (finalMode === 'edit' && validReferenceUrls.length > 0) {
+                requestPayload.reference_image_urls = validReferenceUrls.slice(0, 10) // FLUX.2 Pro max is 10
+                console.log(`📎 [${index + 1}/${allClips.length}] Using ${validReferenceUrls.length} reference images for FLUX.2 Pro`)
+              } else if (finalMode === 'text-to-image') {
+                // Ensure no reference images are sent for text-to-image mode
+                console.log(`📝 [${index + 1}/${allClips.length}] Using text-to-image mode (no reference images)`)
               }
               
-              if (!imageResponse.ok) {
-                let errorMessage = 'Unknown error'
-                let errorDetails: any = {}
-                let errorResponseText = ''
-                try {
-                  // Try to read error response as text first
-                  errorResponseText = await imageResponse.clone().text()
-                  const errorData = JSON.parse(errorResponseText)
-                  errorMessage = errorData.error || errorData.message || JSON.stringify(errorData)
-                  errorDetails = errorData
-                } catch (e) {
-                  // If JSON parsing fails, use the text or status
-                  errorMessage = errorResponseText || `HTTP ${imageResponse.status}: ${imageResponse.statusText}`
-                }
-                console.error(`❌ [${index + 1}/${allClips.length}] API error response for "${clipName}"`, {
-                  status: imageResponse.status,
-                  statusText: imageResponse.statusText,
-                  errorMessage,
-                  errorDetails,
-                  responsePreview: errorResponseText.substring(0, 200)
-                })
-                throw new Error(errorMessage)
-              }
-              
-              let responseData
-              let responseText = ''
+              // Get session token for authentication
+              // Wrap in try-catch to handle any auth errors gracefully
+              let headers: HeadersInit = { 'Content-Type': 'application/json' }
               try {
-                // Read response as text first (in case JSON parsing fails, we can log the text)
-                responseText = await imageResponse.clone().text()
-                responseData = JSON.parse(responseText)
-                console.log(`📦 [${index + 1}/${allClips.length}] Response data parsed for "${clipName}"`, {
-                  hasImageUrl: !!(responseData.imageUrl || responseData.image_url || responseData.url),
-                  hasSuccess: responseData.success,
-                  model: responseData.model,
-                  endpoint: responseData.endpoint,
-                  requestId: responseData.requestId,
-                  responseSize: `${(responseText.length / 1024).toFixed(2)} KB`
+                const { supabase } = await import('@/lib/supabase')
+                const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+                if (sessionError) {
+                  console.warn(`⚠️ [${index + 1}/${allClips.length}] Session error for "${clip.name}":`, sessionError.message)
+                }
+                if (session?.access_token) {
+                  headers['Authorization'] = `Bearer ${session.access_token}`
+                }
+              } catch (authError: any) {
+                // Handle auth errors gracefully - don't block image generation
+                // If auth fails, the API will handle it and return appropriate error
+                console.warn(`⚠️ [${index + 1}/${allClips.length}] Auth error for "${clip.name}":`, authError.message)
+              }
+              
+              const response = await fetch('/api/generate-image-remix', {
+                  method: 'POST',
+                headers,
+                  body: JSON.stringify(requestPayload),
+              })
+
+              if (!response.ok) {
+                let errorMessage = 'Unknown error'
+                try {
+                  const errorData = await response.json()
+                  errorMessage = errorData.error || errorData.details || `HTTP ${response.status}: ${response.statusText}`
+                  console.error(`❌ [${index + 1}/${allClips.length}] Image generation failed for "${clip.name}"`, {
+                    status: response.status,
+                    error: errorMessage,
+                    details: errorData
                 })
               } catch (parseError) {
-                console.error(`❌ [${index + 1}/${allClips.length}] Failed to parse response for "${clipName}"`, {
-                  parseError: parseError instanceof Error ? parseError.message : String(parseError),
-                  responseText: responseText.substring(0, 500) || 'Unable to read response',
-                  responseLength: responseText.length,
-                  status: imageResponse.status,
-                  contentType: imageResponse.headers.get('content-type')
-                })
-                throw new Error(`Failed to parse response: ${parseError instanceof Error ? parseError.message : String(parseError)}`)
+                  errorMessage = `HTTP ${response.status}: ${response.statusText}`
+                  console.error(`❌ [${index + 1}/${allClips.length}] Image generation failed for "${clip.name}"`, {
+                    status: response.status,
+                    error: errorMessage
+                  })
+                }
+                throw new Error(errorMessage)
               }
-              
+
+              const responseData = await response.json()
               const imageUrl = responseData.imageUrl || responseData.image_url || responseData.url
               
               if (!imageUrl) {
-                console.error(`❌ [${index + 1}/${allClips.length}] No image URL in response for "${clipName}"`, {
-                  responseData,
-                  availableKeys: Object.keys(responseData)
+                console.error(`❌ [${index + 1}/${allClips.length}] No image URL in response for "${clip.name}"`, responseData)
+                throw new Error('No image URL returned from API')
+              }
+              
+              // API now handles storage automatically - check if storage succeeded
+              if (responseData.storageSuccess) {
+                console.log(`✅ [${index + 1}/${allClips.length}] Image generated and stored in Supabase Storage for "${clip.name}"`, {
+                  imageUrl: imageUrl.substring(0, 50) + '...',
+                  storagePath: responseData.storagePath,
+                  model: responseData.model
                 })
-                throw new Error(`No image URL in response: ${JSON.stringify(responseData)}`)
-              }
-              
-              console.log(`✅ [${index + 1}/${allClips.length}] Image URL extracted for "${clipName}"`, {
-                imageUrl: imageUrl.substring(0, 100) + '...',
-                imageUrlLength: imageUrl.length
-              })
-              
-              // Update clip with generated image
-              console.log(`💾 [${index + 1}/${allClips.length}] Updating clip "${clipName}" with generated image...`)
-              updateClip(clipId, {
-                generatedImage: imageUrl,
-                previewImage: imageUrl,
-                status: 'completed'
-              })
-              console.log(`✓ [${index + 1}/${allClips.length}] Clip "${clipName}" updated successfully`)
-              
-              // Save to user_images table if user is authenticated
-              const { user } = useAppStore.getState()
-              if (user?.id) {
-                try {
-                  console.log(`💾 [${index + 1}/${allClips.length}] Saving image to database for "${clipName}"...`)
-                  const { saveUserImage } = await import('@/lib/userMedia')
-                  await saveUserImage({
-                    image_url: imageUrl,
-                    prompt: clip.imagePrompt,
-                    model: generationMode === 'remix' ? 'remix' : 'remix-text-to-image',
-                    aspect_ratio: latestProject.story.aspectRatio || '16:9',
-                    project_id: latestProject.id,
-                    clip_id: clipId,
-                    storeExternally: true // Automatically download and store in Supabase Storage
-                  })
-                  console.log(`✓ [${index + 1}/${allClips.length}] Image saved to database for "${clipName}"`)
-                } catch (err) {
-                  console.warn(`⚠️ [${index + 1}/${allClips.length}] Failed to save image to user_images for "${clipName}"`, {
-                    error: err,
-                    clipId,
-                    imageUrl: imageUrl.substring(0, 50) + '...'
-                  })
-                  // Don't fail the whole process if saving fails
-                }
-              } else {
-                console.log(`ℹ️ [${index + 1}/${allClips.length}] Skipping database save for "${clipName}" (user not authenticated)`)
-              }
-              
-              const totalDuration = Date.now() - requestStartTime
-              console.log(`✅ [${index + 1}/${allClips.length}] Image generation completed for "${clipName}"`, {
-                duration: `${totalDuration}ms`,
-                imageUrl: imageUrl.substring(0, 100) + '...'
-              })
-              
-              // Clear generating status on success
-              setClipGeneratingStatus(clipId, null)
-              console.log(`✓ [${index + 1}/${allClips.length}] Status cleared for "${clipName}"`)
-              
-              // Trigger immediate save after image generation
-              if (user?.id && latestProject) {
-                const { saveProjectNow } = useAppStore.getState()
-                saveProjectNow(latestProject.id, true).catch(err => {
-                  console.warn(`⚠️ Failed to save project after image generation:`, err)
-                })
-              }
-              
-              return { success: true, clipId, clipName, imageUrl, duration: totalDuration }
-            } catch (error: any) {
-              // Handle all errors gracefully
-              const errorMessage = error.message || 'Unknown error'
-              const totalDuration = Date.now() - requestStartTime
-              
-              if (error.name === 'AbortError' || errorMessage.includes('timeout')) {
-                console.error(`⏱️ [${index + 1}/${allClips.length}] Timeout generating image for "${clipName}"`, {
-                  duration: `${totalDuration}ms`,
-                  timeoutLimit: '120 seconds'
+              } else if (responseData.fallbackUrl) {
+                console.warn(`⚠️ [${index + 1}/${allClips.length}] Image generated but storage failed, using Fal.ai URL as fallback for "${clip.name}"`, {
+                  imageUrl: imageUrl.substring(0, 50) + '...',
+                  warning: 'Image URL is temporary (7-day expiry)'
                 })
               } else {
-                console.error(`❌ [${index + 1}/${allClips.length}] Error generating image for "${clipName}"`, {
+                console.log(`✅ [${index + 1}/${allClips.length}] Image generated successfully for "${clip.name}"`, {
+                  imageUrl: imageUrl.substring(0, 50) + '...',
+                  model: responseData.model
+                })
+              }
+              
+              updateClip(clipId, { generatedImage: imageUrl, previewImage: imageUrl, status: 'completed' })
+              
+              // Note: API now handles storage automatically - no need for client-side saveUserImage() call
+            } catch (err: any) {
+              const errorMessage = err?.message || 'Unknown error'
+              console.error(`❌ [${index + 1}/${allClips.length}] Image generation error for "${clip.name}":`, {
                   error: errorMessage,
-                  errorName: error.name,
-                  duration: `${totalDuration}ms`,
-                  stack: error.stack?.substring(0, 500) // First 500 chars of stack
-                })
-              }
+                clipId,
+                mode: generationMode,
+                hasReferenceImages
+              })
               
-              // Always clear generating status on error
+              // Update clip with pending status (will retry later)
+              updateClip(clipId, { 
+                status: 'pending'
+              })
+              
+              // Show toast for user feedback
+              toast.error(`Failed to generate image for "${clip.name}": ${errorMessage}`, {
+                duration: 5000
+              })
+            } finally {
               setClipGeneratingStatus(clipId, null)
-              console.log(`✓ [${index + 1}/${allClips.length}] Status cleared for "${clipName}" (after error)`)
-              
-              return { success: false, clipId, clipName, error: errorMessage, duration: totalDuration }
             }
           })
           
-          // Wait for all image generations to complete (success or failure)
-          console.log('⏳ Waiting for all image generation requests to complete...')
-          const results = await Promise.all(imageGenerationPromises)
-          const totalDuration = Date.now() - startTime
+          await Promise.all(imageGenerationPromises)
+          setGenerationStatus('Production assets deployed!')
           
-          // Process results
-          const successful = results.filter(r => r.success)
-          const failed = results.filter(r => !r.success)
-          
-          console.log(`\n📊 Image Generation Summary:`, {
-            total: allClips.length,
-            successful: successful.length,
-            failed: failed.length,
-            totalDuration: `${totalDuration}ms (${(totalDuration / 1000).toFixed(2)}s)`,
-            averageDuration: successful.length > 0 
-              ? `${Math.round(successful.reduce((sum, r) => sum + (r.duration || 0), 0) / successful.length)}ms`
-              : 'N/A'
-          })
-          
-          if (successful.length > 0) {
-            console.log(`✅ Successful generations (${successful.length}):`, 
-              successful.map(r => ({
-                clipName: r.clipName,
-                duration: `${r.duration}ms`,
-                imageUrl: r.imageUrl?.substring(0, 50) + '...'
-              }))
-            )
-          }
-          
-          if (failed.length > 0) {
-            console.error(`❌ Failed generations (${failed.length}):`, 
-              failed.map(r => ({
-                clipName: r.clipName,
-                error: r.error,
-                duration: `${r.duration}ms`
-              }))
-            )
-          }
-          
-          console.log(`\n✅ Image generation process completed in ${(totalDuration / 1000).toFixed(2)}s`)
-          
-          if (failed.length > 0) {
-            setGenerationStatus(`Image generation completed: ${successful.length} succeeded, ${failed.length} failed`)
-          } else {
-            setGenerationStatus(`All ${successful.length} images generated successfully!`)
-          }
-          
-          // Final save after all images are generated
-          const { user, saveProjectNow } = useAppStore.getState()
-          if (user?.id && latestProject) {
-            saveProjectNow(latestProject.id, true).catch(err => {
-              console.warn(`⚠️ Failed to save project after batch image generation:`, err)
-            })
-          }
-          
-          // Small delay to show completion message
+          const { user, saveProjectNow, currentProject: finalState } = useAppStore.getState()
+          if (user?.id && finalState) await saveProjectNow(finalState.id, true)
           await new Promise(resolve => setTimeout(resolve, 1000))
         }
-      } else {
-        console.log('⏭️ Auto-image generation skipped:', latestProject?.settings?.dontGenerateImages 
-          ? 'dontGenerateImages setting is enabled' 
-          : 'No project found')
-      }
+        }
       
-      // Always clear generation status, even if image generation was skipped
-      console.log('🎬 Story generation process complete')
       setGeneratingStory(false)
       setIsGenerating(false)
       setGenerationStatus('')
-      setGenerationProgress({
-        totalScenes: 0,
-        completedScenes: 0,
-        totalClips: 0,
-        completedClips: 0
-      })
-      
-      // Ensure all clip generating statuses are cleared
-      const finalProject = useAppStore.getState().currentProject
-      if (finalProject) {
-        finalProject.scenes.forEach(scene => {
-          scene.clips.forEach(clip => {
-            setClipGeneratingStatus(clip.id, null)
-          })
-        })
-      }
     } catch (error) {
-      console.error('Error generating story:', error)
-      setGenerationStatus('Error generating story. Please try again.')
+      console.error('Error constructing blueprint:', error)
+      setGenerationStatus('Blueprint construction failed. Re-initialize.')
       setGeneratingStory(false)
       setIsGenerating(false)
     }
   }
 
-  // Show analysis screen if analysis is ready
+  const handleAspectRatioChange = (ratio: '16:9' | '9:16' | '1:1') => {
+    setAspectRatio(ratio)
+    updateProject(currentProject.id, { story: { ...currentProject.story, aspectRatio: ratio } })
+  }
+
+  const handleGenerateStory = async () => {
+    if (!currentProject?.story?.originalIdea?.trim()) {
+      toast.error('Define your concept before blueprinting.')
+      return
+    }
+    
+    if (currentProject.scenes?.length > 0) {
+      if (!window.confirm('Constructing a new blueprint will override existing sequences. Continue?')) return
+    }
+    
+    const loadingToast = toast.loading('Blueprint Analysis...')
+    try {
+      setIsGenerating(true)
+      setGeneratingStory(true)
+      setGenerationStatus('Analysis in progress...')
+      
+      const analysisResponse = await fetch('/api/analyze-idea-preview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          idea: currentProject.story.originalIdea,
+          tone: tone || undefined,
+          brandCues: brandCues || undefined,
+        }),
+      })
+
+      if (!analysisResponse.ok) throw new Error('Analysis failed')
+
+      const responseData = await analysisResponse.json()
+      const analysisData = responseData.data || responseData
+      
+        toast.dismiss(loadingToast)
+      toast.success('Blueprint analysis complete.')
+      
+      setIdeaAnalysis(analysisData)
+      setShowAnalysisScreen(true)
+      setIsGenerating(false)
+      setGeneratingStory(false)
+      setGenerationStatus('')
+    } catch (error: any) {
+      toast.dismiss(loadingToast)
+      toast.error(error.message || 'Analysis failed.')
+      setGenerationStatus('')
+      setGeneratingStory(false)
+      setIsGenerating(false)
+    }
+  }
+
   if (showAnalysisScreen && ideaAnalysis) {
-    return (
+  return (
       <IdeaAnalysisScreen
         analysis={ideaAnalysis}
         onContinue={handleContinueFromAnalysis}
@@ -1105,399 +801,181 @@ export default function IdeaTab() {
     )
   }
 
-  const handleAspectRatioChange = (ratio: '16:9' | '9:16' | '1:1') => {
-    setAspectRatio(ratio)
-    updateProject(currentProject.id, {
-      story: {
-        ...currentProject.story,
-        aspectRatio: ratio
-      }
-    })
-  }
-
-  const handleGenerateStory = async () => {
-    console.log('🔘 Generate Story Structure button clicked')
-    
-    if (!currentProject?.story?.originalIdea?.trim()) {
-      console.error('❌ Cannot generate: No original idea found', { 
-        hasProject: !!currentProject,
-        hasStory: !!currentProject?.story,
-        hasIdea: !!currentProject?.story?.originalIdea,
-        ideaLength: currentProject?.story?.originalIdea?.length || 0
-      })
-      toast.error('Please enter an idea before generating the story structure')
-      return
-    }
-    
-    console.log('✅ Validation passed, proceeding with generation', {
-      ideaLength: currentProject.story.originalIdea.length,
-      ideaPreview: currentProject.story.originalIdea.substring(0, 50) + '...'
-    })
-
-    // Warn user if they have existing scenes/clips
-    const hasExistingContent = currentProject.scenes && currentProject.scenes.length > 0
-    if (hasExistingContent) {
-      const confirmed = window.confirm(
-        '⚠️ Warning: Generating a new story will delete all existing scenes and clips.\n\n' +
-        `This will remove ${currentProject.scenes.length} scene(s) and all associated clips.\n\n` +
-        'Are you sure you want to continue?'
-      )
-      if (!confirmed) {
-        return
-      }
-    }
-    
-    console.log('🚀 Starting idea analysis...', { 
-      projectId: currentProject.id,
-      originalIdea: currentProject.story.originalIdea.substring(0, 50) + '...'
-    })
-    
-    const loadingToast = toast.loading('Analyzing your idea...')
-    
-    try {
-      setIsGenerating(true)
-      setGeneratingStory(true)
-      setGenerationStatus('Analyzing your idea...')
-      
-      console.log('📡 Calling analysis API with:', {
-        ideaLength: currentProject.story.originalIdea.length,
-        hasTone: !!tone,
-        hasBrandCues: !!brandCues
-      })
-      
-      // Step 1: Call analysis API
-      const analysisResponse = await fetch('/api/analyze-idea-preview', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          idea: currentProject.story.originalIdea,
-          tone: tone || undefined,
-          brandCues: brandCues || undefined,
-        }),
-      })
-
-      if (!analysisResponse.ok) {
-        let errorMessage = 'Failed to analyze idea'
-        let errorDetails = ''
-        
-        try {
-          const errorData = await analysisResponse.json()
-          errorMessage = errorData.error || errorMessage
-          errorDetails = errorData.details || ''
-          
-          // Provide helpful messages based on error type
-          if (errorData.errorType === 'configuration_error') {
-            errorMessage = 'OpenAI API key not configured. Please check server configuration.'
-          } else if (errorData.errorType === 'auth_error') {
-            errorMessage = 'OpenAI API authentication failed. Please check your API key.'
-          } else if (errorData.errorType === 'rate_limit_error') {
-            errorMessage = 'Rate limit exceeded. Please wait a moment and try again.'
-          } else if (errorData.errorType === 'model_error') {
-            errorMessage = `Model error: ${errorDetails || 'The AI model is not available'}`
-          } else if (errorData.errorType === 'parse_error') {
-            errorMessage = 'Failed to parse AI response. Please try again.'
-          } else if (errorData.details) {
-            errorMessage = `${errorMessage}: ${errorData.details}`
-          }
-          
-          console.error('❌ Analysis API error:', {
-            status: analysisResponse.status,
-            errorType: errorData.errorType,
-            error: errorData.error,
-            details: errorData.details
-          })
-        } catch (e) {
-          // If response is not JSON, get text
-          const text = await analysisResponse.text()
-          console.error('❌ Analysis API error response (non-JSON):', text.substring(0, 200))
-          errorMessage = `Server error (${analysisResponse.status}): ${analysisResponse.statusText}`
-          if (text) {
-            errorDetails = text.substring(0, 200)
-          }
-        }
-        
-        toast.dismiss(loadingToast)
-        toast.error(errorMessage + (errorDetails ? `\n${errorDetails}` : ''), { 
-          duration: 6000,
-          style: {
-            maxWidth: '500px',
-            whiteSpace: 'pre-wrap'
-          }
-        })
-        throw new Error(errorMessage)
-      }
-
-      let responseData
-      try {
-        responseData = await analysisResponse.json()
-      } catch (parseError) {
-        console.error('❌ Failed to parse JSON response:', parseError)
-        const text = await analysisResponse.text()
-        console.error('Response text:', text.substring(0, 500))
-        toast.dismiss(loadingToast)
-        toast.error('Server returned invalid response. Please check server logs.', { duration: 5000 })
-        throw new Error('Failed to parse server response as JSON')
-      }
-      
-      // Validate response structure
-      if (!responseData) {
-        console.error('❌ Empty response received')
-        toast.dismiss(loadingToast)
-        toast.error('Empty response from server. Please try again.', { duration: 5000 })
-        throw new Error('Empty response')
-      }
-
-      // Handle both { data: {...} } and direct data response formats
-      const analysisData = responseData.data || responseData
-      
-      if (!analysisData || !analysisData.analysis) {
-        console.error('❌ Invalid response structure - missing analysis:', {
-          responseData,
-          hasData: !!responseData.data,
-          hasDirectData: !responseData.data && !!responseData.analysis
-        })
-        toast.dismiss(loadingToast)
-        toast.error('Invalid response structure from server. Please try again.', { duration: 5000 })
-        throw new Error('Invalid response structure - missing analysis field')
-      }
-
-      console.log('✅ Idea analyzed successfully:', {
-        type: analysisData.analysis?.type,
-        detectedItems: analysisData.analysis?.detectedItems?.length || 0,
-        fullData: analysisData
-      })
-      
-      toast.dismiss(loadingToast)
-      toast.success('Idea analyzed successfully! Review and confirm your settings below.', { duration: 3000 })
-      
-      // Step 2: Show analysis screen
-      setIdeaAnalysis(analysisData)
-      setShowAnalysisScreen(true)
-      setIsGenerating(false)
-      setGeneratingStory(false)
-      setGenerationStatus('')
-    } catch (error: any) {
-      console.error('❌ Error analyzing idea:', error)
-      toast.dismiss(loadingToast)
-      
-      const errorMessage = error?.message || 'Failed to analyze idea. Please check your connection and try again.'
-      toast.error(errorMessage, { 
-        duration: 5000,
-        icon: '⚠️'
-      })
-      
-      setGenerationStatus('')
-      setGeneratingStory(false)
-      setIsGenerating(false)
-    }
-  }
-
   return (
-    <div className="max-w-4xl mx-auto space-y-8">
+    <div className="max-w-5xl mx-auto space-y-12">
       {/* Header */}
-      <div className="text-center">
-        <h2 className="text-3xl font-bold text-white mb-4">Story Development</h2>
-        <p className="text-gray-400">
-          Develop your idea into a structured story with scenes and characters
+      <div className="text-center space-y-4">
+        <h2 className="text-4xl font-bold text-white tracking-tight">Project Idea</h2>
+        <p className="text-gray-400 text-lg max-w-2xl mx-auto">
+          Define your concept and visual parameters to generate your storyboard.
         </p>
       </div>
 
-      {/* Original Idea */}
-      <div className="bg-[#1A1A24] rounded-2xl p-6 border border-[#00FFF0]/30 shadow-[0_0_10px_rgba(0,255,240,0.1)]">
-        <h3 className="text-xl font-semibold text-white mb-4 flex items-center gap-2">
-          <Sparkles className="w-5 h-5 text-[#00FFF0]" />
-          Your Original Idea
+      <div className="grid lg:grid-cols-3 gap-8">
+        {/* Concept Input */}
+        <div className="lg:col-span-2 space-y-6">
+          <div className="glass-panel rounded-3xl p-8 border-white/5 shadow-2xl">
+            <h3 className="text-xl font-bold text-white mb-6 flex items-center gap-3">
+              <Layers className="w-5 h-5 text-brand-emerald" />
+              Project Concept
         </h3>
         <Textarea
           value={currentProject.story.originalIdea}
           onChange={(e) => updateProject(currentProject.id, {
             story: { ...currentProject.story, originalIdea: e.target.value }
           })}
-          placeholder="Describe your scene, story, or concept..."
-          className="w-full h-32 bg-[#0C0C0C] border-[#00FFF0]/30 text-white placeholder:text-gray-500 
-                   focus:border-[#00FFF0] focus:ring-2 focus:ring-[#00FFF0]/30 focus:outline-none
-                   focus:shadow-[0_0_10px_rgba(0,255,240,0.2)]
-                   rounded-xl px-4 py-3 text-lg resize-none transition-all duration-300"
-        />
-        
-        {/* Don't Generate Images Toggle */}
-        <div className="mt-4 flex items-center gap-2">
+              placeholder="Describe your scene, story, or concept in detail..."
+              className="w-full h-48 bg-brand-obsidian/40 border-white/10 text-white placeholder:text-gray-600 
+                       focus:border-brand-emerald/40 focus:ring-1 focus:ring-brand-emerald/20
+                       rounded-2xl px-6 py-4 text-lg resize-none transition-all duration-300 shadow-inner"
+            />
+            
+            <div className="mt-8 flex flex-col md:flex-row md:items-center justify-between gap-6">
+              <div className="flex items-center gap-3 px-4 py-2 bg-white/5 rounded-xl border border-white/5">
           <Checkbox
             id="dont-generate-images-idea"
             checked={currentProject.settings.dontGenerateImages || false}
             onChange={(e) => updateProject(currentProject.id, {
               settings: { ...currentProject.settings, dontGenerateImages: e.target.checked }
             })}
-          />
-          <label 
-            htmlFor="dont-generate-images-idea" 
-            className="text-sm text-gray-300 cursor-pointer select-none"
-          >
-            Don't generate images
+                  className="border-white/20"
+                />
+                <label htmlFor="dont-generate-images-idea" className="text-sm font-medium text-gray-400 cursor-pointer">
+                  Technical Blueprint Only (No Images)
           </label>
         </div>
 
-        {/* Aspect Ratio Selector */}
-        <div className="mt-6">
-          <label className="block text-sm font-medium text-gray-300 mb-3">
-            Aspect Ratio
-          </label>
-          <div className="flex gap-2">
-            <button
-              onClick={() => handleAspectRatioChange('16:9')}
-              className={`
-                flex items-center gap-2 px-3 py-2 rounded-lg border-2 transition-all
-                ${aspectRatio === '16:9'
-                  ? 'border-[#00FFF0] bg-[#00FFF0]/10 text-[#00FFF0]'
-                  : 'border-[#00FFF0]/30 hover:border-[#00FFF0]/50 bg-[#0C0C0C] text-gray-400 hover:text-white'
-                }
-              `}
+            <Button
+              onClick={handleGenerateStory}
+              disabled={!currentProject.story.originalIdea.trim() || isGenerating}
+              className="btn-primary min-w-[240px] h-14 rounded-2xl flex items-center justify-center gap-3 text-lg"
             >
-              <Monitor className="w-10 h-10" />
-              <span className="text-sm font-medium">16:9</span>
-            </button>
-            <button
-              onClick={() => handleAspectRatioChange('9:16')}
-              className={`
-                flex items-center gap-2 px-3 py-2 rounded-lg border-2 transition-all
-                ${aspectRatio === '9:16'
-                  ? 'border-[#00FFF0] bg-[#00FFF0]/10 text-[#00FFF0]'
-                  : 'border-[#3AAFA9]/30 hover:border-[#3AAFA9] bg-[#0C0C0C] text-gray-400 hover:text-white'
-                }
-              `}
-            >
-              <Smartphone className="w-10 h-10" />
-              <span className="text-sm font-medium">9:16</span>
-            </button>
-            <button
-              onClick={() => handleAspectRatioChange('1:1')}
-              className={`
-                flex items-center gap-2 px-3 py-2 rounded-lg border-2 transition-all
-                ${aspectRatio === '1:1'
-                  ? 'border-[#00FFF0] bg-[#00FFF0]/10 text-[#00FFF0]'
-                  : 'border-[#3AAFA9]/30 hover:border-[#3AAFA9] bg-[#0C0C0C] text-gray-400 hover:text-white'
-                }
-              `}
-            >
-              <Square className="w-10 h-10" />
-              <span className="text-sm font-medium">1:1</span>
-            </button>
+              {isGenerating ? (
+                <>
+                  <div className="w-5 h-5 border-2 border-brand-obsidian/30 border-t-brand-obsidian rounded-full animate-spin" />
+                  Analyzing...
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-5 h-5" />
+                  Generate Storyboard
+                </>
+              )}
+            </Button>
           </div>
         </div>
+
+          {/* Blueprint Output */}
+          {currentProject.story.generatedStory && (
+            <div className="glass-panel rounded-3xl p-8 border-white/5 animate-fade-in">
+              <h3 className="text-xl font-bold text-white mb-6">Active Production Blueprint</h3>
+              <div className="prose prose-invert max-w-none">
+                <pre className="whitespace-pre-wrap text-gray-400 font-mono text-sm leading-relaxed p-6 bg-brand-obsidian/50 rounded-2xl border border-white/5">
+                  {currentProject.story.generatedStory}
+                </pre>
+              </div>
+            </div>
+          )}
       </div>
 
-      {/* Story Settings */}
-      <div className="grid md:grid-cols-3 gap-6">
-        <div className="bg-[#1A1A24] rounded-xl p-4 border border-[#00FFF0]/30 shadow-[0_0_5px_rgba(0,255,240,0.1)]">
-          <label className="block text-sm font-medium text-gray-300 mb-2 flex items-center gap-2">
-            <Clock className="w-4 h-4 text-[#00FFF0]" />
-            Target Runtime (seconds)
+        {/* Studio Settings */}
+        <div className="space-y-6">
+          <div className="glass-card rounded-3xl p-6 space-y-8">
+            <h3 className="text-lg font-bold text-white px-2">Studio Parameters</h3>
+            
+            <div className="space-y-4">
+              <label className="text-sm font-bold text-gray-500 uppercase tracking-widest px-2 flex items-center gap-2">
+                <Clock className="w-4 h-4" /> Runtime
           </label>
+              <div className="relative">
           <Input
             type="number"
             value={targetRuntime}
             onChange={(e) => setTargetRuntime(Number(e.target.value))}
-            className="bg-[#0C0C0C] border-[#00FFF0]/30 text-white focus:border-[#00FFF0] focus:ring-2 focus:ring-[#00FFF0]/30"
+                  className="bg-brand-obsidian/40 border-white/10 text-white rounded-xl h-12 pl-4 pr-12 focus:border-brand-emerald/40"
           />
+                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 text-sm">SEC</span>
+              </div>
         </div>
 
-        <div className="bg-[#1A1A24] rounded-xl p-4 border border-[#00FFF0]/30 shadow-[0_0_5px_rgba(0,255,240,0.1)]">
-          <label className="block text-sm font-medium text-gray-300 mb-2 flex items-center gap-2">
-            <Palette className="w-4 h-4 text-[#00FFF0]" />
-            Tone & Mood
+            <div className="space-y-4">
+              <label className="text-sm font-bold text-gray-500 uppercase tracking-widest px-2 flex items-center gap-2">
+                <Palette className="w-4 h-4" /> Visual Atmosphere
           </label>
           <Input
             value={tone}
             onChange={(e) => setTone(e.target.value)}
-            placeholder="e.g., dramatic, comedic, mysterious"
-            className="bg-[#0C0C0C] border-[#00FFF0]/30 text-white focus:border-[#00FFF0] focus:ring-2 focus:ring-[#00FFF0]/30"
+                placeholder="e.g. Cinematic, Noir, Vibrant"
+                className="bg-brand-obsidian/40 border-white/10 text-white rounded-xl h-12 px-4 focus:border-brand-emerald/40"
           />
         </div>
 
-        <div className="bg-[#1A1A24] rounded-xl p-4 border border-[#00FFF0]/30 shadow-[0_0_5px_rgba(0,255,240,0.1)]">
-          <label className="block text-sm font-medium text-gray-300 mb-2 flex items-center gap-2">
-            <Target className="w-4 h-4 text-[#00FFF0]" />
-            Brand Cues
+            <div className="space-y-4">
+              <label className="text-sm font-bold text-gray-500 uppercase tracking-widest px-2 flex items-center gap-2">
+                <Target className="w-4 h-4" /> Identity Cues
           </label>
           <Input
             value={brandCues}
             onChange={(e) => setBrandCues(e.target.value)}
-            placeholder="e.g., modern, vintage, corporate"
-            className="bg-[#0C0C0C] border-[#00FFF0]/30 text-white focus:border-[#00FFF0] focus:ring-2 focus:ring-[#00FFF0]/30"
+                placeholder="e.g. Modern, Minimalist"
+                className="bg-brand-obsidian/40 border-white/10 text-white rounded-xl h-12 px-4 focus:border-brand-emerald/40"
           />
-        </div>
       </div>
 
-      {/* Generate Button */}
-      <div className="text-center">
-        <Button
-          onClick={(e) => {
-            e.preventDefault()
-            e.stopPropagation()
-            console.log('🔘 Button onClick triggered', {
-              isGenerating,
-              hasIdea: !!currentProject?.story?.originalIdea?.trim(),
-              ideaLength: currentProject?.story?.originalIdea?.trim().length || 0
-            })
-            handleGenerateStory()
-          }}
-          disabled={!currentProject.story.originalIdea.trim() || isGenerating}
-          className="bg-[#00FFF0] hover:bg-[#00FFF0]/90 text-black font-semibold px-8 py-3 rounded-xl
-                   disabled:opacity-50 disabled:cursor-not-allowed"
-          type="button"
-        >
-          {isGenerating ? (
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin" />
-              Generating Story...
+            <div className="space-y-4">
+              <label className="text-sm font-bold text-gray-500 uppercase tracking-widest px-2 flex items-center gap-2">
+                <Layout className="w-4 h-4" /> Frame Ratio
+              </label>
+              <div className="grid grid-cols-3 gap-2">
+                {(['16:9', '9:16', '1:1'] as const).map((ratio) => (
+                  <button
+                    key={ratio}
+                    onClick={() => handleAspectRatioChange(ratio)}
+                    className={`h-12 rounded-xl text-xs font-bold border transition-all ${
+                      aspectRatio === ratio 
+                        ? 'bg-brand-emerald/10 border-brand-emerald/40 text-brand-emerald' 
+                        : 'bg-white/5 border-white/5 text-gray-500 hover:text-white'
+                    }`}
+                  >
+                    {ratio}
+                  </button>
+                ))}
             </div>
-          ) : (
-            <div className="flex items-center gap-2">
-              <Sparkles className="w-4 h-4" />
-              Generate Story Structure
             </div>
-          )}
-        </Button>
       </div>
 
-      {/* Generated Story */}
-      {currentProject.story.generatedStory && (
-        <div className="bg-[#1A1A24] rounded-2xl p-6 border border-[#00FFF0]/30 shadow-[0_0_10px_rgba(0,255,240,0.1)]">
-          <h3 className="text-xl font-semibold text-white mb-4">Generated Story</h3>
-          <div className="prose prose-invert max-w-none">
-            <pre className="whitespace-pre-wrap text-gray-300 font-mono text-sm leading-relaxed">
-              {currentProject.story.generatedStory}
-            </pre>
-          </div>
-        </div>
-      )}
-
-      {/* Characters Section */}
-      <div className="bg-[#1A1A24] rounded-2xl p-6 border border-[#00FFF0]/30 shadow-[0_0_10px_rgba(0,255,240,0.1)]">
-        <h3 className="text-xl font-semibold text-white mb-4 flex items-center gap-2">
-          <Users className="w-5 h-5 text-[#00FFF0]" />
-          Characters
+          {/* Asset Context Summary */}
+          {(assetContext || currentProject.assetContext) && (
+            <div className="glass-card rounded-3xl p-6 animate-fade-in">
+              <h3 className="text-lg font-bold text-white px-2 mb-6 flex items-center justify-between">
+                Deployed Assets
+                <span className="text-[10px] bg-brand-emerald/10 text-brand-emerald px-2 py-1 rounded-full border border-brand-emerald/20 uppercase tracking-tighter">
+                  Active
+                </span>
         </h3>
-        <p className="text-gray-400 mb-4">
-          Characters will be automatically detected from your story. You can add face references later.
-        </p>
-        {currentProject.characters.length === 0 ? (
-          <div className="text-center py-8 text-gray-500">
-            <Users className="w-12 h-12 mx-auto mb-2 opacity-50" />
-            <p>No characters detected yet. Generate your story first.</p>
-          </div>
-        ) : (
-          <div className="grid gap-4">
-            {currentProject.characters.map((character) => (
-              <div key={character.id} className="bg-[#0C0C0C] rounded-xl p-4">
-                <h4 className="font-semibold text-white">{character.name}</h4>
-                <p className="text-gray-400 text-sm">{character.description}</p>
-              </div>
-            ))}
-          </div>
-        )}
+              
+              <div className="space-y-3">
+                {['characters', 'products', 'locations'].map((type) => {
+                  const items = (assetContext || currentProject.assetContext)?.[type as keyof AssetContext] as any[]
+                  if (!items?.length) return null
+                  const Icon = type === 'characters' ? Users : type === 'products' ? Package : MapPin
+                  
+                  return (
+                    <div key={type} className="flex items-center gap-3 p-3 bg-white/5 rounded-2xl border border-white/5">
+                      <div className="w-8 h-8 rounded-lg bg-brand-emerald/10 flex items-center justify-center text-brand-emerald">
+                        <Icon className="w-4 h-4" />
+                    </div>
+                      <div className="flex-1">
+                        <p className="text-xs font-bold text-white capitalize">{type}</p>
+                        <p className="text-[10px] text-gray-500">{items.length} assets mapped</p>
+                </div>
+            </div>
+                  )
+                })}
+                    </div>
+                </div>
+              )}
+            </div>
       </div>
     </div>
   )

@@ -30,8 +30,29 @@ export async function POST(request: NextRequest) {
       
       if (assetContext.characters && Array.isArray(assetContext.characters) && assetContext.characters.length > 0) {
         for (const c of assetContext.characters) {
-          const char = c as { name: string; appearanceDetails?: string; description: string; assetUrl?: string }
-          characterStrings.push(`${char.name}: ${char.appearanceDetails || char.description}. ${char.assetUrl ? 'Use provided reference image for consistency.' : 'Generate based on description.'}`)
+          const char = c as { 
+            name: string; 
+            appearanceDetails?: string; 
+            description: string; 
+            assetUrl?: string;
+            roleInClip?: string;
+            confidence?: string;
+            matchReason?: string;
+          }
+          if (char.assetUrl) {
+            // STRONG emphasis on using reference image for character consistency
+            characterStrings.push(
+              `CRITICAL CHARACTER REFERENCE - ${char.name} (${char.roleInClip || 'character'}): ` +
+              `You MUST use the provided reference image URL to maintain EXACT character appearance consistency. ` +
+              `The reference image shows: ${char.appearanceDetails || char.description}. ` +
+              `The character in this clip MUST match the reference image in facial features, appearance, build, and style. ` +
+              `Reference image URL is provided in the generation request. ` +
+              `This is ESSENTIAL for visual continuity across clips. ` +
+              `Match the character from the reference image exactly, maintaining the same look, facial structure, and appearance.`
+            )
+          } else {
+            characterStrings.push(`${char.name}: ${char.appearanceDetails || char.description}. Generate based on description, but maintain consistency if this character appears in other clips.`)
+          }
         }
       }
       

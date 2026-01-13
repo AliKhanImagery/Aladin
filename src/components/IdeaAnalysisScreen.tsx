@@ -6,41 +6,61 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Checkbox } from '@/components/ui/checkbox'
-import { X, Upload, Sparkles, Palette, Wand2, RefreshCw, User, Package, MapPin } from 'lucide-react'
-import { IdeaAnalysis, DetectedItem, AssetActionState } from '@/types'
+import { 
+  X, 
+  Upload, 
+  Sparkles, 
+  Palette, 
+  Wand2, 
+  RefreshCw, 
+  User, 
+  Package, 
+  MapPin, 
+  CheckCircle2, 
+  Loader2, 
+  Image as ImageIcon,
+  ClipboardList,
+  ChevronRight,
+  ShieldCheck,
+  Trash2,
+  ZoomIn
+} from 'lucide-react'
+import { IdeaAnalysis, DetectedItem, AssetActionState, AssetContext } from '@/types'
 import { supabase } from '@/lib/supabase'
+import { saveUserAsset } from '@/lib/userMedia'
 import toast from 'react-hot-toast'
 
 interface IdeaAnalysisScreenProps {
   analysis: IdeaAnalysis
-  onContinue: (assetContext: any) => void
+  onContinue: (assetContext: AssetContext) => void
   onBack: () => void
 }
 
 export default function IdeaAnalysisScreen({ analysis, onContinue, onBack }: IdeaAnalysisScreenProps) {
-  const { user, updateAnalysisSettings, updateAssetAction, analysisScreenState } = useAppStore()
+  const { user, updateAnalysisSettings, updateAssetAction } = useAppStore()
   
-  // Initialize state from analysis
   const [tone, setTone] = useState<string[]>(analysis.analysis.recommendedTone || [])
   const [brandCues, setBrandCues] = useState<string[]>(analysis.analysis.recommendedBrandCues || [])
   const [toneInput, setToneInput] = useState('')
   const [brandCueInput, setBrandCueInput] = useState('')
   const [settingsConfirmed, setSettingsConfirmed] = useState(false)
   
-  // Initialize asset states from detected items
   const [assets, setAssets] = useState<AssetActionState[]>(() => {
     return analysis.analysis.detectedItems.map(item => ({
       assetId: item.id,
       type: item.type,
       name: item.name,
       role: item.role,
-      action: null,
+      action: 'auto', // Default to auto for the best 'win' experience
       prompt: item.suggestedPrompt,
       error: undefined
     }))
   })
 
-  // Update store when assets change
+  const [uploadStatus, setUploadStatus] = useState<Record<string, 'idle' | 'uploading' | 'uploaded' | 'generating'>>({})
+  const [isGeneratingAutoAssets, setIsGeneratingAutoAssets] = useState(false)
+  const [selectedImageModal, setSelectedImageModal] = useState<{ assetId: string; imageUrl: string; assetName: string } | null>(null)
+
   useEffect(() => {
     updateAnalysisSettings({
       tone,
@@ -50,7 +70,6 @@ export default function IdeaAnalysisScreen({ analysis, onContinue, onBack }: Ide
     })
   }, [tone, brandCues, settingsConfirmed, analysis.analysis.type, updateAnalysisSettings])
 
-  // Handle tone tag management
   const addTone = () => {
     if (toneInput.trim() && !tone.includes(toneInput.trim())) {
       setTone([...tone, toneInput.trim()])
@@ -58,11 +77,6 @@ export default function IdeaAnalysisScreen({ analysis, onContinue, onBack }: Ide
     }
   }
 
-  const removeTone = (index: number) => {
-    setTone(tone.filter((_, i) => i !== index))
-  }
-
-  // Handle brand cue tag management
   const addBrandCue = () => {
     if (brandCueInput.trim() && !brandCues.includes(brandCueInput.trim())) {
       setBrandCues([...brandCues, brandCueInput.trim()])
@@ -70,262 +84,299 @@ export default function IdeaAnalysisScreen({ analysis, onContinue, onBack }: Ide
     }
   }
 
-  const removeBrandCue = (index: number) => {
-    setBrandCues(brandCues.filter((_, i) => i !== index))
-  }
-
-  // Handle asset action selection
   const handleAssetAction = (assetId: string, action: 'upload' | 'generate' | 'remix' | 'auto' | null) => {
     setAssets(assets.map(asset => 
-      asset.assetId === assetId 
-        ? { ...asset, action, error: undefined }
-        : asset
+      asset.assetId === assetId ? { ...asset, action, error: undefined } : asset
     ))
     updateAssetAction(assetId, action)
   }
 
-  // Handle file upload
   const handleFileUpload = async (assetId: string, file: File) => {
     if (!user?.id) {
       toast.error('Please sign in to upload files')
       return
     }
 
-    // Validate file
-    const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp']
-    if (!validTypes.includes(file.type)) {
-      setAssets(assets.map(a => 
-        a.assetId === assetId 
-          ? { ...a, error: 'Invalid file type. Please upload JPG, PNG, or WebP.' }
-          : a
-      ))
-      return
-    }
-
-    const maxSize = 10 * 1024 * 1024 // 10MB
-    if (file.size > maxSize) {
-      setAssets(assets.map(a => 
-        a.assetId === assetId 
-          ? { ...a, error: 'File size too large. Maximum size is 10MB.' }
-          : a
-      ))
-      return
-    }
-
+    console.log(`📤 Starting upload for asset ${assetId}:`, { fileName: file.name, fileSize: file.size })
+    setUploadStatus(prev => ({ ...prev, [assetId]: 'uploading' }))
+    
     try {
-      // Upload to Supabase Storage (using 'assets' bucket or create one)
       const fileExt = file.name.split('.').pop()
       const fileName = `${user.id}/assets/${assetId}/${Date.now()}.${fileExt}`
 
-      const { data, error: uploadError } = await supabase.storage
-        .from('assets')
+      // Try assets bucket first, fallback to avatars if it doesn't exist
+      let bucket = 'assets'
+      let uploadData
+      let uploadError
+
+      console.log(`📦 Uploading to ${bucket} bucket:`, fileName)
+      const { data, error } = await supabase.storage
+        .from(bucket)
         .upload(fileName, file, {
           cacheControl: '3600',
-          upsert: false,
+          upsert: false
         })
 
-      if (uploadError) {
-        // If bucket doesn't exist, try 'avatars' as fallback or create assets bucket
-        console.warn('Assets bucket not found, using avatars as fallback')
-        const fallbackFileName = `${user.id}/assets/${Date.now()}.${fileExt}`
+      uploadData = data
+      uploadError = error
+
+      // If assets bucket fails, try avatars as fallback
+      if (uploadError && (uploadError.message?.includes('not found') || uploadError.message?.includes('Bucket'))) {
+        console.warn(`⚠️ Assets bucket not found, trying avatars bucket...`)
+        bucket = 'avatars'
+        const fallbackFileName = `${user.id}/${assetId}/${Date.now()}.${fileExt}`
+        console.log(`📦 Uploading to fallback ${bucket} bucket:`, fallbackFileName)
         const { data: fallbackData, error: fallbackError } = await supabase.storage
-          .from('avatars')
+          .from(bucket)
           .upload(fallbackFileName, file, {
             cacheControl: '3600',
-            upsert: false,
+            upsert: false
           })
-
-        if (fallbackError) {
-          throw new Error(fallbackError.message)
-        }
-
-        const { data: urlData } = supabase.storage
-          .from('avatars')
-          .getPublicUrl(fallbackData.path)
-
-        setAssets(assets.map(a => 
-          a.assetId === assetId 
-            ? { ...a, resultImageUrl: urlData.publicUrl, uploadedFile: file }
-            : a
-        ))
-        toast.success('File uploaded successfully!')
-        return
+        uploadData = fallbackData
+        uploadError = fallbackError
       }
 
-      const { data: urlData } = supabase.storage
-        .from('assets')
-        .getPublicUrl(data.path)
+      if (uploadError) {
+        console.error('❌ Upload error:', uploadError)
+        throw new Error(uploadError.message || 'Upload failed')
+      }
 
-      setAssets(assets.map(a => 
-        a.assetId === assetId 
-          ? { ...a, resultImageUrl: urlData.publicUrl, uploadedFile: file }
-          : a
+      if (!uploadData) {
+        throw new Error('Upload succeeded but no data returned')
+      }
+
+      console.log(`✅ Upload successful, getting public URL for path:`, uploadData.path)
+      const { data: urlData } = supabase.storage.from(bucket).getPublicUrl(uploadData.path)
+      
+      if (!urlData?.publicUrl) {
+        throw new Error('Failed to get public URL for uploaded file')
+      }
+
+      console.log(`✅ Public URL obtained:`, urlData.publicUrl.substring(0, 50) + '...')
+
+      // Update assets state with the new image URL
+      setAssets(prevAssets => prevAssets.map(a => 
+        a.assetId === assetId ? { ...a, resultImageUrl: urlData.publicUrl, uploadedFile: file } : a
       ))
-      toast.success('File uploaded successfully!')
+
+      // Save to user_assets bin
+      const currentAsset = assets.find(a => a.assetId === assetId)
+      if (currentAsset) {
+        saveUserAsset({
+          name: currentAsset.name,
+          type: currentAsset.type,
+          asset_url: urlData.publicUrl,
+          storage_path: uploadData.path,
+          storage_bucket: bucket,
+          description: analysis.analysis.detectedItems.find(item => item.id === assetId)?.description,
+          metadata: {
+            source: 'upload',
+            originalFilename: file.name,
+          }
+        }).catch(err => console.error('⚠️ Failed to save uploaded asset to library:', err))
+      }
+      
+      // Clear upload status immediately to show the image
+      setUploadStatus(prev => {
+        const newStatus = { ...prev }
+        delete newStatus[assetId] // Remove status entirely to hide loader
+        return newStatus
+      })
+      
+      toast.success('Asset uploaded successfully')
+      console.log(`✅ Upload complete for asset ${assetId}`)
     } catch (error: any) {
-      console.error('Upload error:', error)
-      setAssets(assets.map(a => 
-        a.assetId === assetId 
-          ? { ...a, error: error.message || 'Failed to upload file' }
-          : a
-      ))
-      toast.error('Failed to upload file')
+      console.error('❌ File upload error:', error)
+      // Clear upload status on error
+      setUploadStatus(prev => {
+        const newStatus = { ...prev }
+        delete newStatus[assetId]
+        return newStatus
+      })
+      toast.error(error?.message || 'Failed to upload asset. Please check bucket configuration.')
     }
   }
 
-  // Handle image generation
   const handleGenerateImage = async (asset: AssetActionState) => {
     if (!asset.prompt) {
-      setAssets(assets.map(a => 
-        a.assetId === asset.assetId 
-          ? { ...a, error: 'Please provide a prompt for generation' }
-          : a
-      ))
+      toast.error('Please provide a prompt for generation')
       return
     }
+    setUploadStatus(prev => ({ ...prev, [asset.assetId]: 'generating' }))
 
     try {
+      // Get session token for authentication
+      const { supabase } = await import('@/lib/supabase')
+      const { data: { session } } = await supabase.auth.getSession()
+      const headers: HeadersInit = { 'Content-Type': 'application/json' }
+      if (session?.access_token) {
+        headers['Authorization'] = `Bearer ${session.access_token}`
+      }
+      
       const response = await fetch('/api/generate-image-remix', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers,
         body: JSON.stringify({
           mode: 'text-to-image',
-          prompt: asset.prompt,
+          prompt: `Professional production asset: ${asset.prompt}. Studio quality, photorealistic, 8k resolution.`,
           aspect_ratio: '16:9',
         }),
       })
 
       if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || 'Failed to generate image')
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.error || errorData.details || 'Generation failed')
       }
-
       const { imageUrl } = await response.json()
       
+      if (!imageUrl) {
+        throw new Error('No image URL returned from generation')
+      }
+      
       setAssets(assets.map(a => 
-        a.assetId === asset.assetId 
-          ? { ...a, resultImageUrl: imageUrl }
-          : a
+        a.assetId === asset.assetId ? { ...a, resultImageUrl: imageUrl } : a
       ))
-      toast.success('Image generated successfully!')
+
+      // Save to user_assets bin
+      saveUserAsset({
+        name: asset.name,
+        type: asset.type,
+        asset_url: imageUrl,
+        prompt: asset.prompt,
+        description: analysis.analysis.detectedItems.find(item => item.id === asset.assetId)?.description,
+        metadata: {
+          source: 'generation',
+          generationMode: 'text-to-image',
+        }
+      }).catch(err => console.error('⚠️ Failed to save generated asset to library:', err))
+
+      // Clear upload status after a brief delay to show success
+      setTimeout(() => {
+        setUploadStatus(prev => {
+          const newStatus = { ...prev }
+          delete newStatus[asset.assetId] // Remove status entirely to hide loader
+          return newStatus
+        })
+      }, 500)
+      toast.success('Asset generated successfully')
     } catch (error: any) {
-      console.error('Generation error:', error)
-      setAssets(assets.map(a => 
-        a.assetId === asset.assetId 
-          ? { ...a, error: error.message || 'Failed to generate image' }
-          : a
-      ))
-      toast.error('Failed to generate image')
+      console.error('❌ Generate image error:', error)
+      setUploadStatus(prev => ({ ...prev, [asset.assetId]: 'idle' }))
+      toast.error(error?.message || 'Failed to generate asset image')
     }
   }
 
-  // Handle remix
   const handleRemixImage = async (asset: AssetActionState) => {
-    if (!asset.baseImageUrl && !asset.uploadedFile) {
-      setAssets(assets.map(a => 
-        a.assetId === asset.assetId 
-          ? { ...a, error: 'Please upload a base image to use Remix mode' }
-          : a
-      ))
+    if (!asset.prompt) {
+      toast.error('Please provide a prompt for remix')
       return
     }
 
-    if (!asset.prompt) {
-      setAssets(assets.map(a => 
-        a.assetId === asset.assetId 
-          ? { ...a, error: 'Please provide a prompt for remix' }
-          : a
-      ))
+    // Get base image - prefer uploaded file, then result image, then base image
+    const baseImageUrl = asset.uploadedFile 
+      ? URL.createObjectURL(asset.uploadedFile)
+      : asset.resultImageUrl || asset.baseImageUrl
+
+    if (!baseImageUrl) {
+      toast.error('Please upload or generate an image first to remix')
       return
     }
+
+    setUploadStatus(prev => ({ ...prev, [asset.assetId]: 'generating' }))
 
     try {
-      const baseImageUrl = asset.baseImageUrl || asset.resultImageUrl
-      if (!baseImageUrl) {
-        throw new Error('No base image available')
+      // Get session token for authentication
+      const { supabase } = await import('@/lib/supabase')
+      const { data: { session } } = await supabase.auth.getSession()
+      const headers: HeadersInit = { 'Content-Type': 'application/json' }
+      if (session?.access_token) {
+        headers['Authorization'] = `Bearer ${session.access_token}`
       }
-
+      
       const response = await fetch('/api/generate-image-remix', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers,
         body: JSON.stringify({
           mode: 'remix',
-          prompt: asset.prompt,
-          reference_image_urls: [baseImageUrl],
+          prompt: `Remix this asset: ${asset.prompt}. Maintain visual consistency while applying new style. Professional studio quality, 8k resolution.`,
           aspect_ratio: '16:9',
+          image_url: baseImageUrl, // Reve Remix uses singular image_url
         }),
       })
 
       if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || 'Failed to remix image')
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.error || errorData.details || 'Remix failed')
       }
-
       const { imageUrl } = await response.json()
       
+      if (!imageUrl) {
+        throw new Error('No image URL returned from remix')
+      }
+      
       setAssets(assets.map(a => 
-        a.assetId === asset.assetId 
-          ? { ...a, resultImageUrl: imageUrl }
-          : a
+        a.assetId === asset.assetId ? { ...a, resultImageUrl: imageUrl, baseImageUrl: baseImageUrl } : a
       ))
-      toast.success('Image remixed successfully!')
+
+      // Save to user_assets bin
+      saveUserAsset({
+        name: asset.name,
+        type: asset.type,
+        asset_url: imageUrl,
+        prompt: asset.prompt,
+        description: analysis.analysis.detectedItems.find(item => item.id === asset.assetId)?.description,
+        metadata: {
+          source: 'generation',
+          generationMode: 'remix',
+          baseImageUrl: baseImageUrl
+        }
+      }).catch(err => console.error('⚠️ Failed to save remixed asset to library:', err))
+
+      // Clear upload status after a brief delay to show success
+      setTimeout(() => {
+        setUploadStatus(prev => {
+          const newStatus = { ...prev }
+          delete newStatus[asset.assetId] // Remove status entirely to hide loader
+          return newStatus
+        })
+      }, 500)
+      toast.success('Asset remixed successfully')
     } catch (error: any) {
-      console.error('Remix error:', error)
-      setAssets(assets.map(a => 
-        a.assetId === asset.assetId 
-          ? { ...a, error: error.message || 'Failed to remix image' }
-          : a
-      ))
-      toast.error('Failed to remix image')
+      console.error('❌ Remix image error:', error)
+      setUploadStatus(prev => ({ ...prev, [asset.assetId]: 'idle' }))
+      toast.error(error?.message || 'Failed to remix asset image')
     }
   }
 
-  // Handle continue
-  const handleContinue = () => {
-    if (!settingsConfirmed) {
-      toast.error('Please confirm the settings before continuing')
-      return
-    }
-
-    // Build asset context from assets
-    const assetContext = {
-      characters: assets
-        .filter(a => a.type === 'character')
-        .map(a => ({
-          id: a.assetId,
-          name: a.name,
-          description: analysis.analysis.detectedItems.find(item => item.id === a.assetId)?.description || '',
-          role: (a.role as 'protagonist' | 'antagonist' | 'supporting') || 'supporting',
-          assetUrl: a.resultImageUrl,
-          assetAction: a.action || 'auto',
-          appearanceDetails: a.prompt || analysis.analysis.detectedItems.find(item => item.id === a.assetId)?.suggestedPrompt || '',
-          createdAt: new Date()
-        })),
-      products: assets
-        .filter(a => a.type === 'product')
-        .map(a => ({
-          id: a.assetId,
-          name: a.name,
-          description: analysis.analysis.detectedItems.find(item => item.id === a.assetId)?.description || '',
-          assetUrl: a.resultImageUrl,
-          assetAction: a.action || 'auto',
-          needsExactMatch: analysis.analysis.detectedItems.find(item => item.id === a.assetId)?.needsExactMatch || false,
-          createdAt: new Date()
-        })),
-      locations: assets
-        .filter(a => a.type === 'location')
-        .map(a => ({
-          id: a.assetId,
-          name: a.name,
-          description: analysis.analysis.detectedItems.find(item => item.id === a.assetId)?.description || '',
-          assetUrl: a.resultImageUrl,
-          assetAction: a.action || 'auto',
-          createdAt: new Date()
-        })),
+  const finalizeAndContinue = () => {
+    const assetContext: AssetContext = {
+      characters: assets.filter(a => a.type === 'character').map(a => ({
+        id: a.assetId,
+        name: a.name,
+        description: analysis.analysis.detectedItems.find(item => item.id === a.assetId)?.description || '',
+        role: (a.role as any) || 'supporting',
+        assetUrl: a.resultImageUrl,
+        assetAction: a.action || 'auto',
+        appearanceDetails: a.prompt || '',
+        createdAt: new Date()
+      })),
+      products: assets.filter(a => a.type === 'product').map(a => ({
+        id: a.assetId,
+        name: a.name,
+        description: analysis.analysis.detectedItems.find(item => item.id === a.assetId)?.description || '',
+        assetUrl: a.resultImageUrl,
+        assetAction: a.action || 'auto',
+        needsExactMatch: analysis.analysis.detectedItems.find(item => item.id === a.assetId)?.needsExactMatch || false,
+        createdAt: new Date()
+      })),
+      locations: assets.filter(a => a.type === 'location').map(a => ({
+        id: a.assetId,
+        name: a.name,
+        description: analysis.analysis.detectedItems.find(item => item.id === a.assetId)?.description || '',
+        assetUrl: a.resultImageUrl,
+        assetAction: a.action || 'auto',
+        createdAt: new Date()
+      })),
       settings: {
         tone,
         brandCues,
@@ -333,370 +384,395 @@ export default function IdeaAnalysisScreen({ analysis, onContinue, onBack }: Ide
         confirmed: true
       }
     }
-
     onContinue(assetContext)
   }
 
-  const getAssetIcon = (type: string) => {
-    switch (type) {
-      case 'character':
-        return <User className="w-5 h-5" />
-      case 'product':
-        return <Package className="w-5 h-5" />
-      case 'location':
-        return <MapPin className="w-5 h-5" />
-      default:
-        return <Sparkles className="w-5 h-5" />
+  const handleContinue = async () => {
+    if (!settingsConfirmed) {
+      toast.error('Please confirm the production briefing settings')
+      return
     }
+
+    const pendingAutoAssets = assets.filter(a => a.action === 'auto' && !a.resultImageUrl)
+    if (pendingAutoAssets.length > 0) {
+      setIsGeneratingAutoAssets(true)
+      for (const asset of pendingAutoAssets) {
+        await handleGenerateImage(asset)
+      }
+      setIsGeneratingAutoAssets(false)
+    }
+    finalizeAndContinue()
   }
 
   return (
-    <div className="max-w-5xl mx-auto space-y-8 pb-12">
+    <div className="max-w-6xl mx-auto space-y-12 pb-20 animate-fade-in">
       {/* Header */}
-      <div className="text-center pb-[53px]">
-        <div className="inline-flex items-center justify-center w-16 h-16 bg-[#00FFF0]/10 rounded-full mb-4 shadow-[0_0_20px_rgba(0,255,240,0.3)]">
-          <Sparkles className="w-8 h-8 text-[#00FFF0]" />
+      <div className="text-center space-y-4">
+        <div className="inline-flex items-center justify-center w-20 h-20 bg-brand-emerald/10 rounded-3xl mb-4 glow-emerald">
+          <ClipboardList className="w-10 h-10 text-brand-emerald" />
         </div>
-        <h2 className="text-3xl font-bold text-white mb-2 neon-text">We Analyzed Your Idea!</h2>
-        <p className="text-gray-400">Review and customize the detected elements</p>
+        <h2 className="text-4xl font-bold text-white tracking-tight">Project Analysis</h2>
+        <p className="text-gray-400 text-lg">We've mapped your concept. Confirm your project settings.</p>
       </div>
 
-      {/* Story Preview */}
-      <div className="bg-[#1A1A24] rounded-2xl p-6 border border-[#00FFF0]/30 shadow-[0_0_15px_rgba(0,255,240,0.1)]">
-        <h3 className="text-lg font-semibold text-white mb-2">Story Preview</h3>
-        <p className="text-gray-300 italic">"{analysis.preview}"</p>
-      </div>
-
-      {/* Settings Section */}
-      <div className="bg-[#1A1A24] rounded-2xl p-6 border border-[#00FFF0]/30 shadow-[0_0_15px_rgba(0,255,240,0.1)]">
-        <h3 className="text-xl font-semibold text-white mb-4 flex items-center gap-2">
-          <Palette className="w-5 h-5 text-[#00FFF0]" />
-          Story Settings (AI Recommended)
-        </h3>
-
-        {/* Tone & Mood */}
-        <div className="mb-6">
-          <label className="block text-sm font-medium text-gray-300 mb-2">Tone & Mood</label>
-          <div className="flex flex-wrap gap-2 mb-2">
-            {tone.map((t, index) => (
-              <span
-                key={index}
-                className="inline-flex items-center gap-1 px-3 py-1 bg-[#00FFF0]/10 border border-[#00FFF0]/30 rounded-full text-sm text-[#00FFF0]"
-              >
-                {t}
-                <button
-                  onClick={() => removeTone(index)}
-                  className="hover:text-white transition-colors"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              </span>
-            ))}
-          </div>
-          <div className="flex gap-2">
-            <Input
-              value={toneInput}
-              onChange={(e) => setToneInput(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && addTone()}
-              placeholder="Add tone keyword..."
-              className="bg-[#0C0C0C] border-[#00FFF0]/30 text-white"
-            />
-            <Button
-              onClick={addTone}
-              className="bg-[#00FFF0]/20 hover:bg-[#00FFF0]/30 text-[#00FFF0] border border-[#00FFF0]/30"
-            >
-              Add
-            </Button>
-          </div>
-        </div>
-
-        {/* Brand Cues */}
-        <div className="mb-6">
-          <label className="block text-sm font-medium text-gray-300 mb-2">Brand Cues</label>
-          <div className="flex flex-wrap gap-2 mb-2">
-            {brandCues.map((cue, index) => (
-              <span
-                key={index}
-                className="inline-flex items-center gap-1 px-3 py-1 bg-[#00FFF0]/10 border border-[#00FFF0]/30 rounded-full text-sm text-[#00FFF0]"
-              >
-                {cue}
-                <button
-                  onClick={() => removeBrandCue(index)}
-                  className="hover:text-white transition-colors"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              </span>
-            ))}
-          </div>
-          <div className="flex gap-2">
-            <Input
-              value={brandCueInput}
-              onChange={(e) => setBrandCueInput(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && addBrandCue()}
-              placeholder="Add brand cue..."
-              className="bg-[#0C0C0C] border-[#00FFF0]/30 text-white"
-            />
-            <Button
-              onClick={addBrandCue}
-              className="bg-[#00FFF0]/20 hover:bg-[#00FFF0]/30 text-[#00FFF0] border border-[#00FFF0]/30"
-            >
-              Add
-            </Button>
-          </div>
-        </div>
-
-        {/* Content Type */}
-        <div className="mb-4">
-          <label className="block text-sm font-medium text-gray-300 mb-2">Content Type</label>
-          <span className="inline-block px-3 py-1 bg-[#00FFF0]/10 border border-[#00FFF0]/30 rounded-full text-sm text-[#00FFF0]">
-            {analysis.analysis.type} (detected)
-          </span>
-        </div>
-
-        {/* Confirmation Checkbox */}
-        <div className="flex items-center gap-2 pt-4 border-t border-[#00FFF0]/20">
-          <Checkbox
-            id="confirm-settings"
-            checked={settingsConfirmed}
-            onChange={(e) => setSettingsConfirmed(e.target.checked)}
-          />
-          <label htmlFor="confirm-settings" className="text-sm text-gray-300 cursor-pointer">
-            I confirm these settings
-          </label>
-        </div>
-      </div>
-
-      {/* Detected Assets */}
-      <div>
-        <h3 className="text-xl font-semibold text-white mb-4">📋 Detected Assets</h3>
-        <div className="space-y-4">
-          {assets.map((asset) => {
-            const detectedItem = analysis.analysis.detectedItems.find(item => item.id === asset.assetId)
-            return (
-              <div
-                key={asset.assetId}
-                className="bg-[#1A1A24] rounded-xl p-6 border border-[#00FFF0]/30 shadow-[0_0_10px_rgba(0,255,240,0.1)]"
-              >
-                <div className="flex items-start gap-4 mb-4">
-                  <div className="p-2 bg-[#00FFF0]/10 rounded-lg">
-                    {getAssetIcon(asset.type)}
-                  </div>
-                  <div className="flex-1">
-                    <h4 className="text-lg font-semibold text-white mb-1">
-                      {asset.name}
-                      {asset.role && <span className="text-sm text-gray-400 ml-2">({asset.role})</span>}
-                    </h4>
-                    <p className="text-sm text-gray-400 mb-2">
-                      {detectedItem?.description || 'No description available'}
-                    </p>
-                    {detectedItem?.mentionedInIdea && (
-                      <span className="inline-block px-2 py-0.5 bg-[#00FFF0]/10 border border-[#00FFF0]/30 rounded text-xs text-[#00FFF0]">
-                        Mentioned in your idea
-                      </span>
-                    )}
-                  </div>
+      <div className="grid lg:grid-cols-3 gap-8">
+        {/* Parameters Sidebar */}
+        <div className="space-y-6">
+          <div className="glass-card rounded-3xl p-8 space-y-8">
+            <h3 className="text-xl font-bold text-white flex items-center gap-3">
+              <Palette className="w-5 h-5 text-brand-emerald" />
+              Visual Tone
+            </h3>
+            
+            <div className="space-y-6">
+              <div>
+                <label className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3 block">Visual Atmosphere</label>
+                <div className="flex flex-wrap gap-2 mb-3">
+                  {tone.map((t, idx) => (
+                    <span key={idx} className="inline-flex items-center gap-1 px-3 py-1 bg-brand-emerald/10 border border-brand-emerald/20 rounded-lg text-xs font-bold text-brand-emerald">
+                      {t}
+                      <X className="w-3 h-3 cursor-pointer hover:text-white" onClick={() => setTone(tone.filter((_, i) => i !== idx))} />
+                    </span>
+                  ))}
                 </div>
-
-                {/* Action Buttons */}
-                <div className="flex flex-wrap gap-2 mb-4">
-                  <Button
-                    onClick={() => handleAssetAction(asset.assetId, 'upload')}
-                    variant={asset.action === 'upload' ? 'default' : 'outline'}
-                    className={asset.action === 'upload' 
-                      ? 'bg-[#00FFF0] text-black shadow-[0_0_10px_rgba(0,255,240,0.5)]' 
-                      : 'border-[#00FFF0]/30 text-[#00FFF0] hover:bg-[#00FFF0]/10'}
-                  >
-                    <Upload className="w-4 h-4 mr-2" />
-                    Upload
-                  </Button>
-                  <Button
-                    onClick={() => handleAssetAction(asset.assetId, 'generate')}
-                    variant={asset.action === 'generate' ? 'default' : 'outline'}
-                    className={asset.action === 'generate' 
-                      ? 'bg-[#00FFF0] text-black shadow-[0_0_10px_rgba(0,255,240,0.5)]' 
-                      : 'border-[#00FFF0]/30 text-[#00FFF0] hover:bg-[#00FFF0]/10'}
-                  >
-                    <Sparkles className="w-4 h-4 mr-2" />
-                    Generate
-                  </Button>
-                  <Button
-                    onClick={() => handleAssetAction(asset.assetId, 'remix')}
-                    variant={asset.action === 'remix' ? 'default' : 'outline'}
-                    className={asset.action === 'remix' 
-                      ? 'bg-[#00FFF0] text-black shadow-[0_0_10px_rgba(0,255,240,0.5)]' 
-                      : 'border-[#00FFF0]/30 text-[#00FFF0] hover:bg-[#00FFF0]/10'}
-                  >
-                    <RefreshCw className="w-4 h-4 mr-2" />
-                    Remix
-                  </Button>
-                  <Button
-                    onClick={() => handleAssetAction(asset.assetId, 'auto')}
-                    variant={asset.action === 'auto' ? 'default' : 'outline'}
-                    className={asset.action === 'auto' 
-                      ? 'bg-[#00FFF0] text-black shadow-[0_0_10px_rgba(0,255,240,0.5)]' 
-                      : 'border-[#00FFF0]/30 text-[#00FFF0] hover:bg-[#00FFF0]/10'}
-                  >
-                    Let StoryGinnie decide
-                  </Button>
+                <div className="flex gap-2">
+                  <Input value={toneInput} onChange={(e) => setToneInput(e.target.value)} onKeyPress={(e) => e.key === 'Enter' && addTone()} placeholder="Add tone..." className="bg-brand-obsidian/40 border-white/10 text-white rounded-xl h-10" />
+                  <Button onClick={addTone} className="bg-white/5 hover:bg-white/10 text-white border border-white/10 h-10 px-4">Add</Button>
                 </div>
+              </div>
 
-                {/* Action-specific UI */}
-                {asset.action === 'upload' && (
-                  <div className="mb-4">
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0]
-                        if (file) handleFileUpload(asset.assetId, file)
-                      }}
-                      className="hidden"
-                      id={`upload-${asset.assetId}`}
-                    />
-                    <label
-                      htmlFor={`upload-${asset.assetId}`}
-                      className="inline-flex items-center gap-2 px-4 py-2 bg-[#0C0C0C] border border-[#00FFF0]/30 rounded-lg text-white cursor-pointer hover:bg-[#00FFF0]/10 transition-colors"
-                    >
-                      <Upload className="w-4 h-4" />
-                      Choose File
-                    </label>
-                    {asset.resultImageUrl && (
-                      <div className="mt-2">
-                        <img src={asset.resultImageUrl} alt={asset.name} className="w-32 h-32 object-cover rounded-lg" />
+              <div>
+                <label className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3 block">Identity Cues</label>
+                <div className="flex flex-wrap gap-2 mb-3">
+                  {brandCues.map((cue, idx) => (
+                    <span key={idx} className="inline-flex items-center gap-1 px-3 py-1 bg-brand-amber/10 border border-brand-amber/20 rounded-lg text-xs font-bold text-brand-amber">
+                      {cue}
+                      <X className="w-3 h-3 cursor-pointer hover:text-white" onClick={() => setBrandCues(brandCues.filter((_, i) => i !== idx))} />
+                    </span>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <Input value={brandCueInput} onChange={(e) => setBrandCueInput(e.target.value)} onKeyPress={(e) => e.key === 'Enter' && addBrandCue()} placeholder="Add cue..." className="bg-brand-obsidian/40 border-white/10 text-white rounded-xl h-10" />
+                  <Button onClick={addBrandCue} className="bg-white/5 hover:bg-white/10 text-white border border-white/10 h-10 px-4">Add</Button>
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-6 border-t border-white/5 flex items-center gap-3">
+              <Checkbox id="confirm-briefing" checked={settingsConfirmed} onChange={(e) => setSettingsConfirmed(e.target.checked)} className="border-white/20" />
+              <label htmlFor="confirm-briefing" className="text-sm font-medium text-gray-400 cursor-pointer">Confirm briefing parameters</label>
+            </div>
+          </div>
+        </div>
+
+        {/* Asset Grid */}
+        <div className="lg:col-span-2 space-y-6">
+          <div className="flex items-center justify-between px-2">
+            <h3 className="text-xl font-bold text-white flex items-center gap-3">
+              <ShieldCheck className="w-5 h-5 text-brand-emerald" />
+              Project Assets
+            </h3>
+            <span className="text-xs text-gray-500 font-bold uppercase tracking-widest">{assets.length} Elements Detected</span>
+          </div>
+
+          <div className="grid sm:grid-cols-2 gap-4">
+            {assets.map((asset) => {
+              const Icon = asset.type === 'character' ? User : asset.type === 'product' ? Package : MapPin
+              const status = uploadStatus[asset.assetId] || 'idle'
+              const hasImage = !!asset.resultImageUrl
+
+              return (
+                <div key={asset.assetId} className="glass-card rounded-3xl p-6 border-white/5 group relative">
+                  <div className="aspect-video rounded-2xl bg-brand-obsidian/60 border border-white/5 mb-6 overflow-hidden relative group/image-container">
+                    {hasImage ? (
+                      <>
+                        <img 
+                          src={asset.resultImageUrl} 
+                          alt={asset.name} 
+                          className="w-full h-full object-cover cursor-pointer transition-transform duration-300 group-hover/image-container:scale-105" 
+                          onClick={() => setSelectedImageModal({ 
+                            assetId: asset.assetId, 
+                            imageUrl: asset.resultImageUrl, 
+                            assetName: asset.name 
+                          })}
+                          onError={(e) => {
+                            console.error('❌ Image failed to load:', asset.resultImageUrl)
+                            // Clear the image URL if it fails to load
+                            setAssets(prevAssets => prevAssets.map(a => 
+                              a.assetId === asset.assetId ? { ...a, resultImageUrl: undefined } : a
+                            ))
+                            toast.error('Failed to load image. Please try uploading again.')
+                          }}
+                          onLoad={() => {
+                            console.log('✅ Image loaded successfully:', asset.resultImageUrl?.substring(0, 50))
+                          }}
+                        />
+                        <div className="absolute inset-0 bg-black/0 group-hover/image-container:bg-black/20 transition-all duration-300 flex items-center justify-center opacity-0 group-hover/image-container:opacity-100">
+                          <div className="flex items-center gap-2">
+                            <ZoomIn className="w-5 h-5 text-white" />
+                            <span className="text-xs font-bold text-white uppercase tracking-wider">Click to View</span>
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="w-full h-full flex flex-col items-center justify-center text-gray-600">
+                        <ImageIcon className="w-8 h-8 mb-2 opacity-20" />
+                        <span className="text-[10px] uppercase font-bold tracking-widest opacity-40">Awaiting Visualization</span>
                       </div>
                     )}
-                  </div>
-                )}
-
-                {asset.action === 'generate' && (
-                  <div className="mb-4">
-                    <Textarea
-                      value={asset.prompt || ''}
-                      onChange={(e) => {
-                        setAssets(assets.map(a => 
-                          a.assetId === asset.assetId 
-                            ? { ...a, prompt: e.target.value }
-                            : a
-                        ))
-                      }}
-                      placeholder="Edit the prompt for generation..."
-                      className="w-full h-24 bg-[#0C0C0C] border-[#00FFF0]/30 text-white mb-2"
-                    />
-                    <Button
-                      onClick={() => handleGenerateImage(asset)}
-                      className="bg-[#00FFF0] hover:bg-[#00FFF0]/90 text-black font-semibold"
-                    >
-                      <Wand2 className="w-4 h-4 mr-2" />
-                      Generate Image
-                    </Button>
-                    {asset.resultImageUrl && (
-                      <div className="mt-2">
-                        <img src={asset.resultImageUrl} alt={asset.name} className="w-32 h-32 object-cover rounded-lg" />
+                    {(status === 'uploading' || status === 'generating') && !hasImage ? (
+                      <div className="absolute inset-0 bg-brand-obsidian/80 backdrop-blur-sm flex items-center justify-center z-10">
+                        <div className="text-center">
+                          <Loader2 className="w-6 h-6 text-brand-emerald animate-spin mx-auto mb-2" />
+                          <span className="text-xs text-brand-emerald font-bold uppercase tracking-wider">
+                            {status === 'uploading' ? 'Uploading...' : 'Generating...'}
+                          </span>
+                        </div>
                       </div>
-                    )}
+                    ) : null}
+                    {/* Show loader overlay only if image is loading (not if image exists) */}
+                    {(status === 'uploading' || status === 'generating') && hasImage ? (
+                      <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px] flex items-center justify-center z-20 pointer-events-none">
+                        <div className="text-center">
+                          <Loader2 className="w-5 h-5 text-brand-emerald animate-spin mx-auto mb-1" />
+                          <span className="text-[10px] text-brand-emerald font-bold uppercase tracking-wider">
+                            {status === 'uploading' ? 'Processing...' : 'Generating...'}
+                          </span>
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
-                )}
 
-                {asset.action === 'remix' && (
-                  <div className="mb-4">
-                    <div className="mb-2">
-                      <label className="block text-sm text-gray-300 mb-1">Base Image</label>
-                      <input
-                        type="file"
+                  <div className="flex items-start gap-4 mb-6">
+                    <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center text-gray-400 group-hover:text-brand-emerald transition-colors">
+                      <Icon className="w-5 h-5" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h4 className="text-sm font-bold text-white truncate">{asset.name}</h4>
+                      <p className="text-[10px] text-gray-500 uppercase font-bold tracking-tighter mt-1">{asset.type} {asset.role ? `• ${asset.role}` : ''}</p>
+                    </div>
+                  </div>
+
+                  {/* Character Detail Prompt Editor */}
+                  {asset.type === 'character' && (
+                    <div className="mb-4 space-y-2">
+                      <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest block">
+                        Character Appearance Details
+                      </label>
+                      <Textarea
+                        value={asset.prompt || ''}
+                        onChange={(e) => {
+                          setAssets(assets.map(a => 
+                            a.assetId === asset.assetId ? { ...a, prompt: e.target.value } : a
+                          ))
+                        }}
+                        placeholder="Describe the character's appearance, style, clothing, features..."
+                        rows={3}
+                        className="bg-brand-obsidian/40 border-white/10 text-white text-xs rounded-xl resize-none focus:border-brand-emerald/40"
+                      />
+                    </div>
+                  )}
+
+                  {/* Action Buttons */}
+                  <div className="grid grid-cols-2 gap-2 mb-3">
+                    <button 
+                      onClick={() => handleAssetAction(asset.assetId, 'auto')}
+                      className={`h-9 rounded-xl text-[10px] font-bold uppercase transition-all ${asset.action === 'auto' ? 'bg-brand-emerald/10 border-brand-emerald/40 text-brand-emerald border' : 'bg-white/5 text-gray-500 hover:text-white border border-white/5'}`}
+                    >
+                      Auto
+                    </button>
+                    <button 
+                      onClick={() => handleAssetAction(asset.assetId, 'generate')}
+                      className={`h-9 rounded-xl text-[10px] font-bold uppercase transition-all ${asset.action === 'generate' ? 'bg-brand-emerald/10 border-brand-emerald/40 text-brand-emerald border' : 'bg-white/5 text-gray-500 hover:text-white border border-white/5'}`}
+                    >
+                      Generate
+                    </button>
+                    <button 
+                      onClick={() => handleAssetAction(asset.assetId, 'upload')}
+                      className={`h-9 rounded-xl text-[10px] font-bold uppercase transition-all ${asset.action === 'upload' ? 'bg-brand-emerald/10 border-brand-emerald/40 text-brand-emerald border' : 'bg-white/5 text-gray-500 hover:text-white border border-white/5'}`}
+                    >
+                      Upload
+                    </button>
+                    <button 
+                      onClick={() => handleAssetAction(asset.assetId, 'remix')}
+                      disabled={!asset.resultImageUrl && !asset.uploadedFile && !asset.baseImageUrl}
+                      className={`h-9 rounded-xl text-[10px] font-bold uppercase transition-all ${asset.action === 'remix' ? 'bg-brand-emerald/10 border-brand-emerald/40 text-brand-emerald border' : 'bg-white/5 text-gray-500 hover:text-white border border-white/5'} ${!asset.resultImageUrl && !asset.uploadedFile && !asset.baseImageUrl ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    >
+                      Remix
+                    </button>
+                  </div>
+
+                  {/* Action-specific UI */}
+                  {asset.action === 'upload' && (
+                    <div className="mt-2 pt-3 border-t border-white/5">
+                      <input 
+                        type="file" 
+                        id={`up-${asset.assetId}`} 
+                        className="hidden" 
                         accept="image/*"
                         onChange={(e) => {
                           const file = e.target.files?.[0]
                           if (file) {
-                            const reader = new FileReader()
-                            reader.onload = (e) => {
-                              setAssets(assets.map(a => 
-                                a.assetId === asset.assetId 
-                                  ? { ...a, baseImageUrl: e.target?.result as string, uploadedFile: file }
-                                  : a
-                              ))
-                            }
-                            reader.readAsDataURL(file)
+                            handleFileUpload(asset.assetId, file)
                           }
-                        }}
-                        className="hidden"
-                        id={`remix-base-${asset.assetId}`}
+                        }} 
                       />
-                      <label
-                        htmlFor={`remix-base-${asset.assetId}`}
-                        className="inline-flex items-center gap-2 px-4 py-2 bg-[#0C0C0C] border border-[#00FFF0]/30 rounded-lg text-white cursor-pointer hover:bg-[#00FFF0]/10 transition-colors"
+                      <label 
+                        htmlFor={`up-${asset.assetId}`} 
+                        className="flex items-center justify-center gap-2 h-10 bg-brand-obsidian/60 border border-white/10 rounded-xl text-xs font-bold text-white cursor-pointer hover:bg-white/5 transition-all"
                       >
-                        <Upload className="w-4 h-4" />
-                        Upload Base Image
+                        <Upload className="w-3 h-3" /> 
+                        {status === 'uploading' ? 'Uploading...' : 'Select Frame'}
                       </label>
                     </div>
-                    <Textarea
-                      value={asset.prompt || ''}
-                      onChange={(e) => {
-                        setAssets(assets.map(a => 
-                          a.assetId === asset.assetId 
-                            ? { ...a, prompt: e.target.value }
-                            : a
-                        ))
-                      }}
-                      placeholder="Edit the prompt for remix..."
-                      className="w-full h-24 bg-[#0C0C0C] border-[#00FFF0]/30 text-white mb-2"
-                    />
-                    <Button
-                      onClick={() => handleRemixImage(asset)}
-                      className="bg-[#00FFF0] hover:bg-[#00FFF0]/90 text-black font-semibold"
-                    >
-                      <RefreshCw className="w-4 h-4 mr-2" />
-                      Remix Image
-                    </Button>
-                    {!asset.baseImageUrl && !asset.uploadedFile && (
-                      <div className="mt-2 p-3 bg-[#00FFF0]/10 border border-[#00FFF0]/30 rounded-lg">
-                        <p className="text-sm text-[#00FFF0]">⚠️ Please upload a base image to use Remix mode</p>
-                        <p className="text-xs text-gray-400 mt-1">
-                          ℹ️ Remix mode requires a base image. You can upload one or use Generate mode instead.
-                        </p>
-                      </div>
-                    )}
-                    {asset.resultImageUrl && (
-                      <div className="mt-2">
-                        <img src={asset.resultImageUrl} alt={asset.name} className="w-32 h-32 object-cover rounded-lg" />
-                      </div>
-                    )}
-                  </div>
-                )}
+                  )}
 
-                {/* Error Display */}
-                {asset.error && (
-                  <div className="mt-2 p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
-                    <p className="text-sm text-red-400">{asset.error}</p>
-                  </div>
-                )}
-              </div>
-            )
-          })}
+                  {asset.action === 'generate' && (
+                    <div className="mt-2 pt-3 border-t border-white/5">
+                      <button
+                        onClick={() => handleGenerateImage(asset)}
+                        disabled={!asset.prompt || status === 'generating'}
+                        className="w-full flex items-center justify-center gap-2 h-10 bg-brand-obsidian/60 border border-white/10 rounded-xl text-xs font-bold text-white cursor-pointer hover:bg-white/5 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {status === 'generating' ? (
+                          <>
+                            <Loader2 className="w-3 h-3 animate-spin" /> Generating...
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles className="w-3 h-3" /> Generate Image
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  )}
+
+                  {asset.action === 'remix' && (
+                    <div className="mt-2 pt-3 border-t border-white/5">
+                      <button
+                        onClick={() => handleRemixImage(asset)}
+                        disabled={(!asset.resultImageUrl && !asset.uploadedFile && !asset.baseImageUrl) || status === 'generating' || !asset.prompt}
+                        className="w-full flex items-center justify-center gap-2 h-10 bg-brand-obsidian/60 border border-white/10 rounded-xl text-xs font-bold text-white cursor-pointer hover:bg-white/5 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {status === 'generating' ? (
+                          <>
+                            <Loader2 className="w-3 h-3 animate-spin" /> Remixing...
+                          </>
+                        ) : (
+                          <>
+                            <RefreshCw className="w-3 h-3" /> Remix Image
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
         </div>
       </div>
 
-      {/* Action Buttons */}
-      <div className="flex justify-between items-center pt-6 border-t border-[#00FFF0]/20">
-        <Button
-          onClick={onBack}
-          variant="outline"
-          className="border-[#00FFF0]/30 text-[#00FFF0] hover:bg-[#00FFF0]/10"
-        >
-          ← Back
-        </Button>
-        <Button
-          onClick={handleContinue}
-          disabled={!settingsConfirmed}
-          className="bg-[#00FFF0] hover:bg-[#00FFF0]/90 text-black font-semibold px-8 py-3 rounded-xl
-                   shadow-[0_0_15px_rgba(0,255,240,0.5)] hover:shadow-[0_0_25px_rgba(0,255,240,0.8)]
-                   disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none transition-all duration-300"
-        >
-          Continue to Story →
+      {/* Action Footer */}
+      <div className="flex items-center justify-between pt-12 border-t border-white/5">
+        <button onClick={onBack} className="flex items-center gap-2 text-sm font-bold text-gray-500 hover:text-white transition-colors">
+          Cancel
+        </button>
+        <Button onClick={handleContinue} disabled={!settingsConfirmed || isGeneratingAutoAssets} className="btn-primary min-w-[300px] h-14 rounded-2xl flex items-center justify-center gap-3 text-lg">
+          {isGeneratingAutoAssets ? (
+            <><Loader2 className="w-5 h-5 animate-spin" /> Generating Assets...</>
+          ) : (
+            <>Continue to Storyboard <ChevronRight className="w-5 h-5" /></>
+          )}
         </Button>
       </div>
+
+      {/* Image Zoom Modal */}
+      {selectedImageModal && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4"
+          onClick={() => setSelectedImageModal(null)}
+        >
+          <div 
+            className="relative max-w-4xl max-h-[90vh] w-full bg-brand-obsidian rounded-3xl border border-white/10 overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between p-6 border-b border-white/10">
+              <div>
+                <h3 className="text-xl font-bold text-white">{selectedImageModal.assetName}</h3>
+                <p className="text-sm text-gray-400 mt-1">Click outside to close</p>
+              </div>
+              <button
+                onClick={() => setSelectedImageModal(null)}
+                className="w-10 h-10 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 flex items-center justify-center text-white transition-all"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Image */}
+            <div className="relative bg-brand-obsidian/60 p-8 flex items-center justify-center min-h-[400px]">
+              <img 
+                src={selectedImageModal.imageUrl} 
+                alt={selectedImageModal.assetName}
+                className="max-w-full max-h-[60vh] object-contain rounded-xl"
+              />
+            </div>
+
+            {/* Actions */}
+            <div className="p-6 border-t border-white/10 flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={async () => {
+                    const asset = assets.find(a => a.assetId === selectedImageModal.assetId)
+                    if (asset) {
+                      // Delete the image
+                      setAssets(assets.map(a => 
+                        a.assetId === selectedImageModal.assetId 
+                          ? { ...a, resultImageUrl: undefined, uploadedFile: undefined, baseImageUrl: undefined } 
+                          : a
+                      ))
+                      toast.success('Image removed')
+                      setSelectedImageModal(null)
+                    }
+                  }}
+                  className="flex items-center gap-2 px-4 py-2 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-400 rounded-xl text-sm font-bold transition-all"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  Delete Image
+                </button>
+                <button
+                  onClick={() => {
+                    const asset = assets.find(a => a.assetId === selectedImageModal.assetId)
+                    if (asset) {
+                      handleAssetAction(selectedImageModal.assetId, 'upload')
+                      setSelectedImageModal(null)
+                      // Trigger file input
+                      setTimeout(() => {
+                        const fileInput = document.getElementById(`up-${selectedImageModal.assetId}`) as HTMLInputElement
+                        if (fileInput) {
+                          fileInput.click()
+                        }
+                      }, 100)
+                    }
+                  }}
+                  className="flex items-center gap-2 px-4 py-2 bg-brand-emerald/10 hover:bg-brand-emerald/20 border border-brand-emerald/30 text-brand-emerald rounded-xl text-sm font-bold transition-all"
+                >
+                  <Upload className="w-4 h-4" />
+                  Upload New
+                </button>
+              </div>
+              <button
+                onClick={() => setSelectedImageModal(null)}
+                className="px-6 py-2 bg-white/5 hover:bg-white/10 border border-white/10 text-white rounded-xl text-sm font-bold transition-all"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
-

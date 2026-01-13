@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { fal } from '@fal-ai/client'
+import { createClient } from '@supabase/supabase-js'
+import { downloadAndStoreMedia, getServerSupabaseClient } from '@/lib/mediaStorage'
+import { quickStorageCheck } from '@/lib/storageHealthCheck'
 
 // Configure Fal AI client
 if (process.env.FAL_KEY) {
@@ -15,9 +18,76 @@ if (process.env.FAL_KEY) {
   console.warn('⚠️ FAL_KEY environment variable not set')
 }
 
+// Create server-side Supabase client
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+const supabase = createClient(supabaseUrl, supabaseServiceKey)
+
+/**
+ * Get authenticated user from request
+ */
+async function getAuthenticatedUser(request: NextRequest) {
+  try {
+    // Check Authorization header
+    const authHeader = request.headers.get('authorization')
+    if (authHeader?.startsWith('Bearer ')) {
+      const token = authHeader.substring(7)
+      const supabase = createClient(supabaseUrl, supabaseServiceKey)
+      const { data: { user }, error } = await supabase.auth.getUser(token)
+      if (user && !error) {
+        return user
+      }
+    }
+    
+    // Try cookies as fallback
+    const cookieHeader = request.headers.get('cookie') || ''
+    const projectRef = supabaseUrl.split('//')[1]?.split('.')[0] || ''
+    const cookiePattern = new RegExp(`sb-${projectRef.replace(/[^a-z0-9]/gi, '')}-auth-token=([^;]+)`, 'i')
+    const match = cookieHeader.match(cookiePattern) || cookieHeader.match(/sb-[^-]+-auth-token=([^;]+)/i)
+    
+    if (match && match[1]) {
+      try {
+        const sessionData = JSON.parse(decodeURIComponent(match[1]))
+        const accessToken = sessionData.access_token || sessionData.accessToken
+        if (accessToken) {
+          const supabase = createClient(supabaseUrl, supabaseServiceKey)
+          const { data: { user }, error } = await supabase.auth.getUser(accessToken)
+          if (user && !error) {
+            return user
+          }
+        }
+      } catch {
+        const supabase = createClient(supabaseUrl, supabaseServiceKey)
+        const { data: { user }, error } = await supabase.auth.getUser(match[1])
+        if (user && !error) {
+          return user
+        }
+      }
+    }
+    
+    return null
+  } catch (error: any) {
+    console.error('❌ Error getting authenticated user:', error.message)
+    return null
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     console.log('🎬 /api/generate-video: Request received')
+    
+    // Step 1: Authentication Check
+    const user = await getAuthenticatedUser(request)
+    if (!user) {
+      console.error('❌ Video generation API: Authentication failed - no user found')
+      return NextResponse.json(
+        { error: 'Unauthorized', details: 'User authentication required. Please log in.' },
+        { status: 401 }
+      )
+    }
+
+    const userId = user.id
+    console.log(`✅ Video generation API: User authenticated (${userId.substring(0, 8)}...)`)
     
     // Parse request body with error handling
     let requestBody
@@ -54,7 +124,20 @@ export async function POST(request: NextRequest) {
       movement_amplitude = 'auto',
       seed,
       videoModel = 'vidu', // 'vidu' or 'kling'
+      project_id,
+      clip_id,
     } = requestBody
+
+    // Step 2: Quick Storage Check (before generation to prevent wasted API calls)
+    // IMPORTANT: This should be a warning only, not a hard error, so video generation still works.
+    const storageReady = await quickStorageCheck(userId)
+    if (!storageReady) {
+      console.error('❌ Video generation API: Storage system not fully ready')
+      console.warn('⚠️ Proceeding with generation. Videos may fall back to Fal.ai URLs if storage fails.')
+      // Do NOT return here - let generation proceed and handle storage errors gracefully.
+    } else {
+      console.log('✅ Storage system ready - videos will be stored in Supabase Storage when possible')
+    }
 
     console.log('🎬 /api/generate-video: Extracted parameters', {
       hasPrompt: !!prompt,
@@ -688,6 +771,167 @@ export async function POST(request: NextRequest) {
 
     console.log('✅ Fal AI video generated:', videoUrl)
 
+    // Step 3: IMMEDIATE STORAGE (Industry Standard - store before returning)
+    let finalVideoUrl = videoUrl
+    let storageSuccess = false
+    let storagePath: string | null = null
+    let storageBucket: string | null = null
+    let finalThumbnailUrl: string | null = null
+
+    try {
+      console.log(`📦 Storing video in Supabase Storage for user ${userId.substring(0, 8)}...`)
+      
+      // Get user's access token from Authorization header for RLS policy compliance
+      // Industry Standard: Use user's token so auth.uid() works in RLS policies
+      const authHeader = request.headers.get('authorization')
+      const accessToken = authHeader?.startsWith('Bearer ') 
+        ? authHeader.substring(7) 
+        : undefined
+      
+      if (!accessToken) {
+        console.warn('⚠️ No access token available - storage may fail RLS check')
+      }
+      
+      const storageResult = await downloadAndStoreMedia(
+        videoUrl, // Fal.ai temporary URL
+        userId,
+        'video',
+        {
+          projectId: project_id,
+          clipId: clip_id,
+          contentType: 'video/mp4',
+          accessToken,  // Pass user's access token for RLS compliance
+        }
+      )
+
+      if (storageResult.success && storageResult.publicUrl) {
+        finalVideoUrl = storageResult.publicUrl
+        storagePath = storageResult.storagePath || null
+        storageBucket = storageResult.bucket || null
+        storageSuccess = true
+
+        console.log(`✅ Video stored in Supabase Storage:`, {
+          storagePath,
+          bucket: storageBucket,
+          publicUrl: finalVideoUrl.substring(0, 50) + '...'
+        })
+
+        // Step 4: Save metadata to database (only when storage succeeded)
+        try {
+          // Use authenticated client to respect RLS
+          const authHeader = request.headers.get('authorization')
+          const accessToken = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : undefined
+          const supabase = await getServerSupabaseClient(accessToken)
+          
+          let modelName = 'fal-ai-vidu-text-to-video'
+          if (videoModel === 'kling') {
+            modelName = 'fal-ai-kling-v1.6-standard-elements'
+          } else if (reference_image_urls.length > 0) {
+            modelName = 'fal-ai-vidu-reference-to-video'
+          } else if (image_url) {
+            modelName = 'fal-ai-vidu-image-to-video'
+          }
+
+          const { data: dbData, error: dbError } = await supabase
+            .from('user_videos')
+            .insert({
+              user_id: userId,
+              video_url: finalVideoUrl, // Supabase permanent URL
+              storage_path: storagePath,
+              storage_bucket: storageBucket,
+              prompt: prompt || null,
+              model: modelName,
+              duration: result.data?.duration || duration || null,
+              aspect_ratio: aspect_ratio || null,
+              thumbnail_url: finalThumbnailUrl,
+              project_id: project_id || null,
+              clip_id: clip_id || null,
+              metadata: {
+                falRequestId: result.requestId,
+                videoModel,
+                resolution,
+              }
+            })
+            .select()
+            .single()
+
+          if (dbError) {
+            console.error('❌ Failed to save video metadata to database:', dbError)
+            // Continue - file is stored, just metadata failed
+          } else {
+            console.log(`✅ Video metadata saved to database:`, { videoId: dbData?.id })
+          }
+        } catch (dbException: any) {
+          console.error('❌ Exception saving video metadata:', dbException)
+          // Continue - file is stored, just metadata failed
+        }
+      } else {
+        console.warn('⚠️ Storage failed, using Fal.ai URL as fallback:', storageResult.error)
+        // Continue with Fal.ai URL as fallback
+      }
+    } catch (storageException: any) {
+      console.error('❌ Exception during storage:', storageException)
+      // Continue with Fal.ai URL as fallback
+    }
+
+    // Ensure video metadata is saved to user_videos even if storage failed
+    // This keeps the Master Bin in sync, using Fal.ai URLs as a fallback when needed.
+    if (!storageSuccess) {
+      try {
+        console.log('📚 Saving video metadata to user_videos with Fal.ai URL fallback...')
+        
+        // Use authenticated client to respect RLS
+        const authHeader = request.headers.get('authorization')
+        const accessToken = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : undefined
+        const supabase = await getServerSupabaseClient(accessToken)
+        
+        let modelName = 'fal-ai-vidu-text-to-video'
+        if (videoModel === 'kling') {
+          modelName = 'fal-ai-kling-v1.6-standard-elements'
+        } else if (reference_image_urls.length > 0) {
+          modelName = 'fal-ai-vidu-reference-to-video'
+        } else if (image_url) {
+          modelName = 'fal-ai-vidu-image-to-video'
+        }
+
+        const { data: dbData, error: dbError } = await supabase
+          .from('user_videos')
+          .insert({
+            user_id: userId,
+            video_url: finalVideoUrl, // Fal.ai URL (temporary) or Supabase URL if storage somehow succeeded
+            storage_path: storagePath, // May be null if storage failed
+            storage_bucket: storageBucket, // May be null if storage failed
+            prompt: prompt || null,
+            model: modelName,
+            duration: result.data?.duration || duration || null,
+            aspect_ratio: aspect_ratio || null,
+            thumbnail_url: finalThumbnailUrl,
+            project_id: project_id || null,
+            clip_id: clip_id || null,
+            metadata: {
+              falRequestId: result.requestId,
+              videoModel,
+              resolution,
+              storageSuccess,
+              storageError: storageSuccess ? null : 'Storage failed - using Fal.ai URL as fallback',
+            }
+          })
+          .select()
+          .single()
+
+        if (dbError) {
+          console.error('❌ Failed to save video metadata (fallback) to database:', dbError)
+        } else {
+          console.log(`✅ Video metadata saved to database (fallback):`, { videoId: dbData?.id })
+        }
+      } catch (fallbackDbException: any) {
+        console.error('❌ Exception saving video metadata (fallback):', {
+          message: fallbackDbException.message,
+          stack: fallbackDbException.stack?.substring(0, 200),
+        })
+      }
+    }
+
     // Determine model name for response
     let modelName = 'fal-ai-vidu-text-to-video'
     if (videoModel === 'kling') {
@@ -698,9 +942,14 @@ export async function POST(request: NextRequest) {
       modelName = 'fal-ai-vidu-image-to-video'
     }
 
+    // Return response with Supabase URL (or Fal.ai URL as fallback)
     return NextResponse.json({
       success: true,
-      videoUrl,
+      videoUrl: finalVideoUrl, // Supabase URL if storage succeeded, Fal.ai URL otherwise
+      storageSuccess, // Flag indicating if storage succeeded
+      storagePath,
+      storageBucket,
+      fallbackUrl: !storageSuccess, // True if using Fal.ai URL as fallback
       model: modelName,
       requestId: result.requestId,
       duration: result.data?.duration || duration,
@@ -764,13 +1013,19 @@ export async function POST(request: NextRequest) {
     const klingInput = error.klingInput || null
     const validationMessage = error.validationMessage || null
     
+    // Determine appropriate status code
+    const statusCode = error.status || error.statusCode || 
+      (error.name === 'ValidationError' ? 422 : 
+       error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED' ? 503 :
+       500)
+    
     // Build response with all available error info
     const errorResponse: any = {
       error: 'Failed to generate video',
       details: errorMessage,
       falAiError: errorDetails,
       errorType: error.name || error.code || 'UnknownError',
-      statusCode: error.status || error.statusCode || 500,
+      statusCode, // Always include statusCode in response
     }
     
     // Add Kling-specific details if available
@@ -787,6 +1042,7 @@ export async function POST(request: NextRequest) {
       errorResponse.fullError = JSON.stringify(error.falAiDetails, null, 2).substring(0, 2000)
     }
     
-    return NextResponse.json(errorResponse, { status: 500 })
+    // Use the determined statusCode instead of hardcoded 500
+    return NextResponse.json(errorResponse, { status: statusCode })
   }
 }

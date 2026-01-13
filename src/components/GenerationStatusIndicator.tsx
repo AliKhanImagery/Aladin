@@ -1,19 +1,64 @@
 'use client'
 
+import { useEffect } from 'react'
 import { useAppStore } from '@/lib/store'
 import { Sparkles, CheckCircle2 } from 'lucide-react'
 
 export default function GenerationStatusIndicator() {
-  const { isGeneratingStory, generationStatus, generationProgress } = useAppStore()
-
-  if (!isGeneratingStory) return null
+  const { 
+    isGeneratingStory, 
+    generationStatus, 
+    generationProgress,
+    setGeneratingStory,
+    setGenerationStatus,
+    setGenerationProgress,
+  } = useAppStore()
 
   const { totalScenes, completedScenes, totalClips, completedClips } = generationProgress
   const sceneProgress = totalScenes > 0 ? (completedScenes / totalScenes) * 100 : 0
   const clipProgress = totalClips > 0 ? (completedClips / totalClips) * 100 : 0
-  const overallProgress = totalClips > 0 
-    ? ((completedScenes / totalScenes) * 50 + (completedClips / totalClips) * 50)
-    : (completedScenes / totalScenes) * 100
+  const overallProgress = totalScenes > 0
+    ? (
+        totalClips > 0 
+          ? ((completedScenes / totalScenes) * 50 + (completedClips / totalClips) * 50)
+          : (completedScenes / totalScenes) * 100
+      )
+    : 0
+
+  // Safety net: auto-dismiss the pipeline toast once everything reaches 100%
+  useEffect(() => {
+    if (!isGeneratingStory) return
+
+    const scenesDone = totalScenes > 0 && completedScenes >= totalScenes
+    const clipsDone = totalClips === 0 || (totalClips > 0 && completedClips >= totalClips)
+
+    if (scenesDone && clipsDone) {
+      const timer = setTimeout(() => {
+        // In case the main generator forgot to clear, we hard-reset here
+        setGeneratingStory(false)
+        setGenerationStatus('')
+        setGenerationProgress({
+          totalScenes: 0,
+          completedScenes: 0,
+          totalClips: 0,
+          completedClips: 0,
+        })
+      }, 1500) // small delay so user can see 100% state
+
+      return () => clearTimeout(timer)
+    }
+  }, [
+    isGeneratingStory,
+    totalScenes,
+    completedScenes,
+    totalClips,
+    completedClips,
+    setGeneratingStory,
+    setGenerationStatus,
+    setGenerationProgress,
+  ])
+
+  if (!isGeneratingStory) return null
 
   return (
     <div className="fixed top-20 left-1/2 transform -translate-x-1/2 z-50 

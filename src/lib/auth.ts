@@ -45,10 +45,49 @@ export async function signIn(email: string, password: string) {
       password,
     })
 
-    if (error) throw error
+    if (error) {
+      // Check for schema/database errors
+      const errorMessage = error.message || ''
+      const errorCode = (error as any).code || ''
+      
+      if (errorMessage.toLowerCase().includes('schema') || 
+          errorMessage.toLowerCase().includes('querying') ||
+          errorCode === '42P01') {
+        console.error('❌ Database schema error during sign in:', {
+          message: error.message,
+          code: errorCode,
+          hint: 'Database migrations may not have been run. Check Supabase setup.'
+        })
+        // Return a more user-friendly error
+        return { 
+          data: null, 
+          error: {
+            ...error,
+            message: 'Database configuration error. Please ensure database migrations have been run.'
+          }
+        }
+      }
+      
+      throw error
+    }
+    
     return { data, error: null }
   } catch (error: any) {
     console.error('Sign in error:', error)
+    
+    // Additional check for schema errors in catch block
+    const errorMessage = error?.message || String(error)
+    if (errorMessage.toLowerCase().includes('schema') || 
+        errorMessage.toLowerCase().includes('querying')) {
+      return {
+        data: null,
+        error: {
+          message: 'Database configuration error. Please ensure database migrations have been run.',
+          code: error?.code
+        }
+      }
+    }
+    
     return { data: null, error }
   }
 }
@@ -64,6 +103,9 @@ export async function signOut() {
   }
 }
 
+// Track pending auth calls to prevent race conditions
+let pendingAuthCall: Promise<AuthUser | null> | null = null
+
 export async function getCurrentUser(): Promise<AuthUser | null> {
   try {
     // Check if we're in browser environment
@@ -71,69 +113,169 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
       return null
     }
 
-    // Industry standard: First check for existing session
-    // Supabase automatically loads session from localStorage if persistSession is true
-    // This is fast and synchronous for localStorage, so no timeout needed
-    const { data: { session }, error: sessionError } = await supabase.auth.getSession()
-    
-    if (sessionError) {
-      console.warn('⚠️ Session check error (may be expired):', sessionError.message)
-      return null
-    }
-    
-    // If no session, user is definitely not logged in
-    if (!session?.user) {
-      return null
+    // If there's already a pending auth call, wait for it instead of creating a new one
+    // This prevents race conditions with Supabase's internal locks
+    if (pendingAuthCall) {
+      console.log('🔄 Waiting for pending auth call...')
+      return await pendingAuthCall
     }
 
-    // Verify the session is still valid by getting fresh user data
-    // This also triggers automatic token refresh if needed (autoRefreshToken: true)
-    const { data: { user }, error: userError } = await supabase.auth.getUser()
+    // Create a new auth call and store it
+    pendingAuthCall = (async () => {
+      try {
+        // Industry standard: First check for existing session
+        // Supabase automatically loads session from localStorage if persistSession is true
+        // This is fast and synchronous for localStorage, so no timeout needed
+        let session, sessionError
+        try {
+          const sessionResult = await supabase.auth.getSession()
+          session = sessionResult.data?.session
+          sessionError = sessionResult.error
+        } catch (abortError: any) {
+          // Handle AbortError from Supabase's internal locks gracefully
+          if (abortError?.name === 'AbortError' || abortError?.message?.includes('aborted')) {
+            console.warn('⚠️ Session check aborted (likely race condition) - retrying...')
+            // Retry once after a short delay
+            await new Promise(resolve => setTimeout(resolve, 100))
+            const retryResult = await supabase.auth.getSession()
+            session = retryResult.data?.session
+            sessionError = retryResult.error
+          } else {
+            throw abortError
+          }
+        }
+        
+        if (sessionError) {
+          console.warn('⚠️ Session check error (may be expired):', sessionError.message)
+          return null
+        }
+        
+        // If no session, user is definitely not logged in
+        if (!session?.user) {
+          return null
+        }
+
+        // Verify the session is still valid by getting fresh user data
+        // This also triggers automatic token refresh if needed (autoRefreshToken: true)
+        let user, userError
+        try {
+          const userResult = await supabase.auth.getUser()
+          user = userResult.data?.user
+          userError = userResult.error
+        } catch (abortError: any) {
+          // Handle AbortError from Supabase's internal locks gracefully
+          if (abortError?.name === 'AbortError' || abortError?.message?.includes('aborted')) {
+            console.warn('⚠️ User verification aborted (likely race condition) - using session user')
+            // Use the user from the session instead
+            user = session.user
+            userError = null
+          } else {
+            throw abortError
+          }
+        }
+        
+        if (userError) {
+          // Token might be expired or invalid
+          console.warn('⚠️ User verification error (token may be expired):', userError.message)
+          
+          // If it's a token refresh error, clear the invalid session
+          if (userError.message.includes('refresh') || userError.message.includes('expired')) {
+            console.log('🔄 Clearing expired session...')
+            await supabase.auth.signOut().catch(() => {}) // Ignore signOut errors
+            return null
+          }
+          return null
+        }
     
-    if (userError) {
-      // Token might be expired or invalid
-      console.warn('⚠️ User verification error (token may be expired):', userError.message)
-      
-      // If it's a token refresh error, clear the invalid session
-      if (userError.message.includes('refresh') || userError.message.includes('expired')) {
-        console.log('🔄 Clearing expired session...')
-        await supabase.auth.signOut().catch(() => {}) // Ignore signOut errors
-        return null
+        if (!user) {
+          return null
+        }
+
+        // Get user profile from users table
+        // Don't block on this - if it fails, we still have user data from auth
+        let profile = null
+        try {
+          const { data, error: profileError } = await supabase
+            .from('users')
+            .select('*')
+            .eq('id', user.id)
+            .single()
+          
+          if (!profileError && data) {
+            profile = data
+          } else {
+            // Handle specific error types
+            if (profileError) {
+              const errorCode = profileError.code
+              const errorMessage = profileError.message || ''
+              
+              // Check for schema/table errors
+              if (errorCode === '42P01' || errorMessage.includes('does not exist') || errorMessage.includes('schema')) {
+                console.error('❌ Database schema error: Users table may not exist. Please run migrations:', {
+                  code: errorCode,
+                  message: errorMessage,
+                  hint: 'Run supabase/migrations/001_initial_schema.sql in your Supabase SQL Editor'
+                })
+                // Don't throw - continue without profile, user can still use the app
+              } else if (errorCode === 'PGRST116') {
+                // No rows returned - user profile doesn't exist yet (normal for new users)
+                console.log('ℹ️ User profile not found (user may be new) - will be created automatically')
+              } else {
+                console.warn('⚠️ Profile fetch error (user may not have profile yet):', {
+                  code: errorCode,
+                  message: errorMessage,
+                  hint: profileError.hint
+                })
+              }
+            }
+          }
+        } catch (profileErr: any) {
+          // Profile fetch failed - continue without it
+          const errorMessage = profileErr?.message || String(profileErr)
+          
+          // Check if it's a schema-related error
+          if (errorMessage.includes('schema') || errorMessage.includes('querying') || errorMessage.includes('does not exist')) {
+            console.error('❌ Database schema error when fetching profile:', {
+              message: errorMessage,
+              hint: 'This may indicate the database migrations have not been run. Check Supabase setup.'
+            })
+            // Don't throw - continue without profile
+          } else {
+            console.warn('⚠️ Profile fetch error:', errorMessage)
+          }
+        }
+
+        return {
+          id: user.id,
+          email: user.email,
+          name: profile?.full_name || user.user_metadata?.full_name,
+          avatar: profile?.avatar_url || user.user_metadata?.avatar_url,
+        }
+      } catch (innerError: any) {
+        // Handle AbortError specifically
+        if (innerError?.name === 'AbortError' || innerError?.message?.includes('aborted')) {
+          console.warn('⚠️ Auth call aborted (likely race condition) - returning null')
+          return null
+        }
+        throw innerError
+      } finally {
+        // Clear the pending call after completion
+        pendingAuthCall = null
       }
-      return null
-    }
-    
-    if (!user) {
-      return null
-    }
+    })()
 
-    // Get user profile from users table
-    // Don't block on this - if it fails, we still have user data from auth
-    let profile = null
-    try {
-      const { data, error: profileError } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', user.id)
-        .single()
-      
-      if (!profileError && data) {
-        profile = data
-      } else {
-        console.warn('⚠️ Profile fetch error (user may not have profile yet):', profileError?.message)
-      }
-    } catch (profileErr) {
-      // Profile fetch failed - continue without it
-      console.warn('⚠️ Profile fetch error:', profileErr)
-    }
-
-    return {
-      id: user.id,
-      email: user.email,
-      name: profile?.full_name || user.user_metadata?.full_name,
-      avatar: profile?.avatar_url || user.user_metadata?.avatar_url,
-    }
+    // Return the result of the pending call
+    return await pendingAuthCall
   } catch (error: any) {
+    // Clear pending call on error
+    pendingAuthCall = null
+    
+    // Handle AbortError specifically without logging it as an error
+    if (error?.name === 'AbortError' || error?.message?.includes('aborted')) {
+      console.warn('⚠️ Get current user aborted (likely race condition)')
+      return null
+    }
+    
     console.error('❌ Get current user error:', error)
     return null
   }
@@ -177,35 +319,180 @@ export async function updatePassword(newPassword: string) {
 export function onAuthStateChange(callback: (user: AuthUser | null) => void) {
   return supabase.auth.onAuthStateChange(async (event, session) => {
     // Industry standard: Handle all auth events for comprehensive state management
-    console.log('🔄 Auth state change event:', event)
+    console.log('🔄 Auth state change event:', event, session?.user ? `User: ${session.user.email}` : 'No session')
     
-    // Handle different auth events
-    switch (event) {
-      case 'SIGNED_IN':
-      case 'TOKEN_REFRESHED':
-      case 'USER_UPDATED':
-        // User is authenticated - get fresh user data
-        if (session?.user) {
-          const user = await getCurrentUser()
-          callback(user)
-        } else {
-          callback(null)
-        }
-        break
+    // Helper function to create user from session (used in multiple places)
+    const createUserFromSession = (sessionUser: any, profile?: any): AuthUser => ({
+      id: sessionUser.id,
+      email: sessionUser.email || '',
+      name: profile?.full_name || sessionUser.user_metadata?.full_name,
+      avatar: profile?.avatar_url || sessionUser.user_metadata?.avatar_url,
+    })
+    
+    // For SIGNED_IN events, ALWAYS try to use session user - NEVER return null
+    // This is critical - if we call callback(null) for SIGNED_IN, the user will appear logged out
+    if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
+      console.log('🔐 Processing SIGNED_IN event...', {
+        hasSession: !!session,
+        hasUser: !!session?.user,
+        userId: session?.user?.id?.substring(0, 8),
+        userEmail: session?.user?.email,
+      })
       
-      case 'SIGNED_OUT':
-        // User explicitly logged out
+      // Always try to get session if not provided
+      let finalSession = session
+      if (!finalSession?.user) {
+        console.warn('⚠️ SIGNED_IN event but no session user in event - fetching session...')
+        try {
+          const { data: { session: fetchedSession }, error: fetchError } = await supabase.auth.getSession()
+          if (fetchError) {
+            console.error('❌ Failed to fetch session:', fetchError.message)
+          }
+          if (fetchedSession?.user) {
+            console.log('✅ Found session on fetch:', fetchedSession.user.email)
+            finalSession = fetchedSession
+          }
+        } catch (fetchErr: any) {
+          console.error('❌ Exception fetching session:', fetchErr.message)
+        }
+      }
+      
+      if (finalSession?.user) {
+        console.log('✅ SIGNED_IN event - using session user directly (not calling getCurrentUser)')
+        
+        try {
+          // Get profile from database if available (non-blocking, with timeout)
+          let profile = null
+          try {
+            // Add timeout to profile fetch to prevent hanging
+            const profilePromise = supabase
+              .from('users')
+              .select('*')
+              .eq('id', finalSession.user.id)
+              .single()
+            
+            const timeoutPromise = new Promise((_, reject) => 
+              setTimeout(() => reject(new Error('Profile fetch timeout')), 1500)
+            )
+            
+            const { data } = await Promise.race([profilePromise, timeoutPromise]) as any
+            profile = data
+            if (profile) {
+              console.log('✅ Profile fetched from database')
+            }
+          } catch (profileErr: any) {
+            // Profile fetch failed or timed out - continue with auth user only
+            if (!profileErr?.message?.includes('timeout')) {
+              console.warn('⚠️ Profile fetch failed (non-critical):', profileErr.message)
+            }
+            // Continue - profile is null, will use session user metadata
+          }
+          
+          const authUser = createUserFromSession(finalSession.user, profile)
+          console.log('✅ SIGNED_IN: Calling callback with user:', {
+            id: authUser.id.substring(0, 8),
+            email: authUser.email,
+            name: authUser.name || 'no name',
+          })
+          callback(authUser)
+          return // Exit early - don't process further
+        } catch (error: any) {
+          // Even if anything fails, still use session user
+          console.error('❌ Exception in SIGNED_IN handler:', error.message)
+          console.warn('⚠️ Using session user as fallback despite error')
+          const authUser = createUserFromSession(finalSession.user)
+          console.log('✅ SIGNED_IN: Calling callback with session user (fallback):', {
+            id: authUser.id.substring(0, 8),
+            email: authUser.email,
+          })
+          callback(authUser)
+          return // Exit early
+        }
+      } else {
+        // SIGNED_IN event but still no session after retry - this is very unusual
+        console.error('❌ SIGNED_IN event but cannot get session user - this should not happen!')
+        console.error('❌ Session state:', {
+          hasSession: !!session,
+          sessionKeys: session ? Object.keys(session) : [],
+          eventType: event,
+        })
+        // CRITICAL: Do NOT call callback(null) for SIGNED_IN - this causes logout
+        // Instead, wait a bit and try one more time
+        console.warn('⚠️ Waiting 500ms and retrying session fetch...')
+        await new Promise(resolve => setTimeout(resolve, 500))
+        try {
+          const { data: { session: finalRetrySession } } = await supabase.auth.getSession()
+          if (finalRetrySession?.user) {
+            const authUser = createUserFromSession(finalRetrySession.user)
+            console.log('✅ SIGNED_IN: Found session on final retry, calling callback with user:', authUser.email)
+            callback(authUser)
+            return
+          }
+        } catch (finalRetryError) {
+          console.error('❌ Final retry session check failed:', finalRetryError)
+        }
+        // Last resort - still don't call callback(null) - this would cause logout
+        console.error('❌ SIGNED_IN event but no session available after all retries - skipping callback to prevent logout')
+        return // Exit without calling callback - better than calling callback(null)
+      }
+    }
+    
+    try {
+      // Handle other auth events
+      switch (event) {
+        
+        case 'SIGNED_OUT':
+          // User explicitly logged out
+          console.log('ℹ️ SIGNED_OUT event - calling callback with null')
+          callback(null)
+          break
+        
+        default:
+          // For other events, check session status
+          if (session?.user) {
+            console.log('✅ Other auth event - using session user directly')
+            callback({
+              id: session.user.id,
+              email: session.user.email || '',
+              name: session.user.user_metadata?.full_name,
+              avatar: session.user.user_metadata?.avatar_url,
+            })
+          } else {
+            console.log('ℹ️ Other auth event but no session - calling callback with null')
+            callback(null)
+          }
+      }
+    } catch (error: any) {
+      // Handle any errors gracefully
+      console.error('❌ Auth state change handler error (catch block):', error)
+      
+      // For SIGNED_IN events, ALWAYS try to use session user even on error
+      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
+        if (session?.user) {
+          console.warn('⚠️ Error in SIGNED_IN handler but session exists - using session user as fallback')
+          const authUser = createUserFromSession(session.user)
+          callback(authUser)
+        } else {
+          // Even if no session, try to get it one more time
+          console.warn('⚠️ Error in SIGNED_IN handler and no session - attempting final retry...')
+          try {
+            const { data: { session: finalSession } } = await supabase.auth.getSession()
+            if (finalSession?.user) {
+              const authUser = createUserFromSession(finalSession.user)
+              callback(authUser)
+            } else {
+              // Last resort - don't call callback(null) for SIGNED_IN, just log
+              console.error('❌ SIGNED_IN event but cannot get session - skipping callback to avoid logout')
+            }
+          } catch (finalError) {
+            console.error('❌ Final session retry failed:', finalError)
+            // Don't call callback(null) - just log
+          }
+        }
+      } else {
+        // For other events (like SIGNED_OUT), it's safe to call null
         callback(null)
-        break
-      
-      default:
-        // For other events, check session status
-        if (session?.user) {
-          const user = await getCurrentUser()
-          callback(user)
-        } else {
-          callback(null)
-        }
+      }
     }
   })
 }

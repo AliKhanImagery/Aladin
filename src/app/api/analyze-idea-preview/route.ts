@@ -16,7 +16,23 @@ const openai = new OpenAI({
  */
 export async function POST(request: NextRequest) {
   try {
-    const { idea, tone, brandCues } = await request.json()
+    // Parse and validate request body
+    let requestBody
+    try {
+      requestBody = await request.json()
+    } catch (parseError: any) {
+      console.error('❌ Failed to parse request body:', parseError)
+      return NextResponse.json(
+        { 
+          error: 'Invalid request body', 
+          details: 'Request body must be valid JSON',
+          errorType: 'parse_error'
+        },
+        { status: 400 }
+      )
+    }
+
+    const { idea, tone, brandCues } = requestBody
 
     if (!idea || !idea.trim()) {
       return NextResponse.json(
@@ -26,8 +42,12 @@ export async function POST(request: NextRequest) {
     }
 
     if (!process.env.OPENAI_API_KEY) {
+      console.error('❌ OPENAI_API_KEY not configured')
       return NextResponse.json(
-        { error: 'OpenAI API key not configured' },
+        { 
+          error: 'OpenAI API key not configured',
+          errorType: 'configuration_error'
+        },
         { status: 500 }
       )
     }
@@ -126,36 +146,153 @@ IMPORTANT:
 - Make suggested prompts detailed and production-ready (50-100 words)
 - Be specific about appearance, style, and visual details in prompts`
 
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-4-turbo-preview',
-      messages: [
-        {
-          role: 'system',
-          content: 'You are an expert Content Analyst specializing in video and film production. You quickly analyze ideas and extract key information for production planning.',
-        },
-        {
-          role: 'user',
-          content: analysisPrompt,
-        },
-      ],
-      response_format: { type: 'json_object' },
-      temperature: 0.7, // Lower temperature for more consistent analysis
+    console.log('📡 Calling OpenAI API for idea analysis...', {
+      ideaLength: idea.length,
+      hasTone: !!tone,
+      hasBrandCues: !!brandCues
     })
+
+    // Try multiple model names in order of preference
+    const modelsToTry = [
+      'gpt-4o',           // Latest GPT-4 model
+      'gpt-4-turbo',      // Stable GPT-4 Turbo
+      'gpt-4-turbo-preview', // Legacy preview model
+      'gpt-4'             // Fallback to base GPT-4
+    ]
+
+    let completion
+    let lastError
+    let modelUsed = ''
+
+    for (const model of modelsToTry) {
+      try {
+        console.log(`🔄 Attempting with model: ${model}`)
+        completion = await openai.chat.completions.create({
+          model: model,
+          messages: [
+            {
+              role: 'system',
+              content: 'You are an expert Content Analyst specializing in video and film production. You quickly analyze ideas and extract key information for production planning.',
+            },
+            {
+              role: 'user',
+              content: analysisPrompt,
+            },
+          ],
+          response_format: { type: 'json_object' },
+          temperature: 0.7, // Lower temperature for more consistent analysis
+        })
+        modelUsed = model
+        console.log(`✅ Successfully used model: ${model}`)
+        break // Success, exit loop
+      } catch (modelError: any) {
+        console.warn(`⚠️ Model ${model} failed:`, modelError.message)
+        lastError = modelError
+        // Continue to next model
+      }
+    }
+
+    if (!completion) {
+      console.error('❌ All models failed. Last error:', lastError)
+      throw lastError || new Error('All OpenAI models failed')
+    }
 
     const content = completion.choices[0]?.message?.content
     if (!content) {
-      throw new Error('No response from OpenAI')
+      console.error('❌ No content in OpenAI response:', completion)
+      throw new Error('No response content from OpenAI API')
     }
 
-    const analysisData = JSON.parse(content)
+    console.log('✅ Received OpenAI response, parsing JSON...')
 
-    return NextResponse.json({ success: true, data: analysisData })
+    // Parse and validate JSON response
+    let analysisData
+    try {
+      analysisData = JSON.parse(content)
+    } catch (parseError: any) {
+      console.error('❌ Failed to parse OpenAI JSON response:', parseError)
+      console.error('Response content:', content.substring(0, 500))
+      return NextResponse.json(
+        {
+          error: 'Failed to parse AI response',
+          details: 'OpenAI returned invalid JSON',
+          errorType: 'parse_error',
+          rawResponse: content.substring(0, 200) // Include first 200 chars for debugging
+        },
+        { status: 502 }
+      )
+    }
+
+    // Validate response structure
+    if (!analysisData || !analysisData.analysis) {
+      console.error('❌ Invalid response structure from OpenAI:', {
+        hasAnalysis: !!analysisData?.analysis,
+        keys: analysisData ? Object.keys(analysisData) : 'null'
+      })
+      return NextResponse.json(
+        {
+          error: 'Invalid response structure from AI',
+          details: 'Response missing required "analysis" field',
+          errorType: 'validation_error',
+          receivedStructure: analysisData ? Object.keys(analysisData) : 'null'
+        },
+        { status: 502 }
+      )
+    }
+
+    console.log('✅ Successfully parsed and validated analysis data', {
+      modelUsed,
+      detectedItems: analysisData.analysis?.detectedItems?.length || 0
+    })
+
+    return NextResponse.json({ success: true, data: analysisData, modelUsed })
   } catch (error: any) {
-    console.error('OpenAI API Error:', error)
+    console.error('❌ Error in analyze-idea-preview:', error)
+    console.error('Error stack:', error.stack)
+    
+    // Handle specific OpenAI API errors
+    if (error?.status === 401) {
+      return NextResponse.json(
+        {
+          error: 'OpenAI API authentication failed',
+          details: 'Invalid API key',
+          errorType: 'auth_error',
+          statusCode: 401
+        },
+        { status: 500 }
+      )
+    }
+
+    if (error?.status === 429) {
+      return NextResponse.json(
+        {
+          error: 'OpenAI API rate limit exceeded',
+          details: 'Please try again later',
+          errorType: 'rate_limit_error',
+          statusCode: 429
+        },
+        { status: 429 }
+      )
+    }
+
+    if (error?.code === 'model_not_found' || error?.message?.includes('model')) {
+      return NextResponse.json(
+        {
+          error: 'OpenAI model not available',
+          details: error.message || 'The requested model is not available',
+          errorType: 'model_error',
+          suggestedModel: 'gpt-4o or gpt-4-turbo'
+        },
+        { status: 500 }
+      )
+    }
+
     return NextResponse.json(
       {
         error: 'Failed to analyze idea',
         details: error.message || 'Unknown error',
+        errorType: 'unknown_error',
+        errorCode: error.code || 'NO_CODE'
       },
       { status: 500 }
     )
