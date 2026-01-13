@@ -465,7 +465,7 @@ export function onAuthStateChange(callback: (user: AuthUser | null) => void) {
     } catch (error: any) {
       // Handle any errors gracefully
       console.error('❌ Auth state change handler error (catch block):', error)
-      callback(null)
+        callback(null)
     }
   })
 }

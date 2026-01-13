@@ -99,7 +99,7 @@ export default function IdeaPromptScreen() {
       createdAt: new Date(),
       updatedAt: new Date(),
         createdBy: user?.id || 'anonymous',
-        settings: {
+      settings: {
         defaultDuration: 5,
         defaultQuality: 'standard',
         autoRetry: true,
@@ -223,15 +223,15 @@ export default function IdeaPromptScreen() {
                 <div className="flex flex-col md:flex-row items-center justify-between p-4 gap-4 bg-white/[0.02] rounded-[1.8rem] border border-white/[0.04]">
                   <div className="flex flex-wrap items-center gap-6 px-6">
                     <div className="flex items-center gap-3 group/cb cursor-pointer">
-                      <Checkbox
+              <Checkbox
                         id="text-only"
-                        checked={dontGenerateImages}
-                        onChange={(e) => setDontGenerateImages(e.target.checked)}
+                checked={dontGenerateImages}
+                onChange={(e) => setDontGenerateImages(e.target.checked)}
                         className="w-5 h-5 rounded-full border-white/10 data-[state=checked]:bg-brand-emerald"
-                      />
+              />
                       <label htmlFor="text-only" className="text-[10px] font-black uppercase tracking-[0.2em] text-white/20 cursor-pointer group-hover/cb:text-white/40 transition-colors">
                         Script Only
-                      </label>
+              </label>
                     </div>
                     <div className="h-4 w-[1px] bg-white/5" />
                     
@@ -264,9 +264,9 @@ export default function IdeaPromptScreen() {
                       <div className="w-1.5 h-1.5 rounded-full bg-brand-emerald animate-pulse" />
                       System Ready
                     </div>
-                  </div>
+            </div>
             
-                  <Button
+              <Button
                     onClick={handleCreateFromIdea}
                 disabled={!idea.trim() || isCreating}
                     className="w-full md:w-auto h-16 px-12 rounded-[1.4rem] bg-white text-black hover:bg-brand-emerald hover:text-white transition-all duration-700 flex items-center justify-center gap-5 group/btn overflow-hidden relative"

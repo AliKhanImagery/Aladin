@@ -185,14 +185,14 @@ export async function POST(request: NextRequest) {
       if (mode === 'text-to-image') {
         endpoint = 'fal-ai/flux-2-pro'
         falInput.prompt = sanitizedPrompt
-      } else {
+    } else {
         // Use flux-2-pro/edit for remix and edit modes for best instruction following
-        endpoint = 'fal-ai/flux-2-pro/edit'
+      endpoint = 'fal-ai/flux-2-pro/edit'
         falInput.prompt = sanitizedPrompt
-        if (sanitizedReferenceUrls.length > 0) {
+      if (sanitizedReferenceUrls.length > 0) {
           falInput.image_urls = sanitizedReferenceUrls.slice(0, 8)
           falInput.strength = 0.85 // Maintain high consistency
-        }
+      }
       }
       falInput.num_inference_steps = 50
       falInput.guidance_scale = 9.0

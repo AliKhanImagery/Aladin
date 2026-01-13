@@ -131,17 +131,17 @@ export default function ClipDetailDrawer() {
 
     try {
       // Handle flux-2-pro, nano-banana, or reeve via the unified remix API
-      const aspectRatioToUse = aspectRatio || '16:9'
-      const validReferences = referenceImageUrls.filter(url => url.trim() !== '')
-
+        const aspectRatioToUse = aspectRatio || '16:9'
+        const validReferences = referenceImageUrls.filter(url => url.trim() !== '')
+        
       // Prepare request body
       const requestBody: any = {
         imageModel,
         mode: remixMode,
         aspect_ratio: aspectRatioToUse,
-        prompt: promptToUse,
-        project_id: currentProject?.id,
-        clip_id: selectedClip?.id,
+            prompt: promptToUse,
+          project_id: currentProject?.id,
+          clip_id: selectedClip?.id,
       }
 
       if (validReferences.length > 0) {
@@ -149,44 +149,44 @@ export default function ClipDetailDrawer() {
         if (imageModel === 'flux-2-pro') {
           requestBody.mode = 'edit' // Best for consistency
         }
-      }
-      
-      // Get session token for authentication
-      const { supabase } = await import('@/lib/supabase')
-      const { data: { session } } = await supabase.auth.getSession()
-      const headers: HeadersInit = { 'Content-Type': 'application/json' }
-      if (session?.access_token) {
-        headers['Authorization'] = `Bearer ${session.access_token}`
-      }
-      
-      const response = await fetch('/api/generate-image-remix', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(requestBody),
-      })
+        }
+        
+        // Get session token for authentication
+        const { supabase } = await import('@/lib/supabase')
+        const { data: { session } } = await supabase.auth.getSession()
+        const headers: HeadersInit = { 'Content-Type': 'application/json' }
+        if (session?.access_token) {
+          headers['Authorization'] = `Bearer ${session.access_token}`
+        }
+        
+        const response = await fetch('/api/generate-image-remix', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(requestBody),
+        })
 
-      if (!response.ok) {
-        const errorData = await response.json()
-        lastError = { 
+        if (!response.ok) {
+          const errorData = await response.json()
+          lastError = { 
           model: imageModel.toUpperCase(), 
           error: errorData.error || 'Failed to generate image'
-        }
+          }
         throw new Error(errorData.error || 'Failed to generate image')
-      }
+        }
 
-      const { imageUrl } = await response.json()
-      handleUpdateClip({ generatedImage: imageUrl, previewImage: imageUrl })
-      if (selectedClip?.id) {
-        setClipGeneratingStatus(selectedClip.id, null)
-      }
+        const { imageUrl } = await response.json()
+        handleUpdateClip({ generatedImage: imageUrl, previewImage: imageUrl })
+        if (selectedClip?.id) {
+          setClipGeneratingStatus(selectedClip.id, null)
+        }
       // Save to user_images table
-      await saveUserImage({
-        image_url: imageUrl,
-        prompt: promptToUse,
+        await saveUserImage({
+          image_url: imageUrl,
+          prompt: promptToUse,
         model: imageModel,
-        aspect_ratio: aspectRatioToUse,
-        project_id: currentProject?.id,
-        clip_id: selectedClip?.id,
+          aspect_ratio: aspectRatioToUse,
+          project_id: currentProject?.id,
+          clip_id: selectedClip?.id,
         storeExternally: true
       })
     } catch (error: any) {
@@ -859,7 +859,7 @@ export default function ClipDetailDrawer() {
                               className="flex-1 bg-[#0C0C0C] border-[#3AAFA9] text-white text-sm"
                             />
                             {referenceImageUrls.length > 1 && (
-                              <Button
+              <Button
                                 variant="ghost"
                                 size="icon"
                                 onClick={() => removeReferenceImageUrl(index)}

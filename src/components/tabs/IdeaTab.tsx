@@ -453,13 +453,13 @@ export default function IdeaTab() {
           const assetsWithUrls = {
             characters: matchedAssets.characters.filter((char: any) => char.assetUrl).map((char: any) => ({
               id: char.id, name: char.name, assetUrl: char.assetUrl!, appearanceDetails: char.appearanceDetails
-            })),
+              })),
             products: matchedAssets.products.filter((product: any) => product.assetUrl).map((product: any) => ({
               id: product.id, name: product.name, assetUrl: product.assetUrl!
-            })),
+              })),
             locations: matchedAssets.locations.filter((location: any) => location.assetUrl).map((location: any) => ({
               id: location.id, name: location.name, assetUrl: location.assetUrl!
-            }))
+              }))
           }
           
           assetsWithUrls.characters.forEach((char: any) => referenceImageUrls.push(char.assetUrl))
@@ -559,18 +559,18 @@ export default function IdeaTab() {
                       )
                     }
                   })
-                }
-                
+                  }
+                  
                 // Add product consistency instructions
                   if (metadata.assetContext.products.length > 0) {
                   metadata.assetContext.products.forEach((product: any) => {
                       if (product.assetUrl) {
                       consistencyInstructions.push(
                         `PRODUCT: ${product.name.toUpperCase()} must match reference exactly in shape, color, and design.`
-                      )
+                        )
                     }
                   })
-                }
+                      }
                 
                   if (consistencyInstructions.length > 0) {
                     enhancedPrompt = consistencyInstructions.join(' ') + '. ' + enhancedPrompt
@@ -604,8 +604,8 @@ export default function IdeaTab() {
                   aspect_ratio: latestProject.story.aspectRatio || '16:9',
                 project_id: latestProject.id,
                 clip_id: clipId,
-              }
-              
+                }
+                
               // Add reference images for edit mode (FLUX.2 Pro supports multiple images)
               // Only add if we have valid reference images
               if (finalMode === 'edit' && validReferenceUrls.length > 0) {
@@ -638,8 +638,8 @@ export default function IdeaTab() {
                   method: 'POST',
                 headers,
                   body: JSON.stringify(requestPayload),
-              })
-
+                })
+                
               if (!response.ok) {
                 let errorMessage = 'Unknown error'
                 try {
@@ -697,8 +697,8 @@ export default function IdeaTab() {
                 clipId,
                 mode: generationMode,
                 hasReferenceImages
-              })
-              
+          })
+          
               // Update clip with pending status (will retry later)
               updateClip(clipId, { 
                 status: 'pending'
@@ -829,8 +829,8 @@ export default function IdeaTab() {
               className="w-full h-48 bg-brand-obsidian/40 border-white/10 text-white placeholder:text-gray-600 
                        focus:border-brand-emerald/40 focus:ring-1 focus:ring-brand-emerald/20
                        rounded-2xl px-6 py-4 text-lg resize-none transition-all duration-300 shadow-inner"
-            />
-            
+        />
+        
             <div className="mt-8 flex flex-col md:flex-row md:items-center justify-between gap-6">
               <div className="flex items-center gap-3 px-4 py-2 bg-white/5 rounded-xl border border-white/5">
           <Checkbox
@@ -840,7 +840,7 @@ export default function IdeaTab() {
               settings: { ...currentProject.settings, dontGenerateImages: e.target.checked }
             })}
                   className="border-white/20"
-                />
+          />
                 <label htmlFor="dont-generate-images-idea" className="text-sm font-medium text-gray-400 cursor-pointer">
                   Technical Blueprint Only (No Images)
           </label>

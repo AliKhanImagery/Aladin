@@ -220,11 +220,11 @@ export default function MyAssetsPage() {
                 >
                   <div className="relative aspect-square bg-[#09090b] overflow-hidden">
                     {asset.asset_url && (
-                      <img
-                        src={asset.asset_url}
-                        alt={asset.name}
-                        className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-105 opacity-60 group-hover:opacity-100"
-                      />
+                    <img
+                      src={asset.asset_url}
+                      alt={asset.name}
+                      className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-105 opacity-60 group-hover:opacity-100"
+                    />
                     )}
                     
                     {/* Premium Overlay UI */}

@@ -430,7 +430,7 @@ export default function IdeaAnalysisScreen({ analysis, onContinue, onBack }: Ide
                 <div className="flex flex-wrap gap-2 mb-3">
                   {tone.map((t, idx) => (
                     <span key={idx} className="inline-flex items-center gap-1 px-3 py-1 bg-brand-emerald/10 border border-brand-emerald/20 rounded-lg text-xs font-bold text-brand-emerald">
-                      {t}
+                {t}
                       <X className="w-3 h-3 cursor-pointer hover:text-white" onClick={() => setTone(tone.filter((_, i) => i !== idx))} />
               </span>
             ))}
@@ -633,7 +633,7 @@ export default function IdeaAnalysisScreen({ analysis, onContinue, onBack }: Ide
                       onClick={() => handleGenerateImage(asset)}
                         disabled={!asset.prompt || status === 'generating'}
                         className="w-full flex items-center justify-center gap-2 h-10 bg-brand-obsidian/60 border border-white/10 rounded-xl text-xs font-bold text-white cursor-pointer hover:bg-white/5 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
+                    >
                         {status === 'generating' ? (
                           <>
                             <Loader2 className="w-3 h-3 animate-spin" /> Generating...
@@ -689,7 +689,7 @@ export default function IdeaAnalysisScreen({ analysis, onContinue, onBack }: Ide
 
       {/* Image Zoom Modal */}
       {selectedImageModal && (
-        <div 
+                <div
           className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 backdrop-blur-xl animate-in fade-in duration-300"
           onClick={() => setSelectedImageModal(null)}
         >
@@ -701,7 +701,7 @@ export default function IdeaAnalysisScreen({ analysis, onContinue, onBack }: Ide
             >
               <X className="w-5 h-5 sm:w-6 sm:h-6" />
             </button>
-          </div>
+                    </div>
 
           {/* Image Container - Properly constrained */}
           <div 
@@ -740,7 +740,7 @@ export default function IdeaAnalysisScreen({ analysis, onContinue, onBack }: Ide
                     <Trash2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                   </button>
                   <button
-                    onClick={() => {
+                onClick={() => {
                       handleAssetAction(selectedImageModal.assetId, 'upload')
                       setSelectedImageModal(null)
                       setTimeout(() => {
