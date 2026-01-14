@@ -403,6 +403,7 @@ export default function IdeaTab() {
         await new Promise(resolve => setTimeout(resolve, 400))
 
         const sceneClips = sceneData.clips || []
+        let previousClipVelocity: string | null = null // Track kinetic handshake between clips
         for (let clipIndex = 0; clipIndex < sceneClips.length; clipIndex++) {
           const clipData = sceneClips[clipIndex]
           setGenerationStatus(`Orchestrating clip ${clipIndex + 1}/${sceneClips.length}...`)
@@ -417,8 +418,14 @@ export default function IdeaTab() {
             sceneClips.map((c: any) => ({ description: c.description, name: c.name }))
           )
           
-          let imagePrompt = clipData.imagePrompt || ''
-          let videoPrompt = clipData.videoPrompt || ''
+          // Extract narrative role from clipData (from story generation)
+          const narrativeRole = clipData.narrative_role || 
+            (clipIndex === 0 ? 'Hook' : 
+             clipIndex === sceneClips.length - 1 ? 'Peak' : 
+             'Escalation')
+          
+          let imagePrompt = clipData.imagePrompt || clipData.flux_image_prompt || ''
+          let videoPrompt = clipData.videoPrompt || clipData.kling_motion_prompt || ''
           
           if (!imagePrompt || imagePrompt.length < 100) {
             try {
@@ -433,17 +440,51 @@ export default function IdeaTab() {
                   brandCues: confirmedAssetContext.settings.brandCues,
                   sceneStyle: scene.style,
                   assetContext: matchedAssets,
-                  imageModel: currentProject?.settings.imageModel || 'flux-2-pro'
+                  imageModel: currentProject?.settings.imageModel || 'flux-2-pro',
+                  narrativeRole: narrativeRole,
+                  previousClipVelocity: previousClipVelocity
                 }),
               })
 
               if (clipPromptResponse.ok) {
                 const { data: enhancedPrompts } = await clipPromptResponse.json()
-                imagePrompt = enhancedPrompts.imagePrompt || imagePrompt
-                videoPrompt = enhancedPrompts.videoPrompt || videoPrompt
+                // Handle both old and new field names for backward compatibility
+                imagePrompt = enhancedPrompts.imagePrompt || enhancedPrompts.flux_image_prompt || imagePrompt
+                videoPrompt = enhancedPrompts.videoPrompt || enhancedPrompts.kling_motion_prompt || videoPrompt
+                
+                // Log if we got prompts
+                if (imagePrompt && imagePrompt.length > 100) {
+                  console.log(`✅ Enhanced prompts received for clip ${clipIndex + 1}:`, {
+                    imagePromptLength: imagePrompt.length,
+                    videoPromptLength: videoPrompt.length
+                  })
+                } else {
+                  console.warn(`⚠️ Enhanced prompts too short or missing for clip ${clipIndex + 1}:`, {
+                    imagePromptLength: imagePrompt?.length || 0,
+                    hasImagePrompt: !!enhancedPrompts.imagePrompt,
+                    hasFluxImagePrompt: !!enhancedPrompts.flux_image_prompt
+                  })
+                }
+                
+                // Update previousClipVelocity for next clip's kinetic handshake
+                if (enhancedPrompts.kineticHandshake) {
+                  previousClipVelocity = enhancedPrompts.kineticHandshake
+                }
+              } else {
+                const errorData = await clipPromptResponse.json().catch(() => ({}))
+                console.error(`❌ Failed to enhance clip prompts for clip ${clipIndex + 1}:`, errorData)
               }
             } catch (err) {
               console.warn('Failed to enhance clip prompts:', err)
+            }
+          } else {
+            // If using prompts from story generation, extract kinetic handshake from visual_continuity
+            if (clipData.visual_continuity && clipData.visual_continuity.includes('velocity') || clipData.visual_continuity.includes('speed') || clipData.visual_continuity.includes('momentum')) {
+              // Try to extract velocity description from visual_continuity
+              const velocityMatch = clipData.visual_continuity.match(/(?:velocity|speed|momentum|walking|running|sprinting|turning|moving)[^.]*\.?/i)
+              if (velocityMatch) {
+                previousClipVelocity = velocityMatch[0].trim()
+              }
             }
           }
           
@@ -478,11 +519,11 @@ export default function IdeaTab() {
             sceneId: sceneId,
             order: clipData.order || clipIndex,
             name: clipData.name || `Scene ${sceneIndex + 1} - Clip ${clipIndex + 1}`,
-            imagePrompt: imagePrompt || `${originalIdea} - ${clipData.description || clipData.name}`,
-            videoPrompt: videoPrompt || `${originalIdea} - ${clipData.description || clipData.name}`,
+            imagePrompt: imagePrompt || clipData.flux_image_prompt || `${originalIdea} - ${clipData.description || clipData.name}`,
+            videoPrompt: videoPrompt || clipData.kling_motion_prompt || `${originalIdea} - ${clipData.description || clipData.name}`,
             duration: 5,
             quality: 'standard',
-            cameraPreset: { id: 'default', name: 'Default', description: clipData.cameraAngle || 'Standard framing', prompt: '', examples: [] },
+            cameraPreset: { id: 'default', name: 'Default', description: clipData.cameraAngle || clipData.cameraMovement || 'Standard framing', prompt: '', examples: [] },
             framing: clipData.framing || clipData.cameraAngle || 'medium shot',
             characters: characterReferences,
             klingElements: [],
@@ -495,7 +536,14 @@ export default function IdeaTab() {
             createdAt: new Date(),
             updatedAt: new Date(),
             lastRendered: new Date(),
-            generationMetadata: { shouldUseRemix, referenceImageUrls, assetContext: assetsWithUrls }
+            generationMetadata: { 
+              shouldUseRemix, 
+              referenceImageUrls, 
+              assetContext: assetsWithUrls,
+              narrativeRole: narrativeRole,
+              cameraMovement: clipData.cameraMovement,
+              kineticHandshake: previousClipVelocity
+            }
           }
           
           addClip(sceneId, clip)
@@ -519,11 +567,21 @@ export default function IdeaTab() {
       const allClips: Array<{ clip: Clip; sceneId: string }> = []
         latestProject.scenes.forEach((scene) => {
           scene.clips.forEach((clip) => {
-            if (clip.imagePrompt && !clip.generatedImage) {
-            allClips.push({ clip, sceneId: scene.id })
-          }
+            // Check for both old and new field names
+            const hasImagePrompt = clip.imagePrompt && clip.imagePrompt.trim().length > 0
+            if (hasImagePrompt && !clip.generatedImage) {
+              allClips.push({ clip, sceneId: scene.id })
+            } else if (!hasImagePrompt) {
+              console.warn(`⚠️ Clip "${clip.name}" has no imagePrompt, skipping image generation`, {
+                clipId: clip.id,
+                hasImagePrompt: !!clip.imagePrompt,
+                imagePromptLength: clip.imagePrompt?.length || 0
+              })
+            }
         })
       })
+      
+      console.log(`🖼️ Found ${allClips.length} clips ready for image generation`)
       
         if (allClips.length > 0) {
           allClips.forEach(({ clip }) => setClipGeneratingStatus(clip.id, 'image'))
@@ -539,14 +597,20 @@ export default function IdeaTab() {
             const generationMode = hasReferenceImages ? 'edit' : 'text-to-image'
             
             try {
-              // Ensure we have a valid prompt
-              if (!clip.imagePrompt || clip.imagePrompt.trim().length === 0) {
-                console.warn(`⚠️ [${index + 1}/${allClips.length}] No prompt for "${clip.name}", using fallback`)
+              // Ensure we have a valid prompt (check both old and new field names)
+              const imagePromptToUse = clip.imagePrompt || (clip as any).flux_image_prompt
+              if (!imagePromptToUse || imagePromptToUse.trim().length === 0) {
+                console.error(`❌ [${index + 1}/${allClips.length}] No image prompt found for "${clip.name}"`, {
+                  clipId: clip.id,
+                  hasImagePrompt: !!clip.imagePrompt,
+                  hasFluxImagePrompt: !!(clip as any).flux_image_prompt,
+                  clipData: Object.keys(clip)
+                })
                 throw new Error('Image prompt is required for generation')
               }
               
               // Enhanced prompt with STRONG consistency instructions
-              let enhancedPrompt = clip.imagePrompt.trim()
+              let enhancedPrompt = imagePromptToUse.trim()
                 if (metadata?.assetContext) {
                   const consistencyInstructions: string[] = []
                   
@@ -576,7 +640,8 @@ export default function IdeaTab() {
                     enhancedPrompt = consistencyInstructions.join(' ') + '. ' + enhancedPrompt
                   }
                   
-                enhancedPrompt = `Directing ${clip.name.toUpperCase()}. Maintain production consistency. ` + enhancedPrompt + '. Professional studio quality, 8k resolution, photorealistic, high detail.'
+                // Prompt is now clean and preserves the Kinetic Workflow structure
+                // No additional wrapping needed - the prompt from AI is already properly structured
               }
               
               // Final mode determination - if edit mode but no valid URLs, fallback to text-to-image

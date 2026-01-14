@@ -145,6 +145,21 @@ export async function POST(request: NextRequest) {
 
     // Sanitize inputs early
     const sanitizedPrompt = typeof prompt === 'string' ? prompt.trim() : ''
+    
+    // Clean any accidental labels or metadata from the prompt
+    // Remove common AI hallucinations like "flux_image_prompt:", "[flux_image_prompt:", etc.
+    const cleanedPrompt = sanitizedPrompt
+      .replace(/^\[?flux_image_prompt:\s*/i, '')  // Remove "[flux_image_prompt:" prefix
+      .replace(/^flux_image_prompt:\s*/i, '')     // Remove "flux_image_prompt:" prefix
+      .replace(/^\[?kling_motion_prompt:\s*/i, '') // Remove "[kling_motion_prompt:" prefix
+      .replace(/^imagePrompt:\s*/i, '')            // Remove "imagePrompt:" prefix
+      .replace(/^videoPrompt:\s*/i, '')            // Remove "videoPrompt:" prefix
+      .replace(/^\s*["']|["']\s*$/g, '')          // Remove leading/trailing quotes
+      .trim()
+    
+    // Use cleaned prompt, fallback to sanitized if cleaning removes everything
+    const finalPrompt = cleanedPrompt.length > 10 ? cleanedPrompt : sanitizedPrompt
+    
     const sanitizedReferenceUrls = Array.isArray(reference_image_urls)
       ? reference_image_urls
           .filter((url) => typeof url === 'string' && url.trim().length > 0)
@@ -162,14 +177,14 @@ export async function POST(request: NextRequest) {
     let falInput: any = {
       aspect_ratio: aspectRatioFormatted,
     }
-    
+
     let endpoint = ''
 
     // Model-Specific Dispatching Logic
     if (imageModel === 'nano-banana') {
       // Nano Banana Strategy: Hyper-fast, instruction-dense
       endpoint = 'fal-ai/nano-banana'
-      falInput.prompt = sanitizedPrompt
+      falInput.prompt = finalPrompt
       if (mode === 'remix' || mode === 'edit') {
         falInput.image_url = sanitizedReferenceUrls[0]
       }
@@ -178,22 +193,40 @@ export async function POST(request: NextRequest) {
       endpoint = 'fal-ai/reve/text-to-image' // Defaulting to Reve for Reeve artistic style
       if (mode === 'remix') endpoint = 'fal-ai/reve/remix'
       
-      falInput.prompt = sanitizedPrompt
+      falInput.prompt = finalPrompt
       if (mode === 'remix') falInput.image_url = sanitizedReferenceUrls[0]
     } else {
       // Default / FLUX.2 Pro Strategy
-      if (mode === 'text-to-image') {
+      // FIX: If mode is edit/remix but no reference images, fallback to text-to-image
+      const effectiveMode = (mode === 'edit' || mode === 'remix') && sanitizedReferenceUrls.length === 0
+        ? 'text-to-image'
+        : mode
+      
+      if (effectiveMode === 'text-to-image') {
         endpoint = 'fal-ai/flux-2-pro'
-        falInput.prompt = sanitizedPrompt
+        falInput.prompt = finalPrompt
     } else {
         // Use flux-2-pro/edit for remix and edit modes for best instruction following
       endpoint = 'fal-ai/flux-2-pro/edit'
-        falInput.prompt = sanitizedPrompt
+        falInput.prompt = finalPrompt
       if (sanitizedReferenceUrls.length > 0) {
-          falInput.image_urls = sanitizedReferenceUrls.slice(0, 8)
+          // FIX: flux-2-pro/edit expects image_urls (plural array) as required field
+          falInput.image_urls = sanitizedReferenceUrls.slice(0, 8) // Support up to 8 reference images
           falInput.strength = 0.85 // Maintain high consistency
+          
+          // Warn if multiple images may exceed Fal.ai's 9 megapixel limit
+          // Fal.ai limit: First image ~4MP, additional images ~1MP each, output ~4MP = 9MP total
+          // With multiple images, user may need to reduce count if generation fails
+          if (sanitizedReferenceUrls.length > 1) {
+            console.warn(`⚠️ Using ${sanitizedReferenceUrls.length} reference images. Fal.ai has a 9 megapixel limit (first image ~4MP, additional ~1MP each, output ~4MP). If generation fails with "Requested area too large", try reducing to 1-2 images.`)
       }
+    } else {
+          // Safety: This shouldn't happen due to effectiveMode check, but add fallback
+          console.warn('⚠️ flux-2-pro/edit mode requested but no reference images - this should not happen')
+          endpoint = 'fal-ai/flux-2-pro' // Fallback to text-to-image endpoint
+        }
       }
+      
       falInput.num_inference_steps = 50
       falInput.guidance_scale = 9.0
     }
@@ -281,7 +314,7 @@ export async function POST(request: NextRequest) {
               image_url: finalImageUrl, // Supabase permanent URL
               storage_path: storagePath,
               storage_bucket: storageBucket,
-              prompt: sanitizedPrompt || null,
+              prompt: finalPrompt || null,
               model: modelName,
               aspect_ratio: aspectRatioFormatted,
               project_id: project_id || null,
@@ -374,6 +407,12 @@ export async function POST(request: NextRequest) {
     }
 
     // Return response with Supabase URL (or Fal.ai URL as fallback)
+    // Add warning if multiple reference images may exceed Fal.ai's 9 megapixel limit
+    const referenceImageCount = sanitizedReferenceUrls.length
+    const warning = referenceImageCount > 1 && endpoint.includes('flux-2-pro/edit')
+      ? `Using ${referenceImageCount} reference images. Fal.ai has a 9 megapixel limit (first image ~4MP, additional images ~1MP each, output ~4MP). If generation fails, try reducing to 1-2 images.`
+      : undefined
+
     return NextResponse.json({
       success: true,
       imageUrl: finalImageUrl, // Supabase URL if storage succeeded, Fal.ai URL otherwise
@@ -385,6 +424,7 @@ export async function POST(request: NextRequest) {
       endpoint,
       requestId: result.requestId,
       allImages: result.data?.images || [],
+      ...(warning && { warning }), // Include warning if present
     })
   } catch (error: any) {
     const endpoint = mode === 'text-to-image'

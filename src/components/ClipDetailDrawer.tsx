@@ -135,11 +135,14 @@ export default function ClipDetailDrawer() {
         const validReferences = referenceImageUrls.filter(url => url.trim() !== '')
         
       // Prepare request body
+      // FIX: If no reference images, mode must be 'text-to-image' (edit/remix require images)
+      const modeToUse = validReferences.length > 0 ? remixMode : 'text-to-image'
+      
       const requestBody: any = {
         imageModel,
-        mode: remixMode,
+        mode: modeToUse,
         aspect_ratio: aspectRatioToUse,
-            prompt: promptToUse,
+          prompt: promptToUse,
           project_id: currentProject?.id,
           clip_id: selectedClip?.id,
       }
@@ -881,6 +884,16 @@ export default function ClipDetailDrawer() {
                       <Plus className="w-3 h-3 mr-1" />
                       Add Reference Image
                     </Button>
+                    {remixMode === 'edit' && imageModel === 'flux-2-pro' && referenceImageUrls.filter(url => url.trim()).length > 1 && (
+                      <div className="mt-3 p-3 bg-yellow-900/20 border border-yellow-700 rounded text-xs text-yellow-200">
+                        <p className="font-medium text-yellow-100 mb-1">⚠️ Reference Image Limit:</p>
+                        <p className="ml-2">
+                          Fal.ai's Flux.2 Pro Edit has a 9 megapixel limit (first image ~4MP, additional images ~1MP each, output ~4MP). 
+                          Using {referenceImageUrls.filter(url => url.trim()).length} images may exceed this limit. 
+                          If generation fails with "Requested area too large", try reducing to 1-2 images.
+                        </p>
+                  </div>
+                    )}
                   </div>
                   {remixMode === 'edit' && (
                     <div className="mt-3 p-2 bg-[#1E1F22] rounded text-xs text-gray-400">
@@ -1077,7 +1090,7 @@ export default function ClipDetailDrawer() {
                       ? 'bg-[#00FFF0] text-black' 
                       : 'border-[#3AAFA9] text-[#3AAFA9] hover:bg-[#3AAFA9] hover:text-black'}
                   >
-                    Kling v1.6 (Standard Elements)
+                    Kling v2.5 Turbo (Image-to-Video)
                   </Button>
                 </div>
               </div>

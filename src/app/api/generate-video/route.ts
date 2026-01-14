@@ -203,11 +203,11 @@ export async function POST(request: NextRequest) {
 
     // Use Kling model if specified
     if (videoModel === 'kling') {
-      console.log('Using Kling v1.6 Standard Elements model')
+      console.log('Using Kling v2.5 Turbo Image-to-Video model')
       
       // Validate and prepare Kling input parameters
-      // Based on Fal AI Kling v1.6 Standard Elements API documentation:
-      // https://fal.ai/models/fal-ai/kling-video/v1.6/standard/elements/api
+      // Based on Fal AI Kling v2.5 Turbo Image-to-Video API documentation:
+      // https://fal.ai/models/fal-ai/kling-video/v2.5-turbo/standard/image-to-video/api
       // 
       // Required parameters:
       // - prompt: string (required)
@@ -221,22 +221,22 @@ export async function POST(request: NextRequest) {
         prompt: prompt.trim(),
       }
 
-      // input_image_urls is REQUIRED (list<string>, up to 4 images)
-      // This endpoint is specifically for multi-image-to-video generation
-      // We MUST provide at least one image URL
+      // image_url is REQUIRED for image-to-video generation
+      // This endpoint is specifically for image-to-video generation
+      // We MUST provide an image URL
       if (!image_url || !image_url.trim()) {
         return NextResponse.json(
           {
-            error: 'Image URL required for Kling 1.6 Elements',
-            details: 'Kling 1.6 Standard Elements requires at least one image URL in input_image_urls array. This endpoint generates videos from multiple input images (up to 4).',
+            error: 'Image URL required for Kling v2.5 Turbo Image-to-Video',
+            details: 'Kling v2.5 Turbo Image-to-Video requires an image URL. This endpoint generates videos from a single input image.',
             hint: 'Please generate or upload an image first, or provide an image URL.',
           },
           { status: 400 }
         )
       }
 
-      // input_image_urls must be an array of strings (up to 4 images)
-      klingInput.input_image_urls = [image_url.trim()]
+      // image_url parameter for image-to-video (single image)
+      klingInput.image_url = image_url.trim()
 
       // Duration - Must be string enum: "5" or "10" (default: "5")
       let durationValue: number
@@ -278,15 +278,14 @@ export async function POST(request: NextRequest) {
         hasPrompt: !!klingInput.prompt,
         promptLength: klingInput.prompt?.length,
         aspectRatio: klingInput.aspect_ratio,
-        length: klingInput.length,
-        hasImage: !!klingInput.image,
-        hasSeed: klingInput.seed !== undefined,
+        duration: klingInput.duration,
+        hasImageUrl: !!klingInput.image_url,
       })
 
       try {
         // Log the exact input we're sending
         console.log('📤 Sending Kling request:', {
-          endpoint: 'fal-ai/kling-video/v1.6/standard/elements',
+          endpoint: 'fal-ai/kling-video/v2.5-turbo/standard/image-to-video',
           input: JSON.stringify(klingInput, null, 2),
           inputKeys: Object.keys(klingInput),
           inputTypes: Object.fromEntries(
@@ -296,7 +295,7 @@ export async function POST(request: NextRequest) {
 
         // Try the Kling endpoint
         try {
-          result = await fal.subscribe('fal-ai/kling-video/v1.6/standard/elements', {
+          result = await fal.subscribe('fal-ai/kling-video/v2.5-turbo/standard/image-to-video', {
             input: klingInput,
             logs: true,
             onQueueUpdate: (update: any) => {
@@ -415,7 +414,7 @@ export async function POST(request: NextRequest) {
         // Log everything for debugging
         console.error('❌ Kling error - Complete Error Details:', JSON.stringify(errorDetails, null, 2))
         console.error('❌ Kling error - Request that failed:', JSON.stringify({
-          endpoint: 'fal-ai/kling-video/v1.6/standard/elements',
+          endpoint: 'fal-ai/kling-video/v2.5-turbo/standard/image-to-video',
           input: klingInput,
         }, null, 2))
 
@@ -490,7 +489,7 @@ export async function POST(request: NextRequest) {
         }
 
         // Add context about what was sent
-        errorMsg += ` (Input: prompt="${prompt.substring(0, 50)}...", aspect_ratio="${aspect_ratio}", length="${klingInput.length}", has_image=${!!klingInput.image})`
+        errorMsg += ` (Input: prompt="${prompt.substring(0, 50)}...", aspect_ratio="${aspect_ratio}", duration="${klingInput.duration}", has_image_url=${!!klingInput.image_url})`
 
         // Try to extract the most useful error message for the user
         // If we got a validation error, use that
@@ -825,7 +824,7 @@ export async function POST(request: NextRequest) {
           
           let modelName = 'fal-ai-vidu-text-to-video'
           if (videoModel === 'kling') {
-            modelName = 'fal-ai-kling-v1.6-standard-elements'
+            modelName = 'fal-ai-kling-v2.5-turbo-image-to-video'
           } else if (reference_image_urls.length > 0) {
             modelName = 'fal-ai-vidu-reference-to-video'
           } else if (image_url) {
@@ -887,7 +886,7 @@ export async function POST(request: NextRequest) {
         
         let modelName = 'fal-ai-vidu-text-to-video'
         if (videoModel === 'kling') {
-          modelName = 'fal-ai-kling-v1.6-standard-elements'
+          modelName = 'fal-ai-kling-v2.5-turbo-image-to-video'
         } else if (reference_image_urls.length > 0) {
           modelName = 'fal-ai-vidu-reference-to-video'
         } else if (image_url) {
@@ -935,7 +934,7 @@ export async function POST(request: NextRequest) {
     // Determine model name for response
     let modelName = 'fal-ai-vidu-text-to-video'
     if (videoModel === 'kling') {
-      modelName = 'fal-ai-kling-v1.6-standard-elements'
+      modelName = 'fal-ai-kling-v2.5-turbo-image-to-video'
     } else if (reference_image_urls.length > 0) {
       modelName = 'fal-ai-vidu-reference-to-video'
     } else if (image_url) {

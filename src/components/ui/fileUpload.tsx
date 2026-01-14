@@ -28,6 +28,7 @@ export function FileUpload({
   const [isDragging, setIsDragging] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const MAX_BYTES = 2 * 1024 * 1024 // 2MB
 
   const handleDragEnter = (e: DragEvent<HTMLDivElement>) => {
     e.preventDefault()
@@ -47,6 +48,10 @@ export function FileUpload({
   }
 
   const uploadFile = async (file: File) => {
+    if (typeof file.size === 'number' && file.size > MAX_BYTES) {
+      alert('File too large. Max file size is 2MB. Please compress or resize the image and try again.')
+      return
+    }
     setIsUploading(true)
     try {
       const formData = new FormData()
