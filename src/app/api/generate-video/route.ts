@@ -201,8 +201,105 @@ export async function POST(request: NextRequest) {
 
     let result
 
+    // Use LTX model if specified (for fast cuts, 1-2s clips, 720p @ 24fps)
+    if (videoModel === 'ltx') {
+      console.log('Using LTX-2 19B Distilled Image-to-Video model')
+      
+      // LTX endpoint: fal-ai/ltx-2-19b/distilled/image-to-video
+      // Based on Fal AI LTX-2 documentation
+      // Parameters:
+      // - prompt: string (required)
+      // - image_url: string (required, single image)
+      // - aspect_ratio: "16:9" | "9:16" | "1:1" (optional, default: "16:9")
+      // Note: LTX is optimized for fast cuts (1-2s), produces 720p @ 24fps output
+      
+      const ltxInput: any = {
+        prompt: prompt.trim(),
+      }
+
+      // image_url is REQUIRED for image-to-video generation
+      if (!image_url || !image_url.trim()) {
+        return NextResponse.json(
+          {
+            error: 'Image URL required for LTX-2 Image-to-Video',
+            details: 'LTX-2 Image-to-Video requires an image URL. This endpoint generates fast-cut videos (1-2s) from a single input image at 720p @ 24fps.',
+            hint: 'Please generate or upload an image first, or provide an image URL.',
+          },
+          { status: 400 }
+        )
+      }
+
+      ltxInput.image_url = image_url.trim()
+
+      // Aspect ratio - Must be string enum: "16:9", "9:16", or "1:1" (default: "16:9")
+      if (aspect_ratio && (aspect_ratio === '16:9' || aspect_ratio === '9:16' || aspect_ratio === '1:1')) {
+        ltxInput.aspect_ratio = aspect_ratio
+      } else {
+        ltxInput.aspect_ratio = '16:9' // Default
+      }
+
+      // Note: LTX doesn't support duration parameter - it always generates short clips (1-2s)
+      // The resolution is fixed at 720p @ 24fps for LTX
+
+      console.log('🎬 LTX input parameters:', JSON.stringify(ltxInput, null, 2))
+      console.log('🎬 LTX input summary:', {
+        hasPrompt: !!ltxInput.prompt,
+        promptLength: ltxInput.prompt?.length,
+        aspectRatio: ltxInput.aspect_ratio,
+        hasImageUrl: !!ltxInput.image_url,
+      })
+
+      try {
+        console.log('📤 Sending LTX request:', {
+          endpoint: 'fal-ai/ltx-2-19b/distilled/image-to-video',
+          input: JSON.stringify(ltxInput, null, 2),
+        })
+
+        result = await fal.subscribe('fal-ai/ltx-2-19b/distilled/image-to-video', {
+          input: ltxInput,
+          logs: true,
+          onQueueUpdate: (update: any) => {
+            if (update.status === 'IN_PROGRESS') {
+              console.log('🔄 LTX progress:', update.logs?.map((log: any) => log.message))
+            } else if (update.status === 'FAILED' || update.status === 'ERROR') {
+              console.error('❌ LTX queue update shows failure:', {
+                status: update.status,
+                logs: update.logs,
+                error: update.error,
+              })
+            }
+          },
+        })
+        
+        console.log('✅ LTX response received:', {
+          hasData: !!result.data,
+          keys: result.data ? Object.keys(result.data) : [],
+        })
+      } catch (ltxError: any) {
+        console.error('❌ LTX error:', ltxError)
+        
+        // Extract error message
+        let errorMsg = 'LTX video generation failed'
+        if (ltxError.response?.data?.detail) {
+          const detail = ltxError.response.data.detail
+          errorMsg = typeof detail === 'string'
+            ? `LTX API error: ${detail}`
+            : `LTX API error: ${JSON.stringify(detail).substring(0, 500)}`
+        } else if (ltxError.message) {
+          errorMsg = ltxError.message
+        }
+
+        errorMsg += ` (Input: prompt="${prompt.substring(0, 50)}...", aspect_ratio="${aspect_ratio}", has_image_url=${!!ltxInput.image_url})`
+
+        const enhancedError: any = new Error(errorMsg)
+        enhancedError.ltxInput = ltxInput
+        enhancedError.originalError = ltxError
+        
+        throw enhancedError
+      }
+    }
     // Use Kling model if specified
-    if (videoModel === 'kling') {
+    else if (videoModel === 'kling') {
       console.log('Using Kling v2.5 Turbo Image-to-Video model')
       
       // Validate and prepare Kling input parameters
@@ -822,16 +919,18 @@ export async function POST(request: NextRequest) {
           const accessToken = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : undefined
           const supabase = await getServerSupabaseClient(accessToken)
           
-          let modelName = 'fal-ai-vidu-text-to-video'
-          if (videoModel === 'kling') {
-            modelName = 'fal-ai-kling-v2.5-turbo-image-to-video'
-          } else if (reference_image_urls.length > 0) {
-            modelName = 'fal-ai-vidu-reference-to-video'
-          } else if (image_url) {
-            modelName = 'fal-ai-vidu-image-to-video'
-          }
+        let modelName = 'fal-ai-vidu-text-to-video'
+        if (videoModel === 'ltx') {
+          modelName = 'fal-ai-ltx-2-19b-distilled-image-to-video'
+        } else if (videoModel === 'kling') {
+          modelName = 'fal-ai-kling-v2.5-turbo-image-to-video'
+        } else if (reference_image_urls.length > 0) {
+          modelName = 'fal-ai-vidu-reference-to-video'
+        } else if (image_url) {
+          modelName = 'fal-ai-vidu-image-to-video'
+        }
 
-          const { data: dbData, error: dbError } = await supabase
+        const { data: dbData, error: dbError } = await supabase
             .from('user_videos')
             .insert({
               user_id: userId,
@@ -885,7 +984,9 @@ export async function POST(request: NextRequest) {
         const supabase = await getServerSupabaseClient(accessToken)
         
         let modelName = 'fal-ai-vidu-text-to-video'
-        if (videoModel === 'kling') {
+        if (videoModel === 'ltx') {
+          modelName = 'fal-ai-ltx-2-19b-distilled-image-to-video'
+        } else if (videoModel === 'kling') {
           modelName = 'fal-ai-kling-v2.5-turbo-image-to-video'
         } else if (reference_image_urls.length > 0) {
           modelName = 'fal-ai-vidu-reference-to-video'
@@ -933,7 +1034,9 @@ export async function POST(request: NextRequest) {
 
     // Determine model name for response
     let modelName = 'fal-ai-vidu-text-to-video'
-    if (videoModel === 'kling') {
+    if (videoModel === 'ltx') {
+      modelName = 'fal-ai-ltx-2-19b-distilled-image-to-video'
+    } else if (videoModel === 'kling') {
       modelName = 'fal-ai-kling-v2.5-turbo-image-to-video'
     } else if (reference_image_urls.length > 0) {
       modelName = 'fal-ai-vidu-reference-to-video'

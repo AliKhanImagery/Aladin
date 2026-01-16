@@ -360,19 +360,37 @@ export default function TimelineTab() {
           aspectRatio
         })
 
+        // Determine video model: Check clip metadata for videoEngine (Aladin Pro Dynamic Pacing)
+        // If clip has videoEngine from story generation, use it; otherwise use user selection
+        const videoEngineFromMetadata = clip.generationMetadata?.videoEngine as 'kling' | 'ltx' | undefined
+        const effectiveVideoModel = videoEngineFromMetadata || selectedVideoModel
+        
         // Determine video model based on available assets and user selection
         // Prioritize consistent images and reference images for video generation
         let requestBody: any = {
           prompt: clip.videoPrompt,
-          duration: clip.duration || 5,
+          duration: clip.duration || 5, // Use clip duration (preserved from story generation)
           resolution: '720p',
-          videoModel: selectedVideoModel, // Use selected model
+          videoModel: effectiveVideoModel, // Use videoEngine from metadata or selected model
+        }
+        
+        // LTX and Kling require aspect_ratio
+        if (effectiveVideoModel === 'ltx' || effectiveVideoModel === 'kling') {
+          requestBody.aspect_ratio = aspectRatio
+          // LTX is fixed at 720p @ 24fps, Kling can use 720p or 1080p but we use 720p for consistency
+          requestBody.resolution = '720p'
         }
 
         // Use image-to-video if clip has a generated image (ensures consistency)
+        // LTX and Kling require image_url (image-to-video only)
         if (clip.generatedImage) {
           requestBody.image_url = clip.generatedImage
-          console.log(`📸 [${index + 1}/${clipsNeedingVideo.length}] Using image-to-video for "${clipName}" with model: ${selectedVideoModel}`)
+          console.log(`📸 [${index + 1}/${clipsNeedingVideo.length}] Using image-to-video for "${clipName}" with model: ${effectiveVideoModel}${videoEngineFromMetadata ? ' (from story generation)' : ''}`)
+          
+          // LTX and Kling require image_url, so we're good
+          if ((effectiveVideoModel === 'ltx' || effectiveVideoModel === 'kling') && !requestBody.image_url) {
+            console.warn(`⚠️ [${index + 1}/${clipsNeedingVideo.length}] ${effectiveVideoModel.toUpperCase()} requires image URL but clip has no generated image for "${clipName}"`)
+          }
           
           // If we have reference images in metadata, pass them for additional consistency
           // This helps video models maintain character/product consistency across frames

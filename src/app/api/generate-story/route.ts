@@ -9,9 +9,10 @@ export async function POST(request: NextRequest) {
   try {
     const { idea, tone, brandCues, targetRuntime, assetContext } = await request.json()
 
-    // 1. Timing Logic: Calculate exact clip target to avoid narrative compression (6 seconds per clip avg)
-    const clipTarget = Math.ceil(targetRuntime / 6);
-
+    // 1. Timing Logic: Move from hard-coded averages to Dynamic Pacing
+    // We provide targetRuntime to the LLM and let it allocate clips between 1s and 5s
+    // to match the exact runtime while creating rhythmic tempo.
+    
     if (!idea || !idea.trim()) {
       return NextResponse.json(
         { error: 'Idea is required' },
@@ -26,12 +27,10 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Story Writer role - Generate story structure with High-Density Kinetic Workflow
-    const storyPrompt = `You are a professional Visual Director and Story Architect implementing a High-Density Kinetic Workflow for Kling 2.5 Standard.
+    // Story Writer role - Generate story structure with Aladin Pro Dynamic Pacing
+    const storyPrompt = `You are a professional Visual Director and Story Architect implementing the "Aladin Pro" High-Density Kinetic Workflow.
 
-    NARRATIVE ANCHOR:
-    The user has paid for ${targetRuntime} seconds of content. To fulfill this duration without compression, you MUST provide exactly ${clipTarget} clips in total across your scenes. Each clip represents a distinct beat of the story.
-
+    PRODUCTION CONTEXT:
     User's Idea: "${idea}"
     ${Array.isArray(tone) ? `Tone: ${tone.join(', ')}` : tone ? `Tone: ${tone}` : ''}
     ${Array.isArray(brandCues) ? `Brand Cues: ${brandCues.join(', ')}` : brandCues ? `Brand Cues: ${brandCues}` : ''}
@@ -44,10 +43,25 @@ export async function POST(request: NextRequest) {
     Locations: ${assetContext.locations ? assetContext.locations.map((l: any) => `${l.name}: ${l.description}`).join('; ') : ''}
     ` : ''}
 
-    Generate a story structure with scenes. Return a JSON object with this exact structure:
+    1. DYNAMIC PACING & ENGINE LOGIC:
+    You must allocate clips with varied durations to create "Visual Pacing." 
+    - Total duration of all clips MUST equal exactly ${targetRuntime} seconds.
+    - Video Engine Selection:
+        * "kling": Use for narrative, character acting, and wide establishing shots. (Duration: 3-5 seconds).
+        * "ltx": Use for fast cuts, texture close-ups, rhythmic spikes, and macro details. (Duration: 1-2 seconds).
+    - Rhythmic Editing: Mix long "Hero" clips with short "Texture" clips to create a professional edit feel.
+
+    2. PRODUCTION PERSONA:
+    Decide if this is a "Film" (Narrative-driven, slower pacing, character arcs) or "TVC" (Product-focused, montage-heavy, fast rhythmic cuts) based on the idea. Apply this persona to your pacing strategy.
+
+    3. MATERIAL BIBLE (Consistency):
+    If the project involves a specific object or material (e.g., a "Carpet", "Bottle", "Watch"), you must define its "Material DNA" (texture, sheen, response to light) in the first clip and strictly carry it through every subsequent clip.
+
+    Generate a story structure. Return a JSON object with this exact structure:
     {
       "story": "High-level narrative summary",
-      "Subject": "Character" || "Object", 
+      "production_persona": "Film|TVC",
+      "subject": "Character" || "Object", 
       "scenes": [
         {
           "order": 1,
@@ -55,19 +69,20 @@ export async function POST(request: NextRequest) {
           "description": "Director's Notes: Focus on the emotional shift and sensory atmosphere (smells, textures, lighting mood). Avoid generic adjectives.",
           "type": "establishing|dialogue|action|insert|montage",
           "purpose": "Narrative beat purpose",
-          "duration": 10,
           "clips": [
             {
               "order": 1,
               "name": "Clip name",
-              "description": "Director's Notes: Describe the sensory experience and specific emotional target of this moment. Use professional onset terminology.",
+              "duration": 5, 
+              "video_engine": "kling|ltx",
+              "description": "Director's Notes: Describe the sensory experience and specific emotional target. Use professional onset terminology.",
               "narrative_role": "Hook|Escalation|Peak|Resolution",
-              "visual_continuity": "Kinetic Handshake: Describe how lighting, subject position, environmental elements, AND the velocity/speed/momentum of the character at the end of the previous clip carry over to ensure seamless kinetic flow. Include the character's movement velocity (e.g., 'walking at moderate pace', 'sprinting forward', 'slowly turning') so the next clip picks up the same momentum.",
-              "flux_image_prompt": "Ultra-detailed visual description (150+ words) including: composition, lighting setup with specific HEX codes (e.g., key light #FFA500, fill light #87CEEB), exact character posture and weight distribution, color palette, camera specs (lens, focal length, aperture), depth of field, atmospheric details, character appearance, environmental specifics, cinematic lighting, sharp focus, natural textures. MUST lock the lighting (HEX codes) and exact posture for Clip 1 as the anchor frame.",
-              "kling_motion_prompt": "Starting from the provided frame, [Subject Name] performs [Action] while the camera [Movement]. Ultra-detailed motion description (150+ words) including: Character Acting with Micro-Expressions (e.g., 'Eyes narrowing', 'Breath visible in cold air', 'Lips trembling slightly'), Physics-based Body Movement (e.g., 'Shifting weight forward', 'Arms pumping rhythmically'), camera movement type and motivation, movement speed and easing, subject actions and gestures, shot transitions, dynamic elements, temporal pacing, visual effects, professional cinematography terminology. Acting must be Motivated by the narrative_role.",
+              "visual_continuity": "Kinetic Handshake: Describe how lighting, subject position, environmental elements, AND the velocity/speed/momentum carry over. Mention specific Material DNA if object-centric.",
+              "flux_image_prompt": "Ultra-detailed visual description (150+ words). INCLUDE: composition, lighting HEX codes (e.g., #FFA500), character posture, Material DNA specs, camera specs (lens, focal length), cinematic lighting, natural textures. NO forbidden keywords (4k/8k/photorealistic).",
+              "kling_motion_prompt": "Ultra-detailed motion description (150+ words). INCLUDE: Character Acting with Micro-Expressions, Physics-based Body Movement, camera motivation, and temporal pacing. Acting must be Motivated by the narrative_role.",
               "cameraAngle": "wide|medium|close|insert|extreme-wide|extreme-close",
               "cameraMovement": "Static|Dolly-in|Dolly-out|Tracking|Handheld|Orbiting|Crane-up|Crane-down|Push-in|Pull-out",
-              "framing": "Detailed framing description with technical specs (e.g., 'Medium close-up at 85mm, f/1.8, eye level, shallow depth of field')"
+              "framing": "Detailed framing description with technical specs (e.g., 'Medium close-up at 85mm, f/1.8')"
             }
           ]
         }
@@ -81,59 +96,19 @@ export async function POST(request: NextRequest) {
       ]
     }
 
-    HIGH-DENSITY KINETIC WORKFLOW CONSTRAINTS:
-
-    1. NARRATIVE ROLE MAPPING:
-       - Hook: First clip(s) - Use 'Cinematic wide reveal' or 'Dolly-out' camera movement
-       - Escalation: Middle clip(s) - Use 'Tracking shot' or 'Handheld following' camera movement
-       - Peak: Climactic clip(s) - Use 'Slow push-in (dolly) for intimacy' or 'Orbiting shot' camera movement
-       - Resolution: Final clip(s) - Use appropriate camera movement that serves the story beat
-
-    2. CAMERA MOTIVATION LOGIC:
-       - Camera movement MUST only be used if it serves the story beat
-       - Map camera movements to narrative_role as specified above
-       - Every camera movement must have narrative justification
-
-    3. PERFORMANCE & ACTING LOGIC:
-       - kling_motion_prompt MUST specify 'Character Acting' details
-       - Include 'Micro-Expression' keywords (e.g., 'Eyes narrowing', 'Breath visible in cold air', 'Lips trembling slightly')
-       - Include 'Physics-based Body Movement' (e.g., 'Shifting weight forward', 'Arms pumping rhythmically')
-       - Acting must be 'Motivated' by the narrative_role (e.g., if role is 'Peak', prompt for intense facial shifts)
-
-    4. COST & TECHNICAL SPECS:
-       - STRICTLY REMOVE all '4K', '8K', 'ultra-HD', and 'photorealistic' keywords from both prompts
-       - Focus on 'Cinematic lighting', 'Sharp focus', and 'Natural textures' instead
-       - Use quality keywords: "professional", "cinematic", "award-winning", "commercial quality"
-
-    5. CONTINUITY HANDSHAKE:
-       - visual_continuity MUST include 'Kinetic Handshake'
-       - Describe the velocity/speed/momentum of the character at the end of the previous clip
-       - Next clip must pick up the same momentum (e.g., if previous clip ends with 'walking briskly', next clip starts with character already in motion)
-
-    6. FLUX IMAGE PROMPT (Anchor):
-       - Must lock the lighting with specific HEX codes (e.g., key light #FFA500, fill light #87CEEB)
-       - Must specify exact posture for Clip 1 as the anchor frame
-       - Include all technical specs: lens, focal length, aperture, depth of field
-
-    7. KLING MOTION PROMPT (Pivot):
-       - MUST start with: 'Starting from the provided frame, [Subject Name] performs [Action] while the camera [Movement].'
-       - Include Character Acting with Micro-Expressions
-       - Include Physics-based Body Movement
-       - Acting must be Motivated by narrative_role
-
-    GENERAL CONSTRAINTS:
-    - You MUST output exactly ${clipTarget} clips in total to fulfill the runtime.
-    - Every 'description' must be written as 'Director's Notes' focusing on emotion and sensory details rather than generic adjectives.
-    - Maintain all provided Asset Context and Brand Cues.
-    - Make flux_image_prompt and kling_motion_prompt EXTREMELY DETAILED (150+ words each) using professional cinematography terminology.
+    ALADIN PRO CONSTRAINTS:
+    - CLIPS: You are not limited by number, only by the ${targetRuntime}s total runtime. Create enough clips to feel like a professional edit.
+    - ENGINE: If duration is < 3s, you MUST use "ltx". If >= 3s, use "kling".
+    - MATERIAL DNA: For object-centric clips, define materials with keywords like "anisotropic sheen", "micro-fiber density", "light-refractive index".
+    - Forbidden: REMOVE '4K', '8K', 'ultra-HD', 'photorealistic'. Use 'commercial quality', 'cinematic lighting', 'master-grade'.
     `
 
     const completion = await openai.chat.completions.create({
-      model: 'gpt-4-turbo-preview',
+      model: 'gpt-4o',
       messages: [
         {
           role: 'system',
-          content: 'You are a professional Story Writer specializing in visual narratives with expertise in High-Density Kinetic Workflow for Kling 2.5 Standard. You create structured, cinematic story breakdowns that optimize for kinetic continuity, camera motivation, and performance-driven acting details. Your stories integrate narrative roles (Hook, Escalation, Peak, Resolution) with camera movements and character momentum for seamless visual flow.',
+          content: 'You are a professional Story Writer specializing in visual narratives with expertise in the "Aladin Pro" High-Density Kinetic Workflow. You create structured, cinematic story breakdowns that optimize for dynamic visual pacing (1s to 5s clips), engine-specific routing (Kling vs LTX), and Material DNA consistency. Your stories integrate narrative roles with rhythmic editing to create professional TVC and Film-grade visual sequences.',
         },
         {
           role: 'user',

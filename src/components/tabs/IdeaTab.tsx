@@ -116,7 +116,7 @@ function matchAssetsToClip(clipDescription: string, assetContext: AssetContext) 
   if (matchedCharacters.length === 0 && assetContext.characters.length === 1) {
     matchedCharacters.push(assetContext.characters[0])
   }
-
+  
   return {
     characters: matchedCharacters,
     products: assetContext.products.filter(product => 
@@ -429,7 +429,7 @@ export default function IdeaTab() {
           
           if (!imagePrompt || imagePrompt.length < 100) {
             try {
-              const clipPromptResponse = await fetch('/api/generate-clip-prompts', {
+              const clipPromptResponse: Response = await fetch('/api/generate-clip-prompts', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -447,7 +447,7 @@ export default function IdeaTab() {
               })
 
               if (clipPromptResponse.ok) {
-                const { data: enhancedPrompts } = await clipPromptResponse.json()
+                const { data: enhancedPrompts }: { data: any } = await clipPromptResponse.json()
                 // Handle both old and new field names for backward compatibility
                 imagePrompt = enhancedPrompts.imagePrompt || enhancedPrompts.flux_image_prompt || imagePrompt
                 videoPrompt = enhancedPrompts.videoPrompt || enhancedPrompts.kling_motion_prompt || videoPrompt
@@ -514,6 +514,10 @@ export default function IdeaTab() {
             characterId: char.id, role: char.role, faceRefId: undefined, assetUrl: char.assetUrl, appearanceDetails: char.appearanceDetails
           }))
           
+          // Extract videoEngine and duration from story generation (Aladin Pro Dynamic Pacing)
+          const videoEngine = clipData.video_engine || clipData.videoEngine || 'kling' // Default to kling if not specified
+          const clipDuration = clipData.duration || 5 // Use duration from story generation (1-5s for LTX/Kling routing)
+          
           const clip: Clip = {
             id: crypto.randomUUID(),
             sceneId: sceneId,
@@ -521,7 +525,7 @@ export default function IdeaTab() {
             name: clipData.name || `Scene ${sceneIndex + 1} - Clip ${clipIndex + 1}`,
             imagePrompt: imagePrompt || clipData.flux_image_prompt || `${originalIdea} - ${clipData.description || clipData.name}`,
             videoPrompt: videoPrompt || clipData.kling_motion_prompt || `${originalIdea} - ${clipData.description || clipData.name}`,
-            duration: 5,
+            duration: clipDuration, // Preserve duration from story generation (1-5s for dynamic pacing)
             quality: 'standard',
             cameraPreset: { id: 'default', name: 'Default', description: clipData.cameraAngle || clipData.cameraMovement || 'Standard framing', prompt: '', examples: [] },
             framing: clipData.framing || clipData.cameraAngle || 'medium shot',
@@ -536,13 +540,15 @@ export default function IdeaTab() {
             createdAt: new Date(),
             updatedAt: new Date(),
             lastRendered: new Date(),
-            generationMetadata: { 
-              shouldUseRemix, 
-              referenceImageUrls, 
+            generationMetadata: {
+              shouldUseRemix,
+              referenceImageUrls,
               assetContext: assetsWithUrls,
               narrativeRole: narrativeRole,
               cameraMovement: clipData.cameraMovement,
-              kineticHandshake: previousClipVelocity
+              kineticHandshake: previousClipVelocity || undefined,
+              videoEngine: videoEngine, // Store videoEngine (kling|ltx) for dynamic routing
+              duration: clipDuration // Store duration for video generation
             }
           }
           
@@ -564,7 +570,7 @@ export default function IdeaTab() {
       if (latestProject && !latestProject.settings.dontGenerateImages) {
         setGenerationStatus('Launching parallel image orchestration...')
         
-      const allClips: Array<{ clip: Clip; sceneId: string }> = []
+        const allClips: Array<{ clip: Clip; sceneId: string }> = []
         latestProject.scenes.forEach((scene) => {
           scene.clips.forEach((clip) => {
             // Check for both old and new field names
@@ -574,13 +580,13 @@ export default function IdeaTab() {
             } else if (!hasImagePrompt) {
               console.warn(`⚠️ Clip "${clip.name}" has no imagePrompt, skipping image generation`, {
                 clipId: clip.id,
-                hasImagePrompt: !!clip.imagePrompt,
+              hasImagePrompt: !!clip.imagePrompt,
                 imagePromptLength: clip.imagePrompt?.length || 0
-              })
+            })
             }
+          })
         })
-      })
-      
+        
       console.log(`🖼️ Found ${allClips.length} clips ready for image generation`)
       
         if (allClips.length > 0) {
@@ -785,7 +791,7 @@ export default function IdeaTab() {
           if (user?.id && finalState) await saveProjectNow(finalState.id, true)
           await new Promise(resolve => setTimeout(resolve, 1000))
         }
-        }
+      }
       
       setGeneratingStory(false)
       setIsGenerating(false)
@@ -967,7 +973,10 @@ export default function IdeaTab() {
             <div className="space-y-4">
               <label className="text-sm font-bold text-gray-500 uppercase tracking-widest px-2 flex items-center gap-2">
                 <Palette className="w-4 h-4" /> Visual Atmosphere
-          </label>
+              </label>
+              <p className="px-2 text-xs text-gray-500 leading-relaxed">
+                Defines the emotional mood and lighting (e.g., &apos;Cinematic&apos;, &apos;Dark&apos;, &apos;Energetic&apos;).
+              </p>
           <Input
             value={tone}
             onChange={(e) => setTone(e.target.value)}
@@ -979,7 +988,10 @@ export default function IdeaTab() {
             <div className="space-y-4">
               <label className="text-sm font-bold text-gray-500 uppercase tracking-widest px-2 flex items-center gap-2">
                 <Target className="w-4 h-4" /> Identity Cues
-          </label>
+              </label>
+              <p className="px-2 text-xs text-gray-500 leading-relaxed">
+                Defines the stylistic vibe and aesthetic (e.g., &apos;Minimalist&apos;, &apos;Luxury&apos;). NOT for physical dimensions.
+              </p>
           <Input
             value={brandCues}
             onChange={(e) => setBrandCues(e.target.value)}
@@ -1030,17 +1042,17 @@ export default function IdeaTab() {
                     <div key={type} className="flex items-center gap-3 p-3 bg-white/5 rounded-2xl border border-white/5">
                       <div className="w-8 h-8 rounded-lg bg-brand-emerald/10 flex items-center justify-center text-brand-emerald">
                         <Icon className="w-4 h-4" />
-                    </div>
+          </div>
                       <div className="flex-1">
                         <p className="text-xs font-bold text-white capitalize">{type}</p>
                         <p className="text-[10px] text-gray-500">{items.length} assets mapped</p>
-                </div>
-            </div>
+        </div>
+          </div>
                   )
                 })}
-                    </div>
-                </div>
-              )}
+              </div>
+          </div>
+        )}
             </div>
       </div>
     </div>

@@ -33,7 +33,7 @@ export default function ClipDetailDrawer() {
   const [referenceImageUrls, setReferenceImageUrls] = useState<string[]>([''])
   const [nanoBananaInputImages, setNanoBananaInputImages] = useState<string[]>([''])
   const [isGeneratingVideo, setIsGeneratingVideo] = useState(false)
-  const [videoModel, setVideoModel] = useState<'text-to-video' | 'image-to-video' | 'reference-to-video' | 'kling'>('text-to-video')
+  const [videoModel, setVideoModel] = useState<'text-to-video' | 'image-to-video' | 'reference-to-video' | 'kling' | 'ltx'>('text-to-video')
   const [videoReferenceUrls, setVideoReferenceUrls] = useState<string[]>([''])
   const [videoStartImageUrl, setVideoStartImageUrl] = useState('')
   
@@ -82,11 +82,25 @@ export default function ClipDetailDrawer() {
   }, [selectedClip?.generatedImage, activeTab, videoModel, videoStartImageUrl])
 
   // Auto-switch video tab to image-to-video when image is generated and user switches to video tab
+  // Also check for videoEngine from story generation (Aladin Pro Dynamic Pacing)
   useEffect(() => {
     if (selectedClip?.generatedImage && activeTab === 'video' && videoModel !== 'image-to-video') {
       setVideoModel('image-to-video')
     }
-  }, [activeTab, selectedClip?.generatedImage])
+    
+    // Check for videoEngine from story generation (Aladin Pro Dynamic Pacing)
+    // If clip has videoEngine in metadata, use it for automatic routing
+    if (selectedClip?.generationMetadata?.videoEngine && activeTab === 'video') {
+      const engineFromMetadata = selectedClip.generationMetadata.videoEngine as 'kling' | 'ltx'
+      // Only auto-set if videoModel is not already manually set by user
+      // This allows users to override the AI's engine choice
+      if (engineFromMetadata === 'ltx' && videoModel !== 'ltx' && !videoStartImageUrl) {
+        setVideoModel('ltx')
+      } else if (engineFromMetadata === 'kling' && videoModel !== 'kling' && !videoStartImageUrl) {
+        setVideoModel('kling')
+      }
+    }
+  }, [activeTab, selectedClip?.generatedImage, selectedClip?.generationMetadata?.videoEngine, videoModel, videoStartImageUrl])
 
   if (!selectedClip || !isDrawerOpen) return null
 
@@ -266,7 +280,24 @@ export default function ClipDetailDrawer() {
       }
 
       // Add model-specific inputs
-      if (videoModel === 'kling') {
+      if (videoModel === 'ltx') {
+        // LTX model: optimized for fast cuts (1-2s), 720p @ 24fps
+        requestBody.videoModel = 'ltx'
+        requestBody.aspect_ratio = aspectRatio
+        
+        // LTX requires image URL (image-to-video only)
+        if (!videoStartImageUrl.trim() && !selectedClip.generatedImage) {
+          alert('LTX requires an image URL. Please provide a start image or generate an image first.')
+          setIsGeneratingVideo(false)
+          if (selectedClip?.id) {
+            setClipGeneratingStatus(selectedClip.id, null)
+          }
+          return
+        }
+        requestBody.image_url = videoStartImageUrl.trim() || selectedClip.generatedImage
+        // LTX always generates short clips (1-2s), duration is not configurable
+        requestBody.resolution = '720p' // LTX is fixed at 720p @ 24fps
+      } else if (videoModel === 'kling') {
         // Kling model supports image-to-video
         requestBody.videoModel = 'kling'
         requestBody.aspect_ratio = aspectRatio
@@ -1092,6 +1123,16 @@ export default function ClipDetailDrawer() {
                   >
                     Kling v2.5 Turbo (Image-to-Video)
                   </Button>
+                  <Button
+                    variant={videoModel === 'ltx' ? 'default' : 'outline'}
+                    onClick={() => setVideoModel('ltx')}
+                    className={videoModel === 'ltx' 
+                      ? 'bg-[#00FFF0] text-black' 
+                      : 'border-[#3AAFA9] text-[#3AAFA9] hover:bg-[#3AAFA9] hover:text-black'}
+                    title="LTX-2 19B Distilled: Optimized for fast cuts (1-2s), 720p @ 24fps"
+                  >
+                    LTX-2 19B (Fast Cuts)
+                  </Button>
                 </div>
               </div>
 
@@ -1109,10 +1150,10 @@ export default function ClipDetailDrawer() {
                 />
               </div>
               
-              {(videoModel === 'image-to-video' || videoModel === 'kling') && (
+              {(videoModel === 'image-to-video' || videoModel === 'kling' || videoModel === 'ltx') && (
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Start Image {videoModel === 'kling' && '(Optional)'}
+                    Start Image {(videoModel === 'kling') ? '(Optional)' : (videoModel === 'ltx') ? '(Required for LTX)' : ''}
                   </label>
                   {selectedClip.generatedImage && (
                     <div className="mb-3 p-2 bg-[#00FFF0]/10 border border-[#00FFF0]/30 rounded-lg">

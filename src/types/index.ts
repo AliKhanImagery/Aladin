@@ -171,6 +171,12 @@ export interface Clip {
         assetUrl: string;
       }>;
     };
+    // Aladin Pro High-Density Kinetic Workflow fields
+    narrativeRole?: 'Hook' | 'Escalation' | 'Peak' | 'Resolution';
+    cameraMovement?: string;
+    kineticHandshake?: string; // Velocity/speed/momentum description for continuity
+    videoEngine?: 'kling' | 'ltx'; // Video generation engine (Aladin Pro Dynamic Pacing)
+    duration?: number; // Clip duration (1-5s for LTX/Kling routing)
   };
   
   // Metadata

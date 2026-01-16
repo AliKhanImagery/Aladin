@@ -17,7 +17,9 @@ export async function POST(request: NextRequest) {
       assetContext,
       imageModel = 'flux-2-pro',
       narrativeRole = 'Escalation',
-      previousClipVelocity = null
+      previousClipVelocity = null,
+      duration = 5,
+      videoEngine = 'kling'
     } = await request.json()
     
     // Handle brandCues as array or string
@@ -195,7 +197,7 @@ CRITICAL INSTRUCTIONS FOR JSON OUTPUT:
 `
 
     const completion = await openai.chat.completions.create({
-      model: 'gpt-4-turbo-preview',
+      model: 'gpt-4o',
       messages: [
         {
           role: 'system',
