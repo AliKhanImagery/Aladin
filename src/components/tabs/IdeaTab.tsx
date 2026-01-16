@@ -496,7 +496,7 @@ export default function IdeaTab() {
               id: char.id, name: char.name, assetUrl: char.assetUrl!, appearanceDetails: char.appearanceDetails
               })),
             products: matchedAssets.products.filter((product: any) => product.assetUrl).map((product: any) => ({
-              id: product.id, name: product.name, assetUrl: product.assetUrl!
+              id: product.id, name: product.name, assetUrl: product.assetUrl!, visualFocus: product.visualFocus
               })),
             locations: matchedAssets.locations.filter((location: any) => location.assetUrl).map((location: any) => ({
               id: location.id, name: location.name, assetUrl: location.assetUrl!
@@ -669,12 +669,24 @@ export default function IdeaTab() {
                 promptPreview: enhancedPrompt.substring(0, 100) + '...'
               })
                 
+                // Determine final image model (can be overridden by product focus)
+                let finalImageModel = latestProject.settings.imageModel || 'flux-2-pro'
+                
+                // Check for Nano Banana override (Product Focus)
+                // We check if ANY product in this clip is marked as 'primary' visual focus
+                const primaryProduct = metadata?.assetContext?.products?.find((p: any) => p.visualFocus === 'primary');
+                if (primaryProduct) {
+                   console.log(`🍌 [${index + 1}/${allClips.length}] Primary Product detected (${primaryProduct.name}). Switching to Nano Banana.`);
+                   finalImageModel = 'nano-banana';
+                }
+
                 const requestPayload: any = {
                 mode: finalMode,
                   prompt: enhancedPrompt,
                   aspect_ratio: latestProject.story.aspectRatio || '16:9',
                 project_id: latestProject.id,
                 clip_id: clipId,
+                imageModel: finalImageModel, // Pass the dynamic model selection
                 }
                 
               // Add reference images for edit mode (FLUX.2 Pro supports multiple images)

@@ -81,6 +81,7 @@ ${locationStrings.length > 0 ? `Locations: \n${locationStrings.join('\n')}` : ''
     }
 
     const isFlux = imageModel.includes('flux');
+    const isNanoBanana = imageModel.includes('banana');
 
     // Determine camera movement based on narrative role
     let cameraMovementInstruction = ''
@@ -135,6 +136,17 @@ CRITICAL INSTRUCTIONS FOR FLUX INTEGRATION (TO AVOID "STICKER" LOOK):
 3. LIGHTING PHYSICS: Describe how specific light colors (from Brand Cues or Tone) hit the subject (reflections, rim lights, subsurface scattering on skin). Use HEX CODES if colors are specific (e.g., key light #FFA500, fill light #87CEEB). MUST lock lighting with HEX codes.
 4. BRIDGE INSTRUCTIONS: Every prompt MUST include a "Bridge Instruction" that connects the subject to the scene (e.g., "The emerald #10B981 light from the neon sign reflects accurately off the subject's metallic surface").
 5. NO NEGATIVE PROMPTS: Focus on descriptive, positive detail.
+` : ''}
+
+${isNanoBanana ? `
+CRITICAL INSTRUCTIONS FOR NANO BANANA (COMMERCIAL PRODUCT PHOTOGRAPHY):
+1. PRIORITIZE SUBJECT CLARITY: The product/subject must be hyper-realistic and perfectly rendered.
+2. STYLE INJECTION: You MUST translate the "SCENE STYLE" (mood, lighting, colors) into commercial photography terms.
+   - Instead of "Cinematic, dark, moody", use "High-contrast commercial photography, studio lighting with [Color] gel, dramatic rim lighting".
+   - Instead of "Natural, soft", use "Soft-box studio lighting, clean commercial look, high-key photography".
+3. LIGHTING MATCHING: You MUST include the specific HEX CODES from the Scene Style in the lighting description to ensure the product matches the film's color grade.
+4. TEXTURE & MATERIAL: Describe the surface materials of the product in extreme detail (e.g., "matte finish aluminum", "condensation droplets on glass", "subsurface scattering on plastic").
+5. COMPOSITION: Place the product in the environment described, but ensure it pops. Use "depth of field" to separate subject from background if needed.
 ` : ''}
 
 HIGH-DENSITY KINETIC WORKFLOW REQUIREMENTS:

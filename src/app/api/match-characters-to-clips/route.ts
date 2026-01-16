@@ -93,6 +93,7 @@ Determine which assets should appear in this clip. Be VERY inclusive.
 3. ROLE MATCHES: If "the protagonist", "the hero", "the main character", "the narrator" is used, match to the character with that role.
 4. NARRATIVE INFERENCE: If the scene is about a character, and the clip describes an action ("Walking down the street"), assume that character is the subject even if not named in the clip.
 5. CONTINUITY: If a character was in the previous clip of this scene and the action continues, they are likely still present.
+6. PRODUCT FOCUS: For matched products, determine if the product is the PRIMARY VISUAL SUBJECT (e.g. close-up, hero shot, being held/used prominently) or just INCIDENTAL/BACKGROUND.
 
 Return a JSON object with this format:
 {
@@ -108,7 +109,8 @@ Return a JSON object with this format:
     {
       "productId": "ID_HERE",
       "reason": "Why this product is relevant",
-      "confidence": "high"
+      "confidence": "high",
+      "visualFocus": "primary" | "background"
     }
   ],
   "matchedLocations": [
@@ -200,7 +202,8 @@ IMPORTANT:
         return {
           ...product,
           matchReason: match.reason,
-          confidence: match.confidence
+          confidence: match.confidence,
+          visualFocus: match.visualFocus || 'background'
         }
       })
       .filter((p: any) => p !== null)
