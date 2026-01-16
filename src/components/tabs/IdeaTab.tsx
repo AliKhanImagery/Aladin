@@ -595,7 +595,33 @@ export default function IdeaTab() {
           const imageGenerationPromises = allClips.map(async ({ clip }, index) => {
             const clipId = clip.id
               const metadata = clip.generationMetadata
-            const referenceImageUrls = metadata?.referenceImageUrls || []
+            // Extract reference URLs from multiple sources (fallback logic)
+            let referenceImageUrls = metadata?.referenceImageUrls || []
+            
+            // FALLBACK: If referenceImageUrls is empty, try extracting from assetContext
+            if (referenceImageUrls.length === 0 && metadata?.assetContext) {
+              const fallbackUrls: string[] = []
+              if (metadata.assetContext.characters) {
+                metadata.assetContext.characters.forEach((char: any) => {
+                  if (char.assetUrl) fallbackUrls.push(char.assetUrl)
+                })
+              }
+              if (metadata.assetContext.products) {
+                metadata.assetContext.products.forEach((product: any) => {
+                  if (product.assetUrl) fallbackUrls.push(product.assetUrl)
+                })
+              }
+              if (metadata.assetContext.locations) {
+                metadata.assetContext.locations.forEach((location: any) => {
+                  if (location.assetUrl) fallbackUrls.push(location.assetUrl)
+                })
+              }
+              if (fallbackUrls.length > 0) {
+                console.log(`🔄 [${index + 1}/${allClips.length}] Fallback: Extracted ${fallbackUrls.length} reference URLs from assetContext`)
+                referenceImageUrls = fallbackUrls
+              }
+            }
+            
             const hasReferenceImages = referenceImageUrls.length > 0 && referenceImageUrls.every((url: string) => url && url.trim().length > 0)
             
             // Use 'edit' mode (FLUX.2 Pro) for multi-image consistency, 'text-to-image' otherwise
@@ -669,16 +695,9 @@ export default function IdeaTab() {
                 promptPreview: enhancedPrompt.substring(0, 100) + '...'
               })
                 
-                // Determine final image model (can be overridden by product focus)
+                // Determine final image model from user's project settings
+                // Mode (t2i vs edit/remix) is automatically determined by presence of reference images
                 let finalImageModel = latestProject.settings.imageModel || 'flux-2-pro'
-                
-                // Check for Nano Banana override (Product Focus)
-                // We check if ANY product in this clip is marked as 'primary' visual focus
-                const primaryProduct = metadata?.assetContext?.products?.find((p: any) => p.visualFocus === 'primary');
-                if (primaryProduct) {
-                   console.log(`🍌 [${index + 1}/${allClips.length}] Primary Product detected (${primaryProduct.name}). Switching to Nano Banana.`);
-                   finalImageModel = 'nano-banana';
-                }
 
                 const requestPayload: any = {
                 mode: finalMode,
@@ -691,6 +710,15 @@ export default function IdeaTab() {
                 
               // Add reference images for edit mode (FLUX.2 Pro supports multiple images)
               // Only add if we have valid reference images
+              console.log(`🔍 [${index + 1}/${allClips.length}] Reference URL Debug:`, {
+                finalMode,
+                hasReferenceImages,
+                referenceImageUrlsLength: referenceImageUrls.length,
+                validReferenceUrlsLength: validReferenceUrls.length,
+                validUrls: validReferenceUrls.slice(0, 3),
+                metadataAssetContextProducts: metadata?.assetContext?.products?.map((p: any) => ({ name: p.name, assetUrl: p.assetUrl ? 'EXISTS' : 'MISSING', visualFocus: p.visualFocus }))
+              })
+              
               if (finalMode === 'edit' && validReferenceUrls.length > 0) {
                 requestPayload.reference_image_urls = validReferenceUrls.slice(0, 10) // FLUX.2 Pro max is 10
                 console.log(`📎 [${index + 1}/${allClips.length}] Using ${validReferenceUrls.length} reference images for FLUX.2 Pro`)
@@ -985,7 +1013,7 @@ export default function IdeaTab() {
             <div className="space-y-4">
               <label className="text-sm font-bold text-gray-500 uppercase tracking-widest px-2 flex items-center gap-2">
                 <Palette className="w-4 h-4" /> Visual Atmosphere
-              </label>
+          </label>
               <p className="px-2 text-xs text-gray-500 leading-relaxed">
                 Defines the emotional mood and lighting (e.g., &apos;Cinematic&apos;, &apos;Dark&apos;, &apos;Energetic&apos;).
               </p>
@@ -1000,7 +1028,7 @@ export default function IdeaTab() {
             <div className="space-y-4">
               <label className="text-sm font-bold text-gray-500 uppercase tracking-widest px-2 flex items-center gap-2">
                 <Target className="w-4 h-4" /> Identity Cues
-              </label>
+          </label>
               <p className="px-2 text-xs text-gray-500 leading-relaxed">
                 Defines the stylistic vibe and aesthetic (e.g., &apos;Minimalist&apos;, &apos;Luxury&apos;). NOT for physical dimensions.
               </p>
