@@ -511,7 +511,7 @@ export async function saveUserVideo(params: SaveVideoParams, retryAttempt = 0): 
 /**
  * Fetch user images with enhanced error handling and session verification
  */
-export async function getUserImages(projectId?: string) {
+export async function getUserImages(projectId?: string, clipId?: string) {
   try {
     // Check session first
     const { data: { session }, error: sessionError } = await supabase.auth.getSession()
@@ -533,6 +533,10 @@ export async function getUserImages(projectId?: string) {
       query = query.eq('project_id', projectId)
     }
 
+    if (clipId) {
+      query = query.eq('clip_id', clipId)
+    }
+
     const { data, error } = await query
 
     if (error) {
@@ -550,7 +554,7 @@ export async function getUserImages(projectId?: string) {
 /**
  * Fetch user videos with enhanced error handling and session verification
  */
-export async function getUserVideos(projectId?: string) {
+export async function getUserVideos(projectId?: string, clipId?: string) {
   try {
     // Strategy 1: Try getSession() first (most reliable for RLS)
     let userId: string | null = null
@@ -592,7 +596,7 @@ export async function getUserVideos(projectId?: string) {
     }
 
     // Execute query with detailed error logging
-    return await executeVideoQuery(userId, projectId)
+    return await executeVideoQuery(userId, projectId, clipId)
   } catch (error: any) {
     console.error('❌ getUserVideos exception:', {
       message: error?.message,
@@ -606,7 +610,7 @@ export async function getUserVideos(projectId?: string) {
 /**
  * Shared logic for executing video queries to avoid duplication
  */
-async function executeVideoQuery(userId: string, projectId?: string) {
+async function executeVideoQuery(userId: string, projectId?: string, clipId?: string) {
   console.log(`🎬 Master Bin: Synchronizing sequences for user ${userId.substring(0, 8)}...`, {
     projectId: projectId || 'all projects',
     timestamp: new Date().toISOString()
@@ -620,6 +624,10 @@ async function executeVideoQuery(userId: string, projectId?: string) {
 
   if (projectId) {
     query = query.eq('project_id', projectId)
+  }
+
+  if (clipId) {
+    query = query.eq('clip_id', clipId)
   }
 
   const queryStartTime = Date.now()
