@@ -110,7 +110,7 @@ Return a JSON object with this format:
       "productId": "ID_HERE",
       "reason": "Why this product is relevant",
       "confidence": "high",
-      "visualFocus": "primary" | "background"
+      "visualFocus": "primary" // Example: "primary" or "background"
     }
   ],
   "matchedLocations": [
@@ -153,6 +153,7 @@ IMPORTANT:
     let matchingResult: any
     try {
       matchingResult = JSON.parse(content)
+      console.log('🤖 Character Matching AI Response:', JSON.stringify(matchingResult, null, 2))
     } catch (parseError: any) {
       console.error('JSON parse error in character matching:', {
         error: parseError.message,

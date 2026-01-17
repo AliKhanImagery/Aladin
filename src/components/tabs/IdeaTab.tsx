@@ -543,7 +543,7 @@ export default function IdeaTab() {
             generationMetadata: {
               shouldUseRemix,
               referenceImageUrls,
-              assetContext: assetsWithUrls,
+              assetContext: confirmedAssetContext as any, // FIX: Store full assetContext, not filtered assetsWithUrls, so fallback extraction can find all uploaded assets (cast to any for type compatibility)
               narrativeRole: narrativeRole,
               cameraMovement: clipData.cameraMovement,
               kineticHandshake: previousClipVelocity || undefined,
@@ -616,6 +616,7 @@ export default function IdeaTab() {
                   if (location.assetUrl) fallbackUrls.push(location.assetUrl)
                 })
               }
+              
               if (fallbackUrls.length > 0) {
                 console.log(`🔄 [${index + 1}/${allClips.length}] Fallback: Extracted ${fallbackUrls.length} reference URLs from assetContext`)
                 referenceImageUrls = fallbackUrls

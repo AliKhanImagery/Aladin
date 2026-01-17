@@ -214,7 +214,7 @@ export async function POST(request: NextRequest) {
       if (effectiveMode === 'text-to-image') {
         endpoint = 'fal-ai/flux-2-pro'
         falInput.prompt = finalPrompt
-    } else {
+      } else {
       // Use flux-2-pro/edit for remix and edit modes for best instruction following
       endpoint = 'fal-ai/flux-2-pro/edit'
       falInput.prompt = finalPrompt
@@ -259,11 +259,12 @@ export async function POST(request: NextRequest) {
         // Safety: This shouldn't happen due to effectiveMode check, but add fallback
         console.warn('⚠️ flux-2-pro/edit mode requested but no reference images - this should not happen')
         endpoint = 'fal-ai/flux-2-pro' // Fallback to text-to-image endpoint
+        
         // Remove width/height for text-to-image endpoint (doesn't accept these parameters)
         delete falInput.width
         delete falInput.height
       }
-    }
+      }
       
       falInput.num_inference_steps = 50
       falInput.guidance_scale = 9.0
