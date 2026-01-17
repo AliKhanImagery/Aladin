@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useAppStore } from '@/lib/store'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
@@ -56,7 +56,8 @@ export default function ClipDetailDrawer() {
   // HISTORY STATE
   const [generationHistory, setGenerationHistory] = useState<any[]>([])
   const [isLoadingHistory, setIsLoadingHistory] = useState(false)
-  
+  const historyStripRef = useRef<HTMLDivElement>(null)
+
   // Sync local state when selectedClip changes
   useEffect(() => {
     if (selectedClip) {
@@ -104,6 +105,17 @@ export default function ClipDetailDrawer() {
     }
   }
 
+  // Auto-scroll to latest item in history strip when history updates
+  useEffect(() => {
+    if (historyStripRef.current && generationHistory.length > 0) {
+      // Scroll to the rightmost (latest) item
+      historyStripRef.current.scrollTo({
+        left: historyStripRef.current.scrollWidth,
+        behavior: 'smooth'
+      })
+    }
+  }, [generationHistory])
+
   // Auto-switch to image-to-video when image is generated
   useEffect(() => {
     if (selectedClip?.generatedImage && activeMode === 'animate') {
@@ -127,19 +139,44 @@ export default function ClipDetailDrawer() {
 
   if (!selectedClip || !isDrawerOpen) return null
 
+  // Manual update wrapper to ensure immediate UI feedback
   const handleUpdateClip = (updates: any) => {
     if (selectedClip) {
+      // 1. Update global store (this is async/debounced in some implementations)
       updateClip(selectedClip.id, updates)
+      
+      // 2. Force local update if we're setting the currently selected clip
+      // This is a bit of a hack but ensures the UI reacts instantly to clicks
+      // The store update will follow through and keep things consistent
+      if (updates.generatedImage) {
+        setSelectedClip({ ...selectedClip, ...updates })
+      }
     }
   }
 
   const handleRestoreHistory = (historyItem: any) => {
-    handleUpdateClip({ 
+    if (!selectedClip) return
+    
+    // Force immediate local update first (for instant UI feedback)
+    const updatedClip = { 
+      ...selectedClip,
+      generatedImage: historyItem.image_url,
+      previewImage: historyItem.image_url,
+      imagePrompt: historyItem.prompt || selectedClip.imagePrompt 
+    }
+    setSelectedClip(updatedClip)
+    
+    // Update prompt text area
+    if (historyItem.prompt) {
+      setLocalImagePrompt(historyItem.prompt)
+    }
+    
+    // Then update store (async, but UI already updated)
+    updateClip(selectedClip.id, { 
       generatedImage: historyItem.image_url,
       previewImage: historyItem.image_url,
       imagePrompt: historyItem.prompt || selectedClip.imagePrompt 
     })
-    setLocalImagePrompt(historyItem.prompt || selectedClip.imagePrompt)
   }
 
   const handleImagePromptChange = (value: string) => {
@@ -214,10 +251,10 @@ export default function ClipDetailDrawer() {
     const promptToUse = localImagePrompt.trim()
     if (!promptToUse) {
       alert('Please enter an image prompt first')
-          return
-        }
+      return
+    }
 
-        const aspectRatioToUse = aspectRatio || '16:9'
+    const aspectRatioToUse = aspectRatio || '16:9'
     setIsGeneratingImage(true)
     if (selectedClip?.id) setClipGeneratingStatus(selectedClip.id, 'image')
     
@@ -234,47 +271,52 @@ export default function ClipDetailDrawer() {
         imageModel,
         mode: modeToUse,
         aspect_ratio: aspectRatioToUse,
-          prompt: promptToUse,
-          project_id: currentProject?.id,
-          clip_id: selectedClip?.id,
+        prompt: promptToUse,
+        project_id: currentProject?.id,
+        clip_id: selectedClip?.id,
       }
 
       if (validReferences.length > 0) {
-          requestBody.reference_image_urls = validReferences
+        requestBody.reference_image_urls = validReferences
         if (imageModel === 'flux-2-pro') requestBody.mode = 'edit'
-        }
+      }
         
       const { supabase } = await import('@/lib/supabase')
       const { data: { session } } = await supabase.auth.getSession()
       const headers: HeadersInit = { 'Content-Type': 'application/json' }
       if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`
         
-        const response = await fetch('/api/generate-image-remix', {
-          method: 'POST',
+      const response = await fetch('/api/generate-image-remix', {
+        method: 'POST',
         headers,
-          body: JSON.stringify(requestBody),
-        })
+        body: JSON.stringify(requestBody),
+      })
 
-        if (!response.ok) {
-          const errorData = await response.json()
+      if (!response.ok) {
+        const errorData = await response.json()
         lastError = { model: imageModel.toUpperCase(), error: errorData.error || 'Failed' }
         throw new Error(errorData.error)
-        }
+      }
 
-        const { imageUrl } = await response.json()
-        handleUpdateClip({ generatedImage: imageUrl, previewImage: imageUrl })
+      const { imageUrl } = await response.json()
+      
+      // Update UI immediately
+      handleUpdateClip({ generatedImage: imageUrl, previewImage: imageUrl })
+      
       if (selectedClip?.id) setClipGeneratingStatus(selectedClip.id, null)
       
       // Save and refresh history
-        await saveUserImage({
-          image_url: imageUrl,
-          prompt: promptToUse,
+      await saveUserImage({
+        image_url: imageUrl,
+        prompt: promptToUse,
         model: imageModel,
-          aspect_ratio: aspectRatioToUse,
-          project_id: currentProject?.id,
-          clip_id: selectedClip?.id,
+        aspect_ratio: aspectRatioToUse,
+        project_id: currentProject?.id,
+        clip_id: selectedClip?.id,
         storeExternally: true
       })
+      
+      // Fetch history again to show the new image in the strip
       fetchHistory()
 
     } catch (error: any) {
@@ -347,7 +389,7 @@ export default function ClipDetailDrawer() {
       }
 
       const { videoUrl, duration: generatedDuration } = await response.json()
-
+      
       handleUpdateClip({ 
         generatedVideo: videoUrl, 
         previewVideo: videoUrl,
@@ -407,23 +449,23 @@ export default function ClipDetailDrawer() {
               />
             ) : selectedClip.generatedImage ? (
               <>
-              <img 
-                src={selectedClip.generatedImage} 
-                alt={selectedClip.name}
+                <img 
+                  src={selectedClip.generatedImage} 
+                  alt={selectedClip.name}
                   className="w-full h-full object-contain"
-              />
+                />
                 <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-all flex items-center justify-center opacity-0 group-hover:opacity-100">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => {
-                    setModalImageUrl(selectedClip.generatedImage || null)
-                    setIsImageModalOpen(true)
-                  }}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => {
+                      setModalImageUrl(selectedClip.generatedImage || null)
+                      setIsImageModalOpen(true)
+                    }}
                     className="bg-black/50 hover:bg-black/70 rounded-full text-white border border-white/20"
-                >
+                  >
                     <Maximize2 className="w-5 h-5" />
-                </Button>
+                  </Button>
                 </div>
               </>
             ) : (
@@ -443,18 +485,21 @@ export default function ClipDetailDrawer() {
                 <Button variant="ghost" size="icon" onClick={() => setDrawerOpen(false)} className="h-6 w-6 text-white/80 hover:bg-white/10 pointer-events-auto">
                     <X className="w-4 h-4" />
                 </Button>
+            </div>
           </div>
-        </div>
 
            {/* GENERATIONS STRIP (History) */}
            {activeMode === 'visualize' && generationHistory.length > 0 && (
-            <div className="w-full h-16 bg-[#151619] border-t border-[#3AAFA9]/10 flex items-center gap-2 px-3 overflow-x-auto no-scrollbar">
+            <div 
+              ref={historyStripRef}
+              className="w-full h-16 bg-[#151619] border-t border-[#3AAFA9]/10 flex items-center gap-2 px-3 overflow-x-auto no-scrollbar"
+            >
                 <div className="flex-shrink-0 text-[10px] uppercase font-bold text-gray-500 mr-2 flex flex-col items-center">
                     <History className="w-3 h-3 mb-1" />
                     <span>History</span>
                 </div>
                 {generationHistory.map((historyItem) => (
-              <button
+                    <button
                         key={historyItem.id}
                         onClick={() => handleRestoreHistory(historyItem)}
                         className={`relative h-12 aspect-square rounded-md overflow-hidden border transition-all flex-shrink-0 ${
@@ -465,11 +510,11 @@ export default function ClipDetailDrawer() {
                         title={historyItem.prompt}
                     >
                         <img src={historyItem.image_url} className="w-full h-full object-cover" />
-              </button>
+                    </button>
                 ))}
-                </div>
-              )}
-              </div>
+            </div>
+           )}
+        </div>
 
         {/* 2. MODE SWITCHER */}
         <div className="flex p-2 gap-2 border-b border-[#3AAFA9]/10 bg-[#151619]">
@@ -495,7 +540,7 @@ export default function ClipDetailDrawer() {
             <Video className="w-3.5 h-3.5" />
             Animate
           </button>
-                  </div>
+        </div>
 
         {/* 3. INSPECTOR (Scrollable Controls) */}
         <div className="flex-1 overflow-y-auto p-5 space-y-6 custom-scrollbar">
@@ -511,15 +556,15 @@ export default function ClipDetailDrawer() {
                    The Director (Prompt)
                 </label>
                 <Textarea
-                    value={localImagePrompt}
-                    onChange={(e) => handleImagePromptChange(e.target.value)}
+                  value={localImagePrompt}
+                  onChange={(e) => handleImagePromptChange(e.target.value)}
                   placeholder="Describe what you want to see..."
                   className="bg-[#0C0C0C] border-[#3AAFA9]/20 focus:border-[#00FFF0] min-h-[100px] text-sm resize-none"
                 />
               </div>
 
               {/* Influences Section (Assets) */}
-                  <div className="space-y-3">
+              <div className="space-y-3">
                  <label className="text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-2">
                    <Sparkles className="w-3 h-3 text-[#00FFF0]" />
                    Influences (Reference Assets)
@@ -545,19 +590,19 @@ export default function ClipDetailDrawer() {
                                 >
                                     <Plus className="w-5 h-5" />
                                 </button>
-                        )}
-                      </div>
+                            )}
+                        </div>
                     ))}
                     {referenceImageUrls.length < 3 && (
                         <button 
-                      onClick={addReferenceImageUrl}
+                            onClick={addReferenceImageUrl}
                             className="aspect-square rounded-lg border border-dashed border-[#3AAFA9]/20 flex items-center justify-center text-gray-600 hover:text-[#00FFF0] hover:border-[#00FFF0]/50 transition-colors"
                         >
                             <Plus className="w-4 h-4" />
                         </button>
                     )}
-                    </div>
                 </div>
+              </div>
 
               {/* Engine Settings (Collapsed/Simplified) */}
               <div className="pt-4 border-t border-[#3AAFA9]/10">
@@ -565,8 +610,8 @@ export default function ClipDetailDrawer() {
                     <label className="text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-2">
                         <Settings className="w-3 h-3 text-[#00FFF0]" />
                         Engine Settings
-                  </label>
-                          </div>
+                    </label>
+                </div>
                 
                 <div className="grid grid-cols-2 gap-2">
                     <select 
@@ -585,7 +630,7 @@ export default function ClipDetailDrawer() {
                     >
                         <option>{aspectRatio} (Locked)</option>
                     </select>
-                  </div>
+                </div>
 
                 {/* Sub-modes for Reeve/Nano */}
                 {imageModel === 'reeve' && (
@@ -601,7 +646,7 @@ export default function ClipDetailDrawer() {
                         ))}
                     </div>
                 )}
-                  </div>
+              </div>
             </div>
           )}
 
@@ -622,13 +667,13 @@ export default function ClipDetailDrawer() {
                   className="bg-[#0C0C0C] border-[#3AAFA9]/20 focus:border-[#00FFF0] min-h-[100px] text-sm resize-none"
                 />
               </div>
-              
+
               {/* Start Frame */}
               <div className="space-y-2">
                  <label className="text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-2">
                    <Image className="w-3 h-3 text-[#00FFF0]" />
                    Start Frame
-                  </label>
+                </label>
                 
                 <div className="relative w-full h-24 bg-[#0C0C0C] rounded-lg border border-[#3AAFA9]/20 overflow-hidden flex items-center justify-center">
                     {(videoStartImageUrl || selectedClip.generatedImage) ? (
@@ -646,11 +691,11 @@ export default function ClipDetailDrawer() {
                     >
                         <span className="bg-[#1E1F22] text-xs px-3 py-1 rounded-full border border-white/10 text-white">Change Image</span>
                     </button>
-                          </div>
+                </div>
                 {(!videoStartImageUrl && selectedClip.generatedImage) && (
                     <p className="text-[10px] text-[#00FFF0]">✓ Using generated image automatically</p>
-                        )}
-                      </div>
+                )}
+              </div>
 
               {/* Engine Selection */}
               <div className="pt-4 border-t border-[#3AAFA9]/10">
@@ -660,7 +705,7 @@ export default function ClipDetailDrawer() {
                 </label>
                 
                 <div className="space-y-3">
-                <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-2 gap-2">
                          <button
                             onClick={() => setVideoModel('kling')}
                             className={`p-3 rounded-lg border text-left transition-all ${videoModel === 'kling' ? 'border-[#00FFF0] bg-[#00FFF0]/10' : 'border-[#3AAFA9]/20 bg-[#0C0C0C] hover:border-[#3AAFA9]/50'}`}
@@ -676,8 +721,8 @@ export default function ClipDetailDrawer() {
                             <p className={`text-xs font-bold ${videoModel === 'ltx' ? 'text-[#00FFF0]' : 'text-gray-300'}`}>LTX Studio</p>
                             <p className="text-[10px] text-gray-500 mt-1">Fast Cuts (1-2s)</p>
                          </button>
-              </div>
-              
+                    </div>
+
                     {/* Duration - Only for Kling mostly, but good to show */}
                     {videoModel === 'kling' && (
                         <div className="flex items-center gap-2 bg-[#0C0C0C] p-1 rounded-lg border border-[#3AAFA9]/10">
@@ -690,19 +735,19 @@ export default function ClipDetailDrawer() {
                                     {sec}s
                                 </button>
                             ))}
+                        </div>
+                    )}
                 </div>
-              )}
-            </div>
               </div>
-              
-                      </div>
+
+            </div>
           )}
 
-                </div>
-                
+        </div>
+
         {/* 4. ACTION BAR (Bottom Fixed) */}
         <div className="p-4 bg-[#1E1F22] border-t border-[#3AAFA9]/20">
-                  <Button
+          <Button
             onClick={activeMode === 'visualize' ? handleGenerateImage : handleGenerateVideo}
             disabled={
                 activeMode === 'visualize' 
@@ -728,10 +773,10 @@ export default function ClipDetailDrawer() {
                     <><Play className="w-4 h-4 mr-2" /> Animate Scene</>
                 )
             )}
-                  </Button>
-                </div>
+          </Button>
+        </div>
 
-              </div>
+      </div>
 
       {/* MODALS */}
       <ImageModal
