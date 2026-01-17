@@ -125,17 +125,21 @@ export default function ClipDetailDrawer() {
     }
   }, [selectedClip?.generatedImage, activeMode, videoModel, videoStartImageUrl])
 
-  // Auto-switch video model based on metadata
+  // Auto-switch video model based on metadata (only on initial load, not on user changes)
   useEffect(() => {
     if (selectedClip?.generationMetadata?.videoEngine && activeMode === 'animate') {
       const engineFromMetadata = selectedClip.generationMetadata.videoEngine as 'kling' | 'ltx'
-      if (engineFromMetadata === 'ltx' && videoModel !== 'ltx' && !videoStartImageUrl) {
-        setVideoModel('ltx')
-      } else if (engineFromMetadata === 'kling' && videoModel !== 'kling' && !videoStartImageUrl) {
-        setVideoModel('kling')
+      // Only auto-set if videoModel is still the default or matches the auto-switch logic
+      // Don't override user's manual selection
+      if ((videoModel === 'text-to-video' || videoModel === 'image-to-video') && !videoStartImageUrl) {
+        if (engineFromMetadata === 'ltx') {
+          setVideoModel('ltx')
+        } else if (engineFromMetadata === 'kling') {
+          setVideoModel('kling')
+        }
       }
     }
-  }, [activeMode, selectedClip?.generationMetadata?.videoEngine, videoModel, videoStartImageUrl])
+  }, [activeMode, selectedClip?.generationMetadata?.videoEngine, videoStartImageUrl]) // Removed videoModel from deps to avoid loops
 
   if (!selectedClip || !isDrawerOpen) return null
 
@@ -702,30 +706,71 @@ export default function ClipDetailDrawer() {
                 <div className="space-y-3">
                     <div className="grid grid-cols-2 gap-2">
                          <button
-                            onClick={() => setVideoModel('kling')}
-                            className={`p-3 rounded-lg border text-left transition-all ${videoModel === 'kling' ? 'border-[#00FFF0] bg-[#00FFF0]/10' : 'border-[#3AAFA9]/20 bg-[#0C0C0C] hover:border-[#3AAFA9]/50'}`}
+                            onClick={(e) => {
+                              e.preventDefault()
+                              e.stopPropagation()
+                              setVideoModel('kling')
+                            }}
+                            className={`p-3 rounded-lg border text-left transition-all cursor-pointer ${videoModel === 'kling' ? 'border-[#00FFF0] bg-[#00FFF0]/10' : 'border-[#3AAFA9]/20 bg-[#0C0C0C] hover:border-[#3AAFA9]/50'}`}
                          >
                             <p className={`text-xs font-bold ${videoModel === 'kling' ? 'text-[#00FFF0]' : 'text-gray-300'}`}>Kling AI</p>
                             <p className="text-[10px] text-gray-500 mt-1">Cinematic (5s)</p>
                          </button>
 
                          <button
-                            onClick={() => setVideoModel('ltx')}
-                            className={`p-3 rounded-lg border text-left transition-all ${videoModel === 'ltx' ? 'border-[#00FFF0] bg-[#00FFF0]/10' : 'border-[#3AAFA9]/20 bg-[#0C0C0C] hover:border-[#3AAFA9]/50'}`}
+                            onClick={(e) => {
+                              e.preventDefault()
+                              e.stopPropagation()
+                              setVideoModel('ltx')
+                            }}
+                            className={`p-3 rounded-lg border text-left transition-all cursor-pointer ${videoModel === 'ltx' ? 'border-[#00FFF0] bg-[#00FFF0]/10' : 'border-[#3AAFA9]/20 bg-[#0C0C0C] hover:border-[#3AAFA9]/50'}`}
                          >
                             <p className={`text-xs font-bold ${videoModel === 'ltx' ? 'text-[#00FFF0]' : 'text-gray-300'}`}>LTX Studio</p>
                             <p className="text-[10px] text-gray-500 mt-1">Fast Cuts (1-2s)</p>
                          </button>
                     </div>
 
-                    {/* Duration - Only for Kling mostly, but good to show */}
+                    {/* Duration - Slider for LTX (1-2s), Buttons for Kling (5s/10s) */}
+                    {videoModel === 'ltx' && (
+                        <div className="space-y-2">
+                            <div className="flex items-center justify-between text-[10px] text-gray-400">
+                                <span>Duration</span>
+                                <span className="text-[#00FFF0] font-bold">{selectedClip.duration || 1}s</span>
+                            </div>
+                            <input
+                                type="range"
+                                min="1"
+                                max="2"
+                                step="1"
+                                value={selectedClip.duration || 1}
+                                onChange={(e) => {
+                                  const newDuration = parseInt(e.target.value)
+                                  handleUpdateClip({ duration: newDuration })
+                                }}
+                                className="w-full h-2 bg-[#0C0C0C] rounded-lg appearance-none cursor-pointer accent-[#00FFF0]"
+                                style={{
+                                  background: `linear-gradient(to right, #00FFF0 0%, #00FFF0 ${((selectedClip.duration || 1) - 1) * 100}%, #0C0C0C ${((selectedClip.duration || 1) - 1) * 100}%, #0C0C0C 100%)`
+                                }}
+                            />
+                            <div className="flex justify-between text-[9px] text-gray-500 px-1">
+                                <span>1s</span>
+                                <span>2s</span>
+                            </div>
+                        </div>
+                    )}
+
                     {videoModel === 'kling' && (
                         <div className="flex items-center gap-2 bg-[#0C0C0C] p-1 rounded-lg border border-[#3AAFA9]/10">
                             {[5, 10].map(sec => (
                                 <button
                                     key={sec}
-                                    onClick={() => handleUpdateClip({ duration: sec })}
-                                    className={`flex-1 py-1.5 text-xs font-medium rounded ${selectedClip.duration === sec ? 'bg-[#3AAFA9] text-black' : 'text-gray-500 hover:text-white'}`}
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.preventDefault()
+                                      e.stopPropagation()
+                                      handleUpdateClip({ duration: sec })
+                                    }}
+                                    className={`flex-1 py-1.5 text-xs font-medium rounded cursor-pointer transition-all ${selectedClip.duration === sec ? 'bg-[#3AAFA9] text-black' : 'text-gray-500 hover:text-white'}`}
                                 >
                                     {sec}s
                                 </button>
