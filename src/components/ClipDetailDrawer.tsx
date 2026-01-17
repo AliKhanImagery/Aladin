@@ -305,19 +305,14 @@ export default function ClipDetailDrawer() {
       
       if (selectedClip?.id) setClipGeneratingStatus(selectedClip.id, null)
       
-      // Save and refresh history
-      await saveUserImage({
-        image_url: imageUrl,
-        prompt: promptToUse,
-        model: imageModel,
-        aspect_ratio: aspectRatioToUse,
-        project_id: currentProject?.id,
-        clip_id: selectedClip?.id,
-        storeExternally: true
-      })
+      // Note: Image is already saved by the API route (generate-image-remix)
+      // No need to call saveUserImage here - it would create duplicates
       
       // Fetch history again to show the new image in the strip
-      fetchHistory()
+      // Small delay to ensure API route has finished saving
+      setTimeout(() => {
+        fetchHistory()
+      }, 500)
 
     } catch (error: any) {
       console.error('Image generation error:', error)
