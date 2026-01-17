@@ -240,13 +240,14 @@ export async function POST(request: NextRequest) {
             height = 1080
         }
         
-        falInput.width = width
-        falInput.height = height
-        
       if (sanitizedReferenceUrls.length > 0) {
           // FIX: flux-2-pro/edit expects image_urls (plural array) as required field
           falInput.image_urls = sanitizedReferenceUrls.slice(0, 8) // Support up to 8 reference images
           falInput.strength = 0.85 // Maintain high consistency
+          
+          // Set width/height only for edit mode (flux-2-pro/edit requires explicit dimensions)
+          falInput.width = width
+          falInput.height = height
           
           // Warn if multiple images may exceed Fal.ai's 9 megapixel limit
           // Fal.ai limit: First image ~4MP, additional images ~1MP each, output ~4MP = 9MP total
@@ -258,6 +259,9 @@ export async function POST(request: NextRequest) {
           // Safety: This shouldn't happen due to effectiveMode check, but add fallback
           console.warn('⚠️ flux-2-pro/edit mode requested but no reference images - this should not happen')
           endpoint = 'fal-ai/flux-2-pro' // Fallback to text-to-image endpoint
+          // Remove width/height for text-to-image endpoint (doesn't accept these parameters)
+          delete falInput.width
+          delete falInput.height
         }
       }
       
