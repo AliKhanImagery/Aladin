@@ -1,9 +1,8 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
-import { X, Upload, Image as ImageIcon, Package, User, MapPin, Search, Loader2, Trash2 } from 'lucide-react'
-import { getUserAssets, getUserImages, deleteUserAsset, deleteUserImage } from '@/lib/userMedia'
-import { useAppStore } from '@/lib/store'
+import { useState, useEffect, useRef, useCallback } from 'react'
+import { X, Upload, Image as ImageIcon, Package, User, MapPin, Search, Loader2 } from 'lucide-react'
+import { getUserAssets, getUserImages } from '@/lib/userMedia'
 import toast from 'react-hot-toast'
 
 interface AssetLibraryModalProps {
@@ -24,14 +23,8 @@ export default function AssetLibraryModal({ isOpen, onClose, onSelect, onUpload,
   const [searchQuery, setSearchQuery] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
   
-  // Load data on open
-  useEffect(() => {
-    if (isOpen) {
-      loadData()
-    }
-  }, [isOpen])
-
-  const loadData = async () => {
+  // Load data function - memoized to prevent unnecessary re-renders
+  const loadData = useCallback(async () => {
     setIsLoading(true)
     try {
       const [assetsData, imagesData] = await Promise.all([
@@ -46,7 +39,14 @@ export default function AssetLibraryModal({ isOpen, onClose, onSelect, onUpload,
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [])
+
+  // Load data on open
+  useEffect(() => {
+    if (isOpen) {
+      loadData()
+    }
+  }, [isOpen, loadData])
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -72,6 +72,11 @@ export default function AssetLibraryModal({ isOpen, onClose, onSelect, onUpload,
 
     // Proceed with upload if not duplicate or user chose to proceed
     await onUpload(file)
+    
+    // Reset file input to allow re-selecting the same file
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
     
     // Refresh list after upload
     loadData()
