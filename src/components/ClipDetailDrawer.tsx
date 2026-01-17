@@ -726,11 +726,11 @@ export default function ClipDetailDrawer() {
                             className={`p-3 rounded-lg border text-left transition-all cursor-pointer ${videoModel === 'ltx' ? 'border-[#00FFF0] bg-[#00FFF0]/10' : 'border-[#3AAFA9]/20 bg-[#0C0C0C] hover:border-[#3AAFA9]/50'}`}
                          >
                             <p className={`text-xs font-bold ${videoModel === 'ltx' ? 'text-[#00FFF0]' : 'text-gray-300'}`}>LTX Studio</p>
-                            <p className="text-[10px] text-gray-500 mt-1">Fast Cuts (1-2s)</p>
+                            <p className="text-[10px] text-gray-500 mt-1">Fast Cuts (1-5s)</p>
                          </button>
                     </div>
 
-                    {/* Duration - Slider for LTX (1-2s), Buttons for Kling (5s/10s) */}
+                    {/* Duration - Slider for LTX (1-5s), Buttons for Kling (5s/10s) */}
                     {videoModel === 'ltx' && (
                         <div className="space-y-2">
                             <div className="flex items-center justify-between text-[10px] text-gray-400">
@@ -740,7 +740,7 @@ export default function ClipDetailDrawer() {
                             <input
                                 type="range"
                                 min="1"
-                                max="2"
+                                max="5"
                                 step="1"
                                 value={selectedClip.duration || 1}
                                 onChange={(e) => {
@@ -749,12 +749,12 @@ export default function ClipDetailDrawer() {
                                 }}
                                 className="w-full h-2 bg-[#0C0C0C] rounded-lg appearance-none cursor-pointer accent-[#00FFF0]"
                                 style={{
-                                  background: `linear-gradient(to right, #00FFF0 0%, #00FFF0 ${((selectedClip.duration || 1) - 1) * 100}%, #0C0C0C ${((selectedClip.duration || 1) - 1) * 100}%, #0C0C0C 100%)`
+                                  background: `linear-gradient(to right, #00FFF0 0%, #00FFF0 ${((selectedClip.duration || 1) - 1) / 4 * 100}%, #0C0C0C ${((selectedClip.duration || 1) - 1) / 4 * 100}%, #0C0C0C 100%)`
                                 }}
                             />
                             <div className="flex justify-between text-[9px] text-gray-500 px-1">
                                 <span>1s</span>
-                                <span>2s</span>
+                                <span>5s</span>
                             </div>
                         </div>
                     )}
