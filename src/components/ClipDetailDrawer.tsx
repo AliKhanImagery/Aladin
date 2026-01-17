@@ -915,16 +915,6 @@ export default function ClipDetailDrawer() {
                       <Plus className="w-3 h-3 mr-1" />
                       Add Reference Image
                     </Button>
-                    {remixMode === 'edit' && imageModel === 'flux-2-pro' && referenceImageUrls.filter(url => url.trim()).length > 1 && (
-                      <div className="mt-3 p-3 bg-yellow-900/20 border border-yellow-700 rounded text-xs text-yellow-200">
-                        <p className="font-medium text-yellow-100 mb-1">⚠️ Reference Image Limit:</p>
-                        <p className="ml-2">
-                          Fal.ai's Flux.2 Pro Edit has a 9 megapixel limit (first image ~4MP, additional images ~1MP each, output ~4MP). 
-                          Using {referenceImageUrls.filter(url => url.trim()).length} images may exceed this limit. 
-                          If generation fails with "Requested area too large", try reducing to 1-2 images.
-                        </p>
-                  </div>
-                    )}
                   </div>
                   {remixMode === 'edit' && (
                     <div className="mt-3 p-2 bg-[#1E1F22] rounded text-xs text-gray-400">
@@ -942,6 +932,18 @@ export default function ClipDetailDrawer() {
                       </p>
                     </div>
                   )}
+                </div>
+              )}
+
+              {/* Flux 2 Pro Edit Warning - Show for flux-2-pro edit mode with multiple reference images */}
+              {remixMode === 'edit' && imageModel === 'flux-2-pro' && referenceImageUrls.filter(url => url.trim()).length > 1 && (
+                <div className="mt-3 p-3 bg-yellow-900/20 border border-yellow-700 rounded text-xs text-yellow-200">
+                  <p className="font-medium text-yellow-100 mb-1">⚠️ Reference Image Limit:</p>
+                  <p className="ml-2">
+                    Fal.ai's Flux.2 Pro Edit has a 9 megapixel limit (first image ~4MP, additional images ~1MP each, output ~4MP). 
+                    Using {referenceImageUrls.filter(url => url.trim()).length} images may exceed this limit. 
+                    If generation fails with "Requested area too large", try reducing to 1-2 images.
+                  </p>
                 </div>
               )}
 

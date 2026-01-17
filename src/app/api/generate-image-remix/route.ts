@@ -165,6 +165,15 @@ export async function POST(request: NextRequest) {
           .filter((url) => typeof url === 'string' && url.trim().length > 0)
           .map((url) => url.trim())
       : []
+    
+    console.log(`🔍 [generate-image-remix] Request received:`, {
+      mode: requestMode,
+      imageModel,
+      hasReferenceUrls: reference_image_urls?.length > 0,
+      referenceUrlCount: reference_image_urls?.length || 0,
+      sanitizedCount: sanitizedReferenceUrls.length,
+      validUrls: sanitizedReferenceUrls.filter((url) => url.startsWith('http')).length
+    })
 
     // Validate aspect ratio
     const validAspectRatios = ['16:9', '9:16', '1:1']
@@ -205,26 +214,56 @@ export async function POST(request: NextRequest) {
       if (effectiveMode === 'text-to-image') {
         endpoint = 'fal-ai/flux-2-pro'
         falInput.prompt = finalPrompt
-    } else {
-        // Use flux-2-pro/edit for remix and edit modes for best instruction following
+      } else {
+      // Use flux-2-pro/edit for remix and edit modes for best instruction following
       endpoint = 'fal-ai/flux-2-pro/edit'
-        falInput.prompt = finalPrompt
-      if (sanitizedReferenceUrls.length > 0) {
-          // FIX: flux-2-pro/edit expects image_urls (plural array) as required field
-          falInput.image_urls = sanitizedReferenceUrls.slice(0, 8) // Support up to 8 reference images
-          falInput.strength = 0.85 // Maintain high consistency
-          
-          // Warn if multiple images may exceed Fal.ai's 9 megapixel limit
-          // Fal.ai limit: First image ~4MP, additional images ~1MP each, output ~4MP = 9MP total
-          // With multiple images, user may need to reduce count if generation fails
-          if (sanitizedReferenceUrls.length > 1) {
-            console.warn(`⚠️ Using ${sanitizedReferenceUrls.length} reference images. Fal.ai has a 9 megapixel limit (first image ~4MP, additional ~1MP each, output ~4MP). If generation fails with "Requested area too large", try reducing to 1-2 images.`)
+      falInput.prompt = finalPrompt
+      
+      // Convert aspect_ratio to explicit width/height (multiples of 16, required by Fal.ai)
+      // Flux 2 Pro Edit requires explicit dimensions; if omitted, defaults to input image size (often low-res)
+      let width: number, height: number
+      switch (aspectRatioFormatted) {
+        case '16:9':
+          width = 1920   // 1920x1080 = 2.07MP (within 2MP recommendation, multiples of 16)
+          height = 1080
+          break
+        case '9:16':
+          width = 1080   // 1080x1920 = 2.07MP (portrait)
+          height = 1920
+          break
+        case '1:1':
+          width = 1024   // 1024x1024 = 1.05MP (square)
+          height = 1024
+          break
+        default:
+          width = 1920
+          height = 1080
       }
-    } else {
-          // Safety: This shouldn't happen due to effectiveMode check, but add fallback
-          console.warn('⚠️ flux-2-pro/edit mode requested but no reference images - this should not happen')
-          endpoint = 'fal-ai/flux-2-pro' // Fallback to text-to-image endpoint
+      
+      if (sanitizedReferenceUrls.length > 0) {
+        // FIX: flux-2-pro/edit expects image_urls (plural array) as required field
+        falInput.image_urls = sanitizedReferenceUrls.slice(0, 8) // Support up to 8 reference images
+        falInput.strength = 0.85 // Maintain high consistency
+        
+        // Set width/height only for edit mode (flux-2-pro/edit requires explicit dimensions)
+        falInput.width = width
+        falInput.height = height
+        
+        // Warn if multiple images may exceed Fal.ai's 9 megapixel limit
+        // Fal.ai limit: First image ~4MP, additional images ~1MP each, output ~4MP = 9MP total
+        // With multiple images, user may need to reduce count if generation fails
+        if (sanitizedReferenceUrls.length > 1) {
+          console.warn(`⚠️ Using ${sanitizedReferenceUrls.length} reference images. Fal.ai has a 9 megapixel limit (first image ~4MP, additional ~1MP each, output ~4MP). If generation fails with "Requested area too large", try reducing to 1-2 images.`)
         }
+      } else {
+        // Safety: This shouldn't happen due to effectiveMode check, but add fallback
+        console.warn('⚠️ flux-2-pro/edit mode requested but no reference images - this should not happen')
+        endpoint = 'fal-ai/flux-2-pro' // Fallback to text-to-image endpoint
+        
+        // Remove width/height for text-to-image endpoint (doesn't accept these parameters)
+        delete falInput.width
+        delete falInput.height
+      }
       }
       
       falInput.num_inference_steps = 50
