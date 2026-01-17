@@ -29,6 +29,7 @@ import { IdeaAnalysis, DetectedItem, AssetActionState, AssetContext } from '@/ty
 import { supabase } from '@/lib/supabase'
 import { saveUserAsset } from '@/lib/userMedia'
 import toast from 'react-hot-toast'
+import AssetLibraryModal from './AssetLibraryModal'
 
 interface IdeaAnalysisScreenProps {
   analysis: IdeaAnalysis
@@ -60,6 +61,10 @@ export default function IdeaAnalysisScreen({ analysis, onContinue, onBack }: Ide
   const [uploadStatus, setUploadStatus] = useState<Record<string, 'idle' | 'uploading' | 'uploaded' | 'generating'>>({})
   const [isGeneratingAutoAssets, setIsGeneratingAutoAssets] = useState(false)
   const [selectedImageModal, setSelectedImageModal] = useState<{ assetId: string; imageUrl: string; assetName: string } | null>(null)
+  
+  // New state for asset library picker
+  const [isLibraryOpen, setIsLibraryOpen] = useState(false)
+  const [activeAssetId, setActiveAssetId] = useState<string | null>(null)
 
   useEffect(() => {
     updateAnalysisSettings({
@@ -172,6 +177,7 @@ export default function IdeaAnalysisScreen({ analysis, onContinue, onBack }: Ide
           metadata: {
             source: 'upload',
             originalFilename: file.name,
+            fileSize: file.size,
           }
         }).catch(err => console.error('⚠️ Failed to save uploaded asset to library:', err))
       }
@@ -604,26 +610,17 @@ export default function IdeaAnalysisScreen({ analysis, onContinue, onBack }: Ide
 
                 {/* Action-specific UI */}
                 {asset.action === 'upload' && (
-                    <div className="mt-2 pt-3 border-t border-white/5">
-                    <input
-                      type="file"
-                        id={`up-${asset.assetId}`} 
-                        className="hidden" 
-                      accept="image/*"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0]
-                          if (file) {
-                            handleFileUpload(asset.assetId, file)
-                          }
+                  <div className="mt-2 pt-3 border-t border-white/5">
+                    <button
+                      onClick={() => {
+                        setActiveAssetId(asset.assetId)
+                        setIsLibraryOpen(true)
                       }}
-                    />
-                    <label
-                        htmlFor={`up-${asset.assetId}`} 
-                        className="flex items-center justify-center gap-2 h-10 bg-brand-obsidian/60 border border-white/10 rounded-xl text-xs font-bold text-white cursor-pointer hover:bg-white/5 transition-all"
+                      className="w-full flex items-center justify-center gap-2 h-10 bg-brand-obsidian/60 border border-white/10 rounded-xl text-xs font-bold text-white cursor-pointer hover:bg-white/5 transition-all"
                     >
-                      <Upload className="w-3 h-3" />
-                        {status === 'uploading' ? 'Uploading...' : 'Select Frame'}
-                    </label>
+                      <ImageIcon className="w-3 h-3" />
+                      {status === 'uploading' ? 'Uploading...' : 'Choose Image'}
+                    </button>
                   </div>
                 )}
 
@@ -686,6 +683,31 @@ export default function IdeaAnalysisScreen({ analysis, onContinue, onBack }: Ide
           )}
         </Button>
       </div>
+
+      {/* Asset Library Modal */}
+      {isLibraryOpen && activeAssetId && (
+        <AssetLibraryModal
+          isOpen={isLibraryOpen}
+          onClose={() => setIsLibraryOpen(false)}
+          onSelect={(url) => {
+            setAssets(prev => prev.map(a => 
+              a.assetId === activeAssetId ? { ...a, resultImageUrl: url } : a
+            ))
+            // Also update the asset action state if needed or trigger a save? 
+            // The original logic saved to user_assets bin on upload/generate.
+            // If selecting existing, we might just want to use it for this project context.
+            // But let's stick to just setting the URL for now as per requirement.
+            setIsLibraryOpen(false)
+          }}
+          onUpload={async (file) => {
+            await handleFileUpload(activeAssetId, file)
+            // Modal stays open or closes? Usually closes on selection, but upload might need to finish.
+            // handleFileUpload sets state. Let's close modal after upload if successful.
+            setIsLibraryOpen(false)
+          }}
+          isUploading={uploadStatus[activeAssetId] === 'uploading'}
+        />
+      )}
 
       {/* Image Zoom Modal */}
       {selectedImageModal && (
