@@ -165,6 +165,15 @@ export async function POST(request: NextRequest) {
           .filter((url) => typeof url === 'string' && url.trim().length > 0)
           .map((url) => url.trim())
       : []
+    
+    console.log(`🔍 [generate-image-remix] Request received:`, {
+      mode: requestMode,
+      imageModel,
+      hasReferenceUrls: reference_image_urls?.length > 0,
+      referenceUrlCount: reference_image_urls?.length || 0,
+      sanitizedCount: sanitizedReferenceUrls.length,
+      validUrls: sanitizedReferenceUrls.filter((url) => url.startsWith('http')).length
+    })
 
     // Validate aspect ratio
     const validAspectRatios = ['16:9', '9:16', '1:1']
@@ -209,6 +218,31 @@ export async function POST(request: NextRequest) {
         // Use flux-2-pro/edit for remix and edit modes for best instruction following
       endpoint = 'fal-ai/flux-2-pro/edit'
         falInput.prompt = finalPrompt
+        
+        // Convert aspect_ratio to explicit width/height (multiples of 16, required by Fal.ai)
+        // Flux 2 Pro Edit requires explicit dimensions; if omitted, defaults to input image size (often low-res)
+        let width: number, height: number
+        switch (aspectRatioFormatted) {
+          case '16:9':
+            width = 1920   // 1920x1080 = 2.07MP (within 2MP recommendation, multiples of 16)
+            height = 1080
+            break
+          case '9:16':
+            width = 1080   // 1080x1920 = 2.07MP (portrait)
+            height = 1920
+            break
+          case '1:1':
+            width = 1024   // 1024x1024 = 1.05MP (square)
+            height = 1024
+            break
+          default:
+            width = 1920
+            height = 1080
+        }
+        
+        falInput.width = width
+        falInput.height = height
+        
       if (sanitizedReferenceUrls.length > 0) {
           // FIX: flux-2-pro/edit expects image_urls (plural array) as required field
           falInput.image_urls = sanitizedReferenceUrls.slice(0, 8) // Support up to 8 reference images
