@@ -8,20 +8,33 @@ import toast from 'react-hot-toast'
 interface AssetLibraryModalProps {
   isOpen: boolean
   onClose: () => void
-  onSelect: (url: string) => void
+  onSelect: (url: string, name?: string) => void
   onUpload: (file: File) => Promise<void>
   isUploading?: boolean
+  projectContext?: any // Optional project context for suggestions
 }
 
 type Tab = 'assets' | 'generated'
 
-export default function AssetLibraryModal({ isOpen, onClose, onSelect, onUpload, isUploading = false }: AssetLibraryModalProps) {
+export default function AssetLibraryModal({ isOpen, onClose, onSelect, onUpload, isUploading = false, projectContext }: AssetLibraryModalProps) {
   const [activeTab, setActiveTab] = useState<Tab>('assets')
   const [assets, setAssets] = useState<any[]>([])
   const [images, setImages] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
+  
+  // Naming Modal State
+  const [namingAsset, setNamingAsset] = useState<{ url: string, type: 'asset' | 'generated' } | null>(null)
+  const [assetName, setAssetName] = useState('')
+  
   const fileInputRef = useRef<HTMLInputElement>(null)
+  
+  // Suggestions from project context
+  const suggestions = projectContext ? [
+    ...(projectContext.characters?.map((c: any) => c.name) || []),
+    ...(projectContext.assetContext?.products?.map((p: any) => p.name) || []),
+    ...(projectContext.assetContext?.locations?.map((l: any) => l.name) || [])
+  ] : []
   
   // Load data function - memoized to prevent unnecessary re-renders
   const loadData = useCallback(async () => {
@@ -65,7 +78,7 @@ export default function AssetLibraryModal({ isOpen, onClose, onSelect, onUpload,
       )
       
       if (duplicateAsset && window.confirm(`File "${file.name}" already exists in your library. Use existing file instead?`)) {
-        onSelect(duplicateAsset.asset_url)
+        handleAssetClick(duplicateAsset.asset_url, 'asset')
         return
       }
     }
@@ -79,7 +92,30 @@ export default function AssetLibraryModal({ isOpen, onClose, onSelect, onUpload,
     }
     
     // Refresh list after upload
-    loadData()
+    await loadData()
+    // NOTE: Ideally onUpload should return the new URL so we can open naming immediately.
+    // For now, user will see it in the grid and click it.
+  }
+
+  const handleAssetClick = (url: string, type: 'asset' | 'generated') => {
+    setNamingAsset({ url, type })
+    setAssetName('') // Reset name
+  }
+
+  const handleConfirmName = () => {
+    if (namingAsset) {
+      onSelect(namingAsset.url, assetName.trim())
+      setNamingAsset(null)
+      setAssetName('')
+    }
+  }
+
+  const handleSkipName = () => {
+    if (namingAsset) {
+      onSelect(namingAsset.url, '')
+      setNamingAsset(null)
+      setAssetName('')
+    }
   }
 
   // Filter items based on search
@@ -87,6 +123,72 @@ export default function AssetLibraryModal({ isOpen, onClose, onSelect, onUpload,
   const filteredImages = images.filter(i => i.prompt?.toLowerCase().includes(searchQuery.toLowerCase()))
 
   if (!isOpen) return null
+
+  // Naming Modal View
+  if (namingAsset) {
+    return (
+      <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/95 backdrop-blur-xl animate-in fade-in duration-300 p-4">
+        <div className="w-full max-w-md bg-[#151619] border border-white/10 rounded-2xl overflow-hidden flex flex-col shadow-2xl">
+          <div className="p-4 border-b border-white/5 flex items-center justify-between">
+            <h3 className="text-sm font-bold text-white uppercase tracking-wider">Name this Reference</h3>
+            <button onClick={() => setNamingAsset(null)} className="text-gray-500 hover:text-white"><X className="w-4 h-4" /></button>
+          </div>
+          
+          <div className="p-6 space-y-6">
+            <div className="flex justify-center">
+              <div className="w-32 h-32 rounded-xl overflow-hidden border border-white/10 bg-black/50">
+                <img src={namingAsset.url} className="w-full h-full object-cover" />
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <label className="text-xs text-gray-400 font-medium">Asset Name (Optional)</label>
+              <input 
+                type="text" 
+                value={assetName}
+                onChange={(e) => setAssetName(e.target.value)}
+                placeholder="e.g. Imran Khan, Living Room..."
+                className="w-full bg-black/30 border border-white/10 rounded-lg p-3 text-sm text-white focus:border-brand-emerald/50 outline-none"
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleConfirmName()
+                }}
+              />
+              
+              {suggestions.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {suggestions.map((suggestion: string, i: number) => (
+                    <button 
+                      key={i}
+                      onClick={() => setAssetName(suggestion)}
+                      className="px-2 py-1 bg-white/5 hover:bg-white/10 border border-white/5 rounded-md text-xs text-gray-300 transition-colors"
+                    >
+                      + {suggestion}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <button 
+                onClick={handleSkipName}
+                className="flex-1 py-2.5 rounded-lg border border-white/10 text-gray-400 hover:text-white text-xs font-bold uppercase tracking-wider transition-colors"
+              >
+                Skip
+              </button>
+              <button 
+                onClick={handleConfirmName}
+                className="flex-1 py-2.5 rounded-lg bg-brand-emerald text-brand-obsidian hover:bg-brand-emerald/90 text-xs font-bold uppercase tracking-wider transition-colors shadow-lg shadow-brand-emerald/20"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 backdrop-blur-xl animate-in fade-in duration-300 p-4">
@@ -197,7 +299,7 @@ export default function AssetLibraryModal({ isOpen, onClose, onSelect, onUpload,
                         return (
                           <div
                             key={asset.id}
-                            onClick={() => onSelect(asset.asset_url)}
+                            onClick={() => handleAssetClick(asset.asset_url, 'asset')}
                             className="group relative aspect-square rounded-2xl bg-white/5 border border-white/10 overflow-hidden cursor-pointer hover:border-brand-emerald/50 transition-all"
                           >
                             <img
@@ -232,7 +334,7 @@ export default function AssetLibraryModal({ isOpen, onClose, onSelect, onUpload,
                     filteredImages.map((image) => (
                       <div
                         key={image.id}
-                        onClick={() => onSelect(image.image_url)}
+                        onClick={() => handleAssetClick(image.image_url, 'generated')}
                         className="group relative aspect-video rounded-2xl bg-white/5 border border-white/10 overflow-hidden cursor-pointer hover:border-brand-emerald/50 transition-all"
                       >
                         <img
