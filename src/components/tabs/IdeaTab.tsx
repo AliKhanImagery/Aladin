@@ -644,37 +644,90 @@ export default function IdeaTab() {
               
               // Enhanced prompt with STRONG consistency instructions
               let enhancedPrompt = imagePromptToUse.trim()
-                if (metadata?.assetContext) {
-                  const consistencyInstructions: string[] = []
-                  
-                // Add STRONG character consistency instructions
-                  if (metadata.assetContext.characters.length > 0) {
-                  metadata.assetContext.characters.forEach((char: any) => {
-                      if (char.assetUrl) {
-                      consistencyInstructions.push(
-                        `CRITICAL: ${char.name.toUpperCase()} MUST match the reference image EXACTLY - same face, same features, same appearance, same build, same skin tone, same hair, same eyes. The reference image is provided and must be followed precisely.`
-                      )
-                    }
-                  })
-                  }
-                  
-                // Add product consistency instructions
-                  if (metadata.assetContext.products.length > 0) {
-                  metadata.assetContext.products.forEach((product: any) => {
-                      if (product.assetUrl) {
-                      consistencyInstructions.push(
-                        `PRODUCT: ${product.name.toUpperCase()} must match reference exactly in shape, color, and design.`
-                        )
-                    }
-                  })
-                      }
+              
+              // Helper to find asset URL in local or global context
+              const findAssetUrl = (name: string, type: 'character' | 'product'): string | null => {
+                const normalizedName = name.toLowerCase().trim()
                 
-                  if (consistencyInstructions.length > 0) {
-                    enhancedPrompt = consistencyInstructions.join(' ') + '. ' + enhancedPrompt
+                // 1. Check local clip metadata context first
+                if (type === 'character' && metadata?.assetContext?.characters) {
+                  const localChar = metadata.assetContext.characters.find((c: any) => c.name.toLowerCase().trim() === normalizedName)
+                  if (localChar?.assetUrl) return localChar.assetUrl
+                }
+                if (type === 'product' && metadata?.assetContext?.products) {
+                  const localProd = metadata.assetContext.products.find((p: any) => p.name.toLowerCase().trim() === normalizedName)
+                  if (localProd?.assetUrl) return localProd.assetUrl
+                }
+                
+                // 2. Fallback to Project Level Global Assets (confirmedAssetContext)
+                // This handles cases where clip metadata is missing the URL but the character is known globally
+                if (type === 'character' && confirmedAssetContext?.characters) {
+                  const globalChar = confirmedAssetContext.characters.find((c: any) => c.name.toLowerCase().trim() === normalizedName)
+                  if (globalChar?.assetUrl) return globalChar.assetUrl
+                }
+                if (type === 'product' && confirmedAssetContext?.products) {
+                  const globalProd = confirmedAssetContext.products.find((p: any) => p.name.toLowerCase().trim() === normalizedName)
+                  if (globalProd?.assetUrl) return globalProd.assetUrl
+                }
+                
+                return null
+              }
+
+              // Collect all relevant assets mentioned in prompt OR context
+              const consistencyInstructions: string[] = []
+              
+              // 1. Scan prompt for known character names (Global + Local)
+              const allKnownCharacters = [
+                ...(metadata?.assetContext?.characters || []),
+                ...(confirmedAssetContext?.characters || [])
+              ].map((c: any) => c.name).filter((v, i, a) => a.indexOf(v) === i) // Unique names
+
+              allKnownCharacters.forEach((charName: string) => {
+                // If character is mentioned in prompt OR explicitly listed in this clip's context
+                const isMentioned = enhancedPrompt.toLowerCase().includes(charName.toLowerCase())
+                const isExplicitlyInContext = metadata?.assetContext?.characters?.some((c: any) => c.name.toLowerCase() === charName.toLowerCase())
+                
+                if (isMentioned || isExplicitlyInContext) {
+                  const assetUrl = findAssetUrl(charName, 'character')
+                  if (assetUrl) {
+                    consistencyInstructions.push(
+                      `CRITICAL: ${charName.toUpperCase()} MUST match the reference image EXACTLY - same face, same features, same appearance, same build, same skin tone, same hair, same eyes. The reference image is provided and must be followed precisely.`
+                    )
+                    // Ensure this URL is included in reference images if not already there
+                    if (!referenceImageUrls.includes(assetUrl)) {
+                      referenceImageUrls.push(assetUrl)
+                    }
                   }
-                  
-                // Prompt is now clean and preserves the Kinetic Workflow structure
-                // No additional wrapping needed - the prompt from AI is already properly structured
+                }
+              })
+
+              // 2. Scan for products
+              const allKnownProducts = [
+                ...(metadata?.assetContext?.products || []),
+                ...(confirmedAssetContext?.products || [])
+              ].map((p: any) => p.name).filter((v, i, a) => a.indexOf(v) === i)
+
+              allKnownProducts.forEach((prodName: string) => {
+                const isMentioned = enhancedPrompt.toLowerCase().includes(prodName.toLowerCase())
+                const isExplicitlyInContext = metadata?.assetContext?.products?.some((p: any) => p.name.toLowerCase() === prodName.toLowerCase())
+                
+                if (isMentioned || isExplicitlyInContext) {
+                  const assetUrl = findAssetUrl(prodName, 'product')
+                  if (assetUrl) {
+                    consistencyInstructions.push(
+                      `PRODUCT: ${prodName.toUpperCase()} must match reference exactly in shape, color, and design.`
+                    )
+                    if (!referenceImageUrls.includes(assetUrl)) {
+                      referenceImageUrls.push(assetUrl)
+                    }
+                  }
+                }
+              })
+                
+              if (consistencyInstructions.length > 0) {
+                // Deduplicate instructions
+                const uniqueInstructions = Array.from(new Set(consistencyInstructions))
+                enhancedPrompt = uniqueInstructions.join(' ') + '. ' + enhancedPrompt
               }
               
               // Final mode determination - if edit mode but no valid URLs, fallback to text-to-image
@@ -703,9 +756,9 @@ export default function IdeaTab() {
                 const requestPayload: any = {
                 mode: finalMode,
                   prompt: enhancedPrompt,
-                  aspect_ratio: latestProject.story.aspectRatio || '16:9',
-                project_id: latestProject.id,
-                clip_id: clipId,
+                    aspect_ratio: latestProject.story.aspectRatio || '16:9',
+                    project_id: latestProject.id,
+                    clip_id: clipId,
                 imageModel: finalImageModel, // Pass the dynamic model selection
                 }
                 
@@ -759,7 +812,7 @@ export default function IdeaTab() {
                   errorMessage = errorData.error || errorData.details || `HTTP ${response.status}: ${response.statusText}`
                   console.error(`❌ [${index + 1}/${allClips.length}] Image generation failed for "${clip.name}"`, {
                     status: response.status,
-                    error: errorMessage,
+                  error: errorMessage,
                     details: errorData
                 })
               } catch (parseError) {
