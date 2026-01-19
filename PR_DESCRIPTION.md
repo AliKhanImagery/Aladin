@@ -1,111 +1,57 @@
-# Auth Flow Integration & Supabase Setup
+# Omni Editor v1 Beta - Unified Creative Workflow
 
 ## Summary
-This PR implements Phase 1 of the authentication system redesign, integrating auth checks with project creation flow and fixing Supabase user profile creation.
+This major update introduces the **Omni Editor**, a complete redesign of the `ClipDetailDrawer`. It unifies image and video generation into a single "Stage" with distinct "Visualize" and "Animate" workflows. It also adds a global asset library, duplicate file detection, a generation history strip, and intelligent prompt injection for character consistency.
 
 ## 🎯 Main Features
 
-### 1. Auth Flow Integration
-- ✅ Auth check before "Start Creating" button
-- ✅ Idea preservation in localStorage when auth required
-- ✅ Context-aware auth modal with benefits messaging
-- ✅ Auto-continue project creation after successful auth
-- ✅ Guest browsing enabled (users can explore without signing up)
+### 1. Omni Editor Redesign (ClipDetailDrawer)
+- **Unified Stage**: Single preview area for both images and videos.
+- **Workflow Switcher**: Toggle between "Visualize" (Image) and "Animate" (Video) modes.
+- **Visualize Mode**:
+  - "The Director": Focused prompt editing.
+  - "Influences": Visual grid of reference assets with naming capabilities.
+  - "History Strip": Horizontal scroll of previous generations with instant restore.
+- **Animate Mode**:
+  - "The Action": Motion prompt editing.
+  - "Start Frame": Clear selection of the source image for video generation.
+  - "Engine Controls": Refined LTX (1-5s slider) and Kling (5s/10s) controls.
 
-### 2. Supabase User Profile Creation
-- ✅ Fixed database trigger for automatic profile creation
-- ✅ Simplified signup flow (removed problematic client-side checks)
-- ✅ Added INSERT RLS policy for user profiles
-- ✅ Profile creation now works reliably via server-side trigger
+### 2. Global Asset Library
+- **Unified Picker**: New `AssetLibraryModal` for selecting or uploading assets.
+- **Duplicate Detection**: Prevents uploading the same file twice by checking filename and size.
+- **Smart Naming**: Dedicated flow to name assets (e.g., "Imran Khan") immediately after selection.
 
-### 3. Project Manager Enhancements
-- ✅ Added "My Images" tab to browse all generated images
-- ✅ Added "My Videos" tab to browse all generated videos
-- ✅ Projects tab shows auto-saved projects
-- ✅ Content organized by media type across all projects
+### 3. Intelligent Prompt Consistency (Global Asset Fallback)
+- **Automatic Injection**: If a clip prompt mentions a character/product name (e.g., "Imran Khan") that exists in the project assets, the system automatically injects:
+  - "CRITICAL: [Name] MUST match reference..." instructions.
+  - The correct asset URL into the `reference_image_urls` list.
+- **Project-Level Context**: Works even if the specific clip wasn't manually tagged with the asset, ensuring consistency across the entire story.
 
-### 4. Prompt Generation Improvements
-- ✅ Enhanced prompt generation for higher quality, detailed prompts
-- ✅ Increased minimum prompt length (100+ words)
-- ✅ Added technical camera details, lighting, and cinematography terminology
-- ✅ Improved story generation with more detailed clip prompts
+### 4. UX Polish
+- **Instant Feedback**: Clicking a history item immediately updates the stage and prompt.
+- **Refined Controls**: LTX slider now supports 1-5s in 1s intervals.
+- **Visual Clarity**: Removed clutter, improved spacing, and added clear labels.
 
 ## 📁 Files Changed
 
-### Core Auth Changes
-- `src/lib/store.ts` - Added auth modal state management (`showAuthModal`, `pendingIdea`)
-- `src/components/AuthProvider.tsx` - Allow guest browsing, use store for modal control
-- `src/components/AuthModal.tsx` - Context-aware messaging for project creation
-- `src/components/IdeaPromptScreen.tsx` - Auth check, idea preservation, auto-continue
-- `src/lib/auth.ts` - Simplified signup to rely on database trigger
+### Components
+- `src/components/ClipDetailDrawer.tsx` - **Complete Rewrite** for Omni Editor logic.
+- `src/components/AssetLibraryModal.tsx` - **New Component** for unified asset management.
+- `src/components/IdeaAnalysisScreen.tsx` - Integrated new Asset Library modal.
+- `src/components/tabs/IdeaTab.tsx` - Implemented **Global Asset Fallback** logic for prompts.
 
-### Supabase Setup
-- `supabase/migrations/001_initial_schema.sql` - Added INSERT policy for users table
-- `SUPABASE_TROUBLESHOOTING.md` - Troubleshooting guide
-- `scripts/check-supabase-setup.sql` - Diagnostic queries
-- `scripts/fix-supabase-users-insert.sql` - Fix script for RLS policies
-
-### Project Manager
-- `src/components/ProjectManager.tsx` - Added "My Images" and "My Videos" tabs
-- `src/components/MainApp.tsx` - Added Projects button to navbar
-
-### Prompt Generation
-- `src/app/api/generate-clip-prompts/route.ts` - Enhanced prompt quality
-- `src/app/api/generate-story/route.ts` - Improved story generation prompts
+### Libraries & Types
+- `src/lib/userMedia.ts` - Updated `getUserImages` to support clip-specific filtering.
+- `src/types/index.ts` - Updated `Clip` and `GenerationMetadata` interfaces.
 
 ## 🧪 Testing Checklist
 
-- [x] Sign up flow works correctly
-- [x] User profiles created automatically via trigger
-- [x] Auth modal shows with context messaging
-- [x] Project creation continues after auth
-- [x] Idea preserved in localStorage
-- [x] No console errors (RLS errors resolved)
-- [x] Guest browsing works (can explore without auth)
-- [x] "Start Creating" triggers auth modal when not authenticated
-
-## 🔧 Database Changes Required
-
-Before deploying, run this SQL in Supabase SQL Editor:
-
-```sql
--- Create trigger for automatic user profile creation
-CREATE OR REPLACE FUNCTION public.handle_new_user()
-RETURNS TRIGGER AS $$
-BEGIN
-  INSERT INTO public.users (id, email, full_name, created_at, updated_at)
-  VALUES (
-    NEW.id,
-    NEW.email,
-    COALESCE(NEW.raw_user_meta_data->>'full_name', split_part(NEW.email, '@', 1)),
-    NOW(),
-    NOW()
-  )
-  ON CONFLICT (id) DO NOTHING;
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
-DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
-CREATE TRIGGER on_auth_user_created
-  AFTER INSERT ON auth.users
-  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
-
--- Add INSERT policy
-CREATE POLICY "Users can insert own profile" ON users
-  FOR INSERT 
-  WITH CHECK (auth.uid() IS NOT NULL);
-```
-
-## 🚀 Next Steps
-
-- Phase 2: Admin setup and role management
-- Phase 3: Credit system integration
-- Phase 4: Lemon Squeezy payment integration
-
-## 📝 Notes
-
-- The trigger handles user profile creation server-side, avoiding RLS issues
-- Email confirmation can be disabled for testing (see Supabase Auth settings)
-- All user profiles are created automatically, no manual intervention needed
-
+- [ ] **Omni Editor UI**: Verify "Visualize" and "Animate" toggle works.
+- [ ] **Asset Library**: Upload a new file, try to upload it again (check duplicate warning), and select an existing file.
+- [ ] **History Strip**: Generate an image, see it appear in history, and click previous items to restore them.
+- [ ] **Video Generation**: Test LTX slider (1-5s) and Kling buttons.
+- [ ] **Consistency Fallback**:
+  1. Create a project with a character named "Hero".
+  2. In a clip *without* the asset manually attached, write a prompt "Hero stands in the rain."
+  3. Verify the generated image uses the reference face of "Hero".
