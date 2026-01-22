@@ -73,6 +73,11 @@ async function getAuthenticatedUser(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  // Billing state for refunds/tracking
+  let transactionLedgerId: string | null = null
+  let transactionCost: number = 0
+  let pricingKeyForRefund: string = ''
+
   try {
     console.log('🎬 /api/generate-video: Request received')
     
@@ -241,6 +246,8 @@ export async function POST(request: NextRequest) {
         : videoModel === 'kling'
           ? durationValueForPricing === 10 ? 'video.kling.10s' : 'video.kling.5s'
           : durationValueForPricing === 10 ? 'video.vidu.10s' : 'video.vidu.5s'
+    
+    pricingKeyForRefund = pricingKey
 
     const { data: priceRow, error: priceError } = await billingClient
       .from('credit_pricing')
@@ -255,8 +262,16 @@ export async function POST(request: NextRequest) {
         message: priceError.message,
       })
     } else if (priceRow?.cost && priceRow.cost > 0) {
+      // COMPETITIVE BATCH PRICING: Check for 'Pro' status
+      const isPro = user.app_metadata?.plan === 'pro' || user.user_metadata?.plan === 'pro'
+      
+      let finalCost = priceRow.cost
+      if (isPro) {
+        finalCost = Math.floor(finalCost * 0.9) // 10% Volume Discount
+      }
+
       const spendResult = await billingClient.rpc('spend_credits', {
-        p_cost: priceRow.cost,
+        p_cost: finalCost,
         p_reason: pricingKey,
         p_metadata: {
           videoModel,
@@ -1161,6 +1176,32 @@ export async function POST(request: NextRequest) {
       duration: result.data?.duration || duration,
     })
   } catch (error: any) {
+    // Refund Logic: If we spent credits but generation failed
+    if (transactionLedgerId && transactionCost > 0) {
+       console.log(`💰 Initiating Refund of ${transactionCost} credits due to video failure...`)
+       try {
+          const authHeader = request.headers.get('authorization')
+          let accessToken = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : undefined
+          if (!accessToken) {
+             const cookieHeader = request.headers.get('cookie') || ''
+             const match = cookieHeader.match(/sb-[^-]+-auth-token=([^;]+)/)
+             if (match?.[1]) {
+                try { accessToken = JSON.parse(decodeURIComponent(match[1])).access_token } catch { accessToken = match[1] }
+             }
+          }
+
+          if (accessToken) {
+             const billingClient = await getServerSupabaseClient(accessToken)
+             await billingClient.rpc('refund_credits', {
+               p_amount: transactionCost,
+               p_reason: 'refund_generation_failed',
+               p_metadata: { original_ledger_id: transactionLedgerId, error: error.message, pricingKey: pricingKeyForRefund }
+             })
+             console.log('✅ Refund processed successfully')
+          }
+       } catch (refundError) { console.error('❌ Refund failed', refundError) }
+    }
+
     // Log the complete error object to understand its structure
     const errorStringified = JSON.stringify(error, Object.getOwnPropertyNames(error), 2)
     console.error('❌ Fal AI Video Generation Error - Complete Error Object:', {

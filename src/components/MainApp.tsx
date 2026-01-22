@@ -10,6 +10,7 @@ import TimelineTab from './tabs/TimelineTab'
 import ClipDetailDrawer from './ClipDetailDrawer'
 import GenerationStatusIndicator from './GenerationStatusIndicator'
 import UserMenu from './UserMenu'
+import CreditsBadge from './CreditsBadge'
 import ProjectManager from './ProjectManager'
 import EditProjectNameModal from './EditProjectNameModal'
 
@@ -92,6 +93,7 @@ export default function MainApp() {
 
             {/* Right side: UserMenu */}
             <div className="flex items-center gap-4">
+              <CreditsBadge />
               <button 
                 onClick={() => setProjectManagerOpen(true)}
                 className="text-xs font-medium text-gray-400 hover:text-white transition-colors bg-white/5 px-3 py-1.5 rounded-lg border border-white/5"

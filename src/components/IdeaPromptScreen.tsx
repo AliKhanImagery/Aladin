@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import Link from 'next/link'
 import { useAppStore } from '@/lib/store'
 import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
@@ -9,6 +8,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Play, Briefcase, Zap, Film, Layout, MousePointer2, Command, ArrowRight } from 'lucide-react'
 import { Project } from '@/types'
 import UserMenu from './UserMenu'
+import CreditsBadge from './CreditsBadge'
 
 const PERSONAS = [
   {
@@ -172,16 +172,9 @@ export default function IdeaPromptScreen() {
               </div>
               <span className="text-xl font-bold tracking-[-0.04em] uppercase">Flowboard</span>
             </div>
-            <nav className="hidden md:flex items-center gap-8">
-              <Link href="/my-projects" className="text-[11px] font-bold uppercase tracking-[0.2em] text-white/30 hover:text-white transition-colors">
-                Projects
-              </Link>
-              <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-white/10 cursor-not-allowed">
-                Features
-              </span>
-            </nav>
           </div>
           <div className="flex items-center gap-6">
+            <CreditsBadge />
             <UserMenu user={user} />
           </div>
         </div>

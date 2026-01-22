@@ -56,7 +56,10 @@ export async function getServerSupabaseClient(accessToken?: string) {
           if (!sessionError) {
             return client
           }
-          console.warn('⚠️ getServerSupabaseClient: setSession failed:', sessionError.message)
+          // Only warn if it's not the common "Auth session missing!" error which happens when we only have access token
+          if (sessionError.message !== 'Auth session missing!') {
+             console.warn('⚠️ getServerSupabaseClient: setSession failed:', sessionError.message)
+          }
         } else {
           console.warn('⚠️ getServerSupabaseClient: getUser failed with token:', userError?.message)
         }

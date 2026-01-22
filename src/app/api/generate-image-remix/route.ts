@@ -92,6 +92,11 @@ export async function POST(request: NextRequest) {
   // Declare mode at function scope so it's accessible in catch block
   let mode: string = 'remix'
   
+  // Billing state for refunds/tracking
+  let transactionLedgerId: string | null = null
+  let transactionCost: number = 0
+  let pricingKeyForRefund: string = ''
+  
   try {
     // Step 1: Authentication Check - get user from cookies/headers
     const user = await getAuthenticatedUser(request)
@@ -282,23 +287,16 @@ export async function POST(request: NextRequest) {
         const cookiePattern = new RegExp(`sb-${projectRef.replace(/[^a-z0-9]/gi, '')}-auth-token=([^;]+)`, 'i')
         const match = cookieHeader.match(cookiePattern) || cookieHeader.match(/sb-[^-]+-auth-token=([^;]+)/i)
         if (match?.[1]) {
-          try {
-            const sessionData = JSON.parse(decodeURIComponent(match[1]))
-            accessToken = sessionData.access_token || sessionData.accessToken
-          } catch {
-            // Cookie might be token directly
-            accessToken = match[1]
-          }
+           try {
+             const sessionData = JSON.parse(decodeURIComponent(match[1]))
+             accessToken = sessionData.access_token || sessionData.accessToken
+           } catch { accessToken = match[1] }
         }
       }
 
       if (!accessToken) {
-        // No user token => can't enforce user-bound credits safely
-        console.error('❌ Billing: missing access token (cannot determine auth.uid() for spend_credits)')
-        return NextResponse.json(
-          { error: 'Unauthorized', details: 'Missing access token for billing enforcement' },
-          { status: 401 }
-        )
+        console.error('❌ Billing: missing access token')
+        return NextResponse.json({ error: 'Unauthorized', details: 'Missing access token for billing' }, { status: 401 })
       }
 
       const billingClient = await getServerSupabaseClient(accessToken)
@@ -315,6 +313,8 @@ export async function POST(request: NextRequest) {
               : endpoint.includes('reve/remix')
                 ? 'image.reeve.remix'
                 : 'image.reeve.text_to_image'
+      
+      pricingKeyForRefund = pricingKey
 
       const { data: priceRow, error: priceError } = await billingClient
         .from('credit_pricing')
@@ -323,55 +323,47 @@ export async function POST(request: NextRequest) {
         .eq('active', true)
         .single()
 
-      if (priceError) {
-        console.warn('⚠️ Billing: pricing lookup failed, allowing generation', {
-          pricingKey,
-          message: priceError.message,
-        })
-      } else if (priceRow?.cost && priceRow.cost > 0) {
+      if (priceRow?.cost && priceRow.cost > 0) {
+        // COMPETITIVE BATCH PRICING: Check for 'Pro' status
+        const isPro = user.app_metadata?.plan === 'pro' || user.user_metadata?.plan === 'pro'
+        
+        let finalCost = priceRow.cost
+        if (isPro) {
+          finalCost = Math.floor(finalCost * 0.9) // 10% Volume Discount
+          console.log('💎 Applying Pro Discount (10%)', { original: priceRow.cost, final: finalCost })
+        }
+
         const spendResult = await billingClient.rpc('spend_credits', {
-          p_cost: priceRow.cost,
+          p_cost: finalCost,
           p_reason: pricingKey,
-          p_metadata: {
-            endpoint,
-            imageModel,
-            mode,
-            project_id: project_id || null,
-            clip_id: clip_id || null,
-          },
+          p_metadata: { endpoint, imageModel, mode, project_id, clip_id, is_pro: isPro },
         })
 
         if (spendResult.error) {
-          const msg = spendResult.error.message || 'billing_error'
-          if (msg.includes('insufficient_credits')) {
-            return NextResponse.json(
-              {
-                error: 'Insufficient credits',
-                code: 'INSUFFICIENT_CREDITS',
-                required: priceRow.cost,
-                pricingKey,
-              },
-              { status: 402 }
-            )
-          }
-          console.error('❌ Billing: spend_credits failed', { pricingKey, msg })
-          return NextResponse.json(
-            { error: 'Billing error', code: 'BILLING_ERROR', details: msg },
-            { status: 500 }
-          )
+           const msg = spendResult.error.message || 'billing_error'
+           if (msg.includes('insufficient_credits')) {
+             return NextResponse.json(
+               { error: 'Insufficient credits', code: 'INSUFFICIENT_CREDITS', required: finalCost },
+               { status: 402 }
+             )
+           }
+           throw spendResult.error
         }
 
-        console.log('💳 Billing: spent credits', {
-          pricingKey,
-          cost: priceRow.cost,
-        })
-      } else {
-        console.warn('⚠️ Billing: no active price, allowing generation', { pricingKey })
+        // Capture Transaction ID for Refund/Profit Tracking
+        // spend_credits v2 returns { new_balance, ledger_id }
+        const resultData = spendResult.data as any
+        if (resultData && resultData.ledger_id) {
+           transactionLedgerId = resultData.ledger_id
+           transactionCost = finalCost
+           console.log('💳 Billing: spent credits', { pricingKey, cost: finalCost, ledgerId: transactionLedgerId })
+        }
       }
     } catch (billingException: any) {
-      console.warn('⚠️ Billing: exception, allowing generation', {
-        message: billingException?.message || String(billingException),
-      })
+       console.warn('⚠️ Billing exception:', billingException)
+       if (billingException?.message?.includes('insufficient_credits')) {
+          return NextResponse.json({ error: 'Insufficient credits', code: 'INSUFFICIENT_CREDITS' }, { status: 402 })
+       }
     }
 
     // Call Fal AI
@@ -397,6 +389,26 @@ export async function POST(request: NextRequest) {
     }
 
     console.log(`✅ Fal AI (${endpoint}) image generated:`, imageUrl)
+
+    // Profit Tracking: Record exact USD cost
+    if (transactionLedgerId) {
+        let providerCost = 0.05 // Default Flux Pro estimate
+        if (endpoint.includes('nano-banana')) providerCost = 0.005
+        else if (endpoint.includes('flux-2-pro')) providerCost = 0.05
+        else if (endpoint.includes('reve')) providerCost = 0.04
+        
+        try {
+           const authHeader = request.headers.get('authorization')
+           const accessToken = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : undefined
+           if (accessToken) {
+             const billingClient = await getServerSupabaseClient(accessToken)
+             await billingClient.rpc('record_usage_cost', {
+               p_ledger_id: transactionLedgerId,
+               p_cost_usd: providerCost
+             })
+           }
+        } catch (e) { console.warn('Failed to record usage cost', e) }
+    }
 
     // Step 3: IMMEDIATE STORAGE (Industry Standard - store before returning)
     let finalImageUrl = imageUrl
@@ -570,6 +582,33 @@ export async function POST(request: NextRequest) {
       ...(warning && { warning }), // Include warning if present
     })
   } catch (error: any) {
+    // Refund Logic: If we spent credits but generation failed
+    if (transactionLedgerId && transactionCost > 0) {
+       console.log(`💰 Initiating Refund of ${transactionCost} credits due to failure...`)
+       try {
+          const authHeader = request.headers.get('authorization')
+          let accessToken = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : undefined
+          if (!accessToken) {
+             // Quick cookie fallback
+             const cookieHeader = request.headers.get('cookie') || ''
+             const match = cookieHeader.match(/sb-[^-]+-auth-token=([^;]+)/)
+             if (match?.[1]) {
+                try { accessToken = JSON.parse(decodeURIComponent(match[1])).access_token } catch { accessToken = match[1] }
+             }
+          }
+
+          if (accessToken) {
+             const billingClient = await getServerSupabaseClient(accessToken)
+             await billingClient.rpc('refund_credits', {
+               p_amount: transactionCost,
+               p_reason: 'refund_generation_failed',
+               p_metadata: { original_ledger_id: transactionLedgerId, error: error.message, pricingKey: pricingKeyForRefund }
+             })
+             console.log('✅ Refund processed successfully')
+          }
+       } catch (refundError) { console.error('❌ Refund failed', refundError) }
+    }
+
     const endpoint = mode === 'text-to-image'
       ? 'fal-ai/reve/text-to-image'
       : mode === 'remix'
