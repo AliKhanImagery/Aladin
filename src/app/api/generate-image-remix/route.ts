@@ -270,6 +270,110 @@ export async function POST(request: NextRequest) {
       falInput.guidance_scale = 9.0
     }
 
+    // Billing: spend credits before generation (server-enforced)
+    try {
+      // Extract access token (prefer Authorization header; fallback to Supabase cookie)
+      const authHeader = request.headers.get('authorization')
+      let accessToken = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : undefined
+
+      if (!accessToken) {
+        const cookieHeader = request.headers.get('cookie') || ''
+        const projectRef = supabaseUrl.split('//')[1]?.split('.')[0] || ''
+        const cookiePattern = new RegExp(`sb-${projectRef.replace(/[^a-z0-9]/gi, '')}-auth-token=([^;]+)`, 'i')
+        const match = cookieHeader.match(cookiePattern) || cookieHeader.match(/sb-[^-]+-auth-token=([^;]+)/i)
+        if (match?.[1]) {
+          try {
+            const sessionData = JSON.parse(decodeURIComponent(match[1]))
+            accessToken = sessionData.access_token || sessionData.accessToken
+          } catch {
+            // Cookie might be token directly
+            accessToken = match[1]
+          }
+        }
+      }
+
+      if (!accessToken) {
+        // No user token => can't enforce user-bound credits safely
+        console.error('❌ Billing: missing access token (cannot determine auth.uid() for spend_credits)')
+        return NextResponse.json(
+          { error: 'Unauthorized', details: 'Missing access token for billing enforcement' },
+          { status: 401 }
+        )
+      }
+
+      const billingClient = await getServerSupabaseClient(accessToken)
+
+      const pricingKey =
+        endpoint.includes('nano-banana')
+          ? sanitizedReferenceUrls.length > 0 && (mode === 'edit' || mode === 'remix')
+            ? 'image.nano_banana.edit'
+            : 'image.nano_banana.text_to_image'
+          : endpoint.includes('flux-2-pro/edit')
+            ? 'image.flux.edit'
+            : endpoint.includes('flux-2-pro')
+              ? 'image.flux.text_to_image'
+              : endpoint.includes('reve/remix')
+                ? 'image.reeve.remix'
+                : 'image.reeve.text_to_image'
+
+      const { data: priceRow, error: priceError } = await billingClient
+        .from('credit_pricing')
+        .select('cost')
+        .eq('key', pricingKey)
+        .eq('active', true)
+        .single()
+
+      if (priceError) {
+        console.warn('⚠️ Billing: pricing lookup failed, allowing generation', {
+          pricingKey,
+          message: priceError.message,
+        })
+      } else if (priceRow?.cost && priceRow.cost > 0) {
+        const spendResult = await billingClient.rpc('spend_credits', {
+          p_cost: priceRow.cost,
+          p_reason: pricingKey,
+          p_metadata: {
+            endpoint,
+            imageModel,
+            mode,
+            project_id: project_id || null,
+            clip_id: clip_id || null,
+          },
+        })
+
+        if (spendResult.error) {
+          const msg = spendResult.error.message || 'billing_error'
+          if (msg.includes('insufficient_credits')) {
+            return NextResponse.json(
+              {
+                error: 'Insufficient credits',
+                code: 'INSUFFICIENT_CREDITS',
+                required: priceRow.cost,
+                pricingKey,
+              },
+              { status: 402 }
+            )
+          }
+          console.error('❌ Billing: spend_credits failed', { pricingKey, msg })
+          return NextResponse.json(
+            { error: 'Billing error', code: 'BILLING_ERROR', details: msg },
+            { status: 500 }
+          )
+        }
+
+        console.log('💳 Billing: spent credits', {
+          pricingKey,
+          cost: priceRow.cost,
+        })
+      } else {
+        console.warn('⚠️ Billing: no active price, allowing generation', { pricingKey })
+      }
+    } catch (billingException: any) {
+      console.warn('⚠️ Billing: exception, allowing generation', {
+        message: billingException?.message || String(billingException),
+      })
+    }
+
     // Call Fal AI
     console.log(`📤 Sending request to Fal AI (${endpoint}) [Model: ${imageModel}] with input:`, JSON.stringify(falInput, null, 2))
     

@@ -189,6 +189,110 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Billing: spend credits before generation (server-enforced)
+    // Do basic required-parameter checks for models that require image_url
+    if ((videoModel === 'kling' || videoModel === 'ltx') && (!image_url || !image_url.trim())) {
+      return NextResponse.json(
+        { error: 'Image URL required', details: `image_url is required for videoModel=${videoModel}` },
+        { status: 400 }
+      )
+    }
+
+    // Extract access token (prefer Authorization header; fallback to Supabase cookie)
+    const authHeader = request.headers.get('authorization')
+    let accessToken = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : undefined
+    if (!accessToken) {
+      const cookieHeader = request.headers.get('cookie') || ''
+      const projectRef = supabaseUrl.split('//')[1]?.split('.')[0] || ''
+      const cookiePattern = new RegExp(`sb-${projectRef.replace(/[^a-z0-9]/gi, '')}-auth-token=([^;]+)`, 'i')
+      const match = cookieHeader.match(cookiePattern) || cookieHeader.match(/sb-[^-]+-auth-token=([^;]+)/i)
+      if (match?.[1]) {
+        try {
+          const sessionData = JSON.parse(decodeURIComponent(match[1]))
+          accessToken = sessionData.access_token || sessionData.accessToken
+        } catch {
+          accessToken = match[1]
+        }
+      }
+    }
+
+    if (!accessToken) {
+      return NextResponse.json(
+        { error: 'Unauthorized', details: 'Missing access token for billing enforcement' },
+        { status: 401 }
+      )
+    }
+
+    const billingClient = await getServerSupabaseClient(accessToken)
+
+    // Normalize duration for pricing buckets (5s or 10s); LTX is treated as 2s bucket
+    let durationValueForPricing = 5
+    if (typeof duration === 'number') {
+      durationValueForPricing = Math.floor(duration)
+    } else if (typeof duration === 'string') {
+      const numMatch = duration.match(/(\d+)/)
+      durationValueForPricing = numMatch ? parseInt(numMatch[1], 10) : 5
+    }
+    durationValueForPricing = durationValueForPricing <= 5 ? 5 : 10
+
+    const pricingKey =
+      videoModel === 'ltx'
+        ? 'video.ltx.2s'
+        : videoModel === 'kling'
+          ? durationValueForPricing === 10 ? 'video.kling.10s' : 'video.kling.5s'
+          : durationValueForPricing === 10 ? 'video.vidu.10s' : 'video.vidu.5s'
+
+    const { data: priceRow, error: priceError } = await billingClient
+      .from('credit_pricing')
+      .select('cost')
+      .eq('key', pricingKey)
+      .eq('active', true)
+      .single()
+
+    if (priceError) {
+      console.warn('⚠️ Billing: pricing lookup failed, allowing generation', {
+        pricingKey,
+        message: priceError.message,
+      })
+    } else if (priceRow?.cost && priceRow.cost > 0) {
+      const spendResult = await billingClient.rpc('spend_credits', {
+        p_cost: priceRow.cost,
+        p_reason: pricingKey,
+        p_metadata: {
+          videoModel,
+          duration,
+          resolution,
+          aspect_ratio,
+          project_id: project_id || null,
+          clip_id: clip_id || null,
+        },
+      })
+
+      if (spendResult.error) {
+        const msg = spendResult.error.message || 'billing_error'
+        if (msg.includes('insufficient_credits')) {
+          return NextResponse.json(
+            {
+              error: 'Insufficient credits',
+              code: 'INSUFFICIENT_CREDITS',
+              required: priceRow.cost,
+              pricingKey,
+            },
+            { status: 402 }
+          )
+        }
+        console.error('❌ Billing: spend_credits failed', { pricingKey, msg })
+        return NextResponse.json(
+          { error: 'Billing error', code: 'BILLING_ERROR', details: msg },
+          { status: 500 }
+        )
+      }
+
+      console.log('💳 Billing: spent credits', { pricingKey, cost: priceRow.cost })
+    } else {
+      console.warn('⚠️ Billing: no active price, allowing generation', { pricingKey })
+    }
+
     console.log('🎬 Generating video with Fal AI:', {
       model: videoModel,
       prompt: prompt.substring(0, 50) + '...',
