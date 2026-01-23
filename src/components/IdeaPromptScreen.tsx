@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import Link from 'next/link'
 import { useAppStore } from '@/lib/store'
 import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
@@ -172,6 +173,11 @@ export default function IdeaPromptScreen() {
               </div>
               <span className="text-xl font-bold tracking-[-0.04em] uppercase">Flowboard</span>
             </div>
+            <nav className="hidden md:flex items-center gap-8">
+              <Link href="/pricing" className="text-[11px] font-bold uppercase tracking-[0.2em] text-white/30 hover:text-white transition-colors">
+                Pricing
+              </Link>
+            </nav>
           </div>
           <div className="flex items-center gap-6">
             <CreditsBadge />
