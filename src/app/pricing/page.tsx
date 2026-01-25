@@ -1,72 +1,38 @@
 'use client'
 
 import { useState } from 'react'
-import { Check, X, Zap, Crown, Sparkles, ArrowRight } from 'lucide-react'
+import { Check, X, Zap, Crown, Sparkles, ArrowRight, HelpCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
+import { BILLING_PLANS_V2, CREDIT_COSTS } from '@/constants/billing'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 
 export default function PricingPage() {
   const [isYearly, setIsYearly] = useState(false)
 
   const plans = [
     {
-      name: 'Starter',
-      description: 'For hobbyists and experimenters.',
-      price: 0,
-      yearlyPrice: 0,
-      features: [
-        '100 Coins / month',
-        'Standard generation speed',
-        'Public gallery access',
-        'Basic models (Flux Dev)',
-      ],
-      notIncluded: [
-        'Commercial usage rights',
-        'Priority support',
-        'Pro batch discounts',
-      ],
-      cta: 'Current Plan',
+      ...BILLING_PLANS_V2.STARTER,
+      cta: 'Get Starter',
       ctaVariant: 'outline',
       highlight: false,
     },
     {
-      name: 'Creator',
-      description: 'For content creators growing their audience.',
-      price: 19,
-      yearlyPrice: 15,
-      features: [
-        '2,000 Coins / month',
-        'Fast generation speed',
-        'Commercial usage rights',
-        'Access to Flux Pro & Kling',
-        'Private gallery',
-      ],
-      notIncluded: [
-        'Pro batch discounts',
-        'API access',
-      ],
-      cta: 'Upgrade to Creator',
+      ...BILLING_PLANS_V2.CREATOR,
+      cta: 'Get Creator',
       ctaVariant: 'primary',
       highlight: false,
-      popular: false,
     },
     {
-      name: 'Pro',
-      description: 'For professional studios and power users.',
-      price: 49,
-      yearlyPrice: 39,
-      features: [
-        '6,000 Coins / month',
-        'Turbo generation speed',
-        '10% Volume Discount on all generations',
-        'Priority support (Email)',
-        'Early access to new models (Sora/Gen-3)',
-      ],
-      notIncluded: [],
-      cta: 'Get Pro Access',
+      ...BILLING_PLANS_V2.STUDIO,
+      cta: 'Get Studio',
       ctaVariant: 'gradient',
       highlight: true,
-      popular: true,
     },
   ]
 
@@ -93,11 +59,7 @@ export default function PricingPage() {
 
       <main className="relative z-10 py-20 px-6 max-w-7xl mx-auto">
         {/* Header Section */}
-        <div className="text-center mb-20 space-y-4 animate-fade-in">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-xs font-medium text-brand-emerald mb-4">
-            <Sparkles className="w-3 h-3" />
-            <span>Launch Special: Double Coins on Yearly Plans</span>
-          </div>
+        <div className="text-center mb-16 space-y-4 animate-fade-in">
           <h1 className="text-4xl md:text-6xl font-bold tracking-tight">
             Simple, Transparent <span className="text-brand-emerald">Credit Pricing.</span>
           </h1>
@@ -127,9 +89,35 @@ export default function PricingPage() {
           </div>
         </div>
 
+        {/* Usage Guide Component */}
+        <div className="max-w-4xl mx-auto mb-20">
+          <div className="bg-white/5 border border-white/10 rounded-xl p-6 backdrop-blur-sm">
+            <h3 className="text-sm font-semibold text-white/60 uppercase tracking-wider mb-4 flex items-center gap-2">
+              <HelpCircle className="w-4 h-4" /> Usage Guide (Est. Costs)
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="flex items-center justify-between p-3 bg-white/5 rounded-lg">
+                <span className="text-white/80">Video Generation</span>
+                <span className="font-mono text-brand-emerald">{CREDIT_COSTS.VIDEO_GENERATION}c</span>
+              </div>
+              <div className="flex items-center justify-between p-3 bg-white/5 rounded-lg">
+                <span className="text-white/80">Nano Banana (Fast)</span>
+                <span className="font-mono text-brand-emerald">{CREDIT_COSTS.NANO_BANANA}c</span>
+              </div>
+              <div className="flex items-center justify-between p-3 bg-white/5 rounded-lg">
+                <span className="text-white/80">Edits & Remixes</span>
+                <span className="font-mono text-brand-emerald">{CREDIT_COSTS.EDITS}c</span>
+              </div>
+            </div>
+            <p className="text-xs text-white/30 mt-4 text-center">
+              *Actual costs may vary based on model settings (duration, resolution, etc.)
+            </p>
+          </div>
+        </div>
+
         {/* Pricing Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8 items-start">
-          {plans.map((plan, idx) => (
+          {plans.map((plan) => (
             <div
               key={plan.name}
               className={`relative rounded-2xl border backdrop-blur-xl p-8 transition-all duration-300 hover:translate-y-[-4px] ${
@@ -147,18 +135,18 @@ export default function PricingPage() {
               <div className="mb-8">
                 <h3 className="text-xl font-bold mb-2 flex items-center gap-2">
                   {plan.name}
-                  {plan.name === 'Pro' && <Crown className="w-4 h-4 text-brand-amber" />}
+                  {plan.name === 'Studio' && <Crown className="w-4 h-4 text-brand-amber" />}
                 </h3>
                 <p className="text-sm text-white/40 mb-6 h-10">{plan.description}</p>
                 <div className="flex items-baseline gap-1">
                   <span className="text-4xl font-bold tracking-tight">
-                    ${isYearly ? plan.yearlyPrice : plan.price}
+                    ${isYearly ? (plan.priceMonthly * 0.8).toFixed(2) : plan.priceMonthly}
                   </span>
                   <span className="text-white/40">/month</span>
                 </div>
-                {isYearly && plan.price > 0 && (
+                {isYearly && (
                   <p className="text-xs text-brand-emerald mt-2">
-                    Billed ${plan.yearlyPrice * 12} yearly
+                    Billed ${(plan.priceMonthly * 0.8 * 12).toFixed(2)} yearly
                   </p>
                 )}
               </div>
@@ -190,6 +178,8 @@ export default function PricingPage() {
                     ? 'bg-white text-black hover:bg-gray-200'
                     : 'bg-transparent border border-white/20 hover:bg-white/5'
                 }`}
+                // Add Checkout Link logic here later
+                onClick={() => console.log('Checkout', plan.name)}
               >
                 {plan.cta}
                 {plan.highlight && <ArrowRight className="w-4 h-4 ml-2" />}
