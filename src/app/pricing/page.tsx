@@ -12,8 +12,33 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 
+import { useAppStore } from '@/lib/store'
+import { toast } from 'react-hot-toast'
+
 export default function PricingPage() {
   const [isYearly, setIsYearly] = useState(false)
+  const { user, setShowAuthModal } = useAppStore()
+
+  const handleCheckout = (plan: typeof BILLING_PLANS_V2[keyof typeof BILLING_PLANS_V2]) => {
+    if (!user) {
+      toast.error('Please sign in to purchase a plan')
+      setShowAuthModal(true)
+      return
+    }
+
+    const variantId = isYearly ? plan.variantIdYearly : plan.variantIdMonthly
+    if (!variantId) {
+      toast.error('This plan is not available yet')
+      return
+    }
+
+    // Construct Lemon Squeezy Checkout URL
+    // Pass user_id in custom data so webhook can fulfill credits
+    // Pre-fill email for better UX
+    const checkoutUrl = `https://store.lemonsqueezy.com/checkout/buy/${variantId}?checkout[custom][user_id]=${user.id}&checkout[email]=${user.email}`
+    
+    window.open(checkoutUrl, '_blank')
+  }
 
   const plans = [
     {
@@ -179,7 +204,7 @@ export default function PricingPage() {
                     : 'bg-transparent border border-white/20 hover:bg-white/5'
                 }`}
                 // Add Checkout Link logic here later
-                onClick={() => console.log('Checkout', plan.name)}
+                onClick={() => handleCheckout(plan)}
               >
                 {plan.cta}
                 {plan.highlight && <ArrowRight className="w-4 h-4 ml-2" />}

@@ -18,6 +18,7 @@ export const BILLING_PLANS_V2 = {
       'Commercial usage rights',
       'Priority support',
     ],
+    popular: false,
   },
   CREATOR: {
     id: 'creator',
