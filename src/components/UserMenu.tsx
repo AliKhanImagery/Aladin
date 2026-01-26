@@ -69,7 +69,7 @@ export default function UserMenu({ user }: UserMenuProps) {
         className="h-11 px-8 rounded-full bg-white text-black hover:bg-brand-emerald hover:text-white text-[11px] font-black uppercase tracking-[0.2em] transition-all duration-500 flex items-center gap-3 shadow-xl"
       >
         <Sparkles className="w-3.5 h-3.5" />
-        Get Started
+        Initialize Engine
       </button>
     )
   }
@@ -164,7 +164,7 @@ export default function UserMenu({ user }: UserMenuProps) {
           </div>
           
           <div className="bg-brand-emerald/[0.03] px-6 py-4 flex items-center justify-between">
-            <span className="text-[9px] font-bold text-white/20 uppercase tracking-[0.3em]">Flowboard Dashboard</span>
+            <span className="text-[9px] font-bold text-white/20 uppercase tracking-[0.3em]">geniferAI Studio</span>
             <Sparkles className="w-3 h-3 text-brand-emerald/40" />
           </div>
         </div>

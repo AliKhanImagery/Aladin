@@ -10,6 +10,7 @@ import { Play, Briefcase, Zap, Film, Layout, MousePointer2, Command, ArrowRight 
 import { Project } from '@/types'
 import UserMenu from './UserMenu'
 import CreditsBadge from './CreditsBadge'
+import Logo from './ui/Logo'
 
 const PERSONAS = [
   {
@@ -167,12 +168,7 @@ export default function IdeaPromptScreen() {
       <header className="sticky top-0 left-0 right-0 z-50 backdrop-blur-xl border-b border-white/[0.02]">
         <div className="max-w-7xl mx-auto px-8 h-20 flex items-center justify-between">
           <div className="flex items-center gap-12">
-            <div className="flex items-center gap-3 group cursor-default">
-              <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center transition-transform duration-700 group-hover:rotate-[360deg]">
-                <Play className="w-4 h-4 text-black fill-current ml-0.5" />
-              </div>
-              <span className="text-xl font-bold tracking-[-0.04em] uppercase">Flowboard</span>
-            </div>
+            <Logo size="md" />
             <nav className="hidden md:flex items-center gap-8">
               <Link href="/pricing" className="text-[11px] font-bold uppercase tracking-[0.2em] text-white/30 hover:text-white transition-colors">
                 Pricing
@@ -274,7 +270,7 @@ export default function IdeaPromptScreen() {
                       <div className="w-6 h-6 border-2 border-black/30 border-t-black rounded-full animate-spin" />
                 ) : (
                       <>
-                        <span className="text-[15px] font-black uppercase tracking-[0.1em]">Generate Project</span>
+                        <span className="text-[15px] font-black uppercase tracking-[0.1em]">Initialize Production</span>
                         <ArrowRight className="w-5 h-5 transition-transform duration-700 group-hover/btn:translate-x-2" />
                       </>
                 )}
@@ -340,16 +336,10 @@ export default function IdeaPromptScreen() {
             Professional AI video production platform
           </div>
           <div className="opacity-10">
-            <span className="text-[10px] font-black uppercase tracking-[0.5em]">Flowboard © 2026</span>
+            <span className="text-[10px] font-black uppercase tracking-[0.5em]">geniferAI © 2026</span>
         </div>
       </div>
       </footer>
-
-      <style jsx global>{`
-        @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;1,700&family=Inter:wght@400;500;700;900&display=swap');
-        .serif { font-family: 'Playfair Display', serif; }
-        body { font-family: 'Inter', sans-serif; }
-      `}</style>
     </div>
   )
 }

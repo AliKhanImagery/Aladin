@@ -191,7 +191,7 @@ export async function POST(request: NextRequest) {
     let falInput: any = {
       aspect_ratio: aspectRatioFormatted,
     }
-
+    
     let endpoint = ''
 
     // Model-Specific Dispatching Logic
@@ -200,7 +200,7 @@ export async function POST(request: NextRequest) {
       endpoint = 'fal-ai/nano-banana'
       falInput.prompt = finalPrompt
       if (mode === 'remix' || mode === 'edit') {
-        falInput.image_url = sanitizedReferenceUrls[0]
+      falInput.image_url = sanitizedReferenceUrls[0]
       }
     } else if (imageModel === 'reeve') {
       // Reeve Strategy: Naturalistic, story-driven
@@ -342,7 +342,7 @@ export async function POST(request: NextRequest) {
         if (spendResult.error) {
            const msg = spendResult.error.message || 'billing_error'
            if (msg.includes('insufficient_credits')) {
-             return NextResponse.json(
+        return NextResponse.json(
                { error: 'Insufficient credits', code: 'INSUFFICIENT_CREDITS', required: finalCost },
                { status: 402 }
              )
