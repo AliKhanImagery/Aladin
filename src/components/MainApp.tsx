@@ -13,6 +13,7 @@ import UserMenu from './UserMenu'
 import CreditsBadge from './CreditsBadge'
 import ProjectManager from './ProjectManager'
 import EditProjectNameModal from './EditProjectNameModal'
+import Logo from './ui/Logo'
 
 export default function MainApp() {
   const { 
@@ -66,16 +67,13 @@ export default function MainApp() {
             {/* Left side: Logo & Title */}
             <div className="flex items-center gap-6 flex-1 min-w-0">
               <div className="flex items-center gap-2 cursor-pointer" onClick={() => window.location.href = '/'}>
-                <div className="w-8 h-8 bg-brand-emerald rounded-lg flex items-center justify-center glow-emerald">
-                  <Play className="w-4 h-4 text-brand-obsidian fill-brand-obsidian" />
-                </div>
-                <span className="text-lg font-bold tracking-tight hidden md:block">Flowboard</span>
+                <Logo size="sm" />
               </div>
               
               <div className="h-4 w-[1px] bg-white/10 hidden md:block" />
               
               <div className="flex items-center gap-3 min-w-0">
-                <span className="text-xs font-medium text-gray-500 uppercase tracking-widest hidden sm:block">Active Project:</span>
+                <span className="text-xs font-medium text-gray-500 uppercase tracking-widest hidden sm:block">Active Production:</span>
                 <div className="flex items-center gap-2 min-w-0 group">
                   <h1 className="text-sm font-semibold text-white truncate group-hover:text-brand-emerald transition-colors">
                   {currentProject.name ? truncateProjectName(currentProject.name) : 'Untitled Project'}

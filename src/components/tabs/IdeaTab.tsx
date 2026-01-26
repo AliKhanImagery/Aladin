@@ -971,9 +971,9 @@ export default function IdeaTab() {
     <div className="max-w-5xl mx-auto space-y-12">
       {/* Header */}
       <div className="text-center space-y-4">
-        <h2 className="text-4xl font-bold text-white tracking-tight">Project Idea</h2>
+        <h2 className="text-4xl font-bold text-white tracking-tight">Production Concept</h2>
         <p className="text-gray-400 text-lg max-w-2xl mx-auto">
-          Define your concept and visual parameters to generate your storyboard.
+          Define your vision and visual parameters to initialize your storyboard.
         </p>
       </div>
 
@@ -983,7 +983,7 @@ export default function IdeaTab() {
           <div className="glass-panel rounded-3xl p-8 border-white/5 shadow-2xl">
             <h3 className="text-xl font-bold text-white mb-6 flex items-center gap-3">
               <Layers className="w-5 h-5 text-brand-emerald" />
-              Project Concept
+              Production Brief
         </h3>
         <Textarea
           value={currentProject.story.originalIdea}
@@ -1024,7 +1024,7 @@ export default function IdeaTab() {
               ) : (
                 <>
                   <Sparkles className="w-5 h-5" />
-                  Generate Storyboard
+                  Initialize Storyboard
                 </>
               )}
             </Button>

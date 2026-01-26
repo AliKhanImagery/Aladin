@@ -417,8 +417,8 @@ export default function IdeaAnalysisScreen({ analysis, onContinue, onBack }: Ide
         <div className="inline-flex items-center justify-center w-20 h-20 bg-brand-emerald/10 rounded-3xl mb-4 glow-emerald">
           <ClipboardList className="w-10 h-10 text-brand-emerald" />
         </div>
-        <h2 className="text-4xl font-bold text-white tracking-tight">Project Analysis</h2>
-        <p className="text-gray-400 text-lg">We've mapped your concept. Confirm your project settings.</p>
+        <h2 className="text-4xl font-bold text-white tracking-tight">Production Analysis</h2>
+        <p className="text-gray-400 text-lg">We've mapped your concept. Confirm your production settings.</p>
       </div>
 
       <div className="grid lg:grid-cols-3 gap-8">
@@ -476,7 +476,7 @@ export default function IdeaAnalysisScreen({ analysis, onContinue, onBack }: Ide
           <div className="flex items-center justify-between px-2">
             <h3 className="text-xl font-bold text-white flex items-center gap-3">
               <ShieldCheck className="w-5 h-5 text-brand-emerald" />
-              Project Assets
+              Production Assets
             </h3>
             <span className="text-xs text-gray-500 font-bold uppercase tracking-widest">{assets.length} Elements Detected</span>
           </div>
@@ -741,7 +741,7 @@ export default function IdeaAnalysisScreen({ analysis, onContinue, onBack }: Ide
               <div className="flex items-center gap-3 sm:gap-4 flex-wrap">
                 <div>
                   <h3 className="text-xs sm:text-sm font-bold text-white uppercase tracking-widest">{selectedImageModal.assetName}</h3>
-                  <p className="text-[9px] sm:text-[10px] text-gray-500 font-bold uppercase mt-0.5">Project Asset • Resolution Verified</p>
+                  <p className="text-[9px] sm:text-[10px] text-gray-500 font-bold uppercase mt-0.5">Production Asset • Resolution Verified</p>
                 </div>
                 <div className="h-6 sm:h-8 w-[1px] bg-white/10 mx-1 sm:mx-2" />
                 <div className="flex items-center gap-2">

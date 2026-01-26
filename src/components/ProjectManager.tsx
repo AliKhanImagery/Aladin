@@ -9,6 +9,7 @@ import CreateProjectModal from './CreateProjectModal'
 import Link from 'next/link'
 import { loadUserProjects, deleteProject as deleteProjectFromDb } from '@/lib/db'
 import toast from 'react-hot-toast'
+import Logo from './ui/Logo'
 
 export default function ProjectManager() {
   const { 
@@ -80,15 +81,14 @@ export default function ProjectManager() {
         {/* Header */}
         <div className="flex items-center justify-between p-8 md:p-10 border-b border-white/[0.03] relative z-10">
           <div className="flex items-center gap-6">
-            <div className="w-14 h-14 rounded-2xl bg-white/[0.03] border border-white/[0.05] flex items-center justify-center">
-              <FolderOpen className="w-7 h-7 text-brand-emerald" />
-            </div>
+            <Logo size="md" />
+            <div className="h-8 w-[1px] bg-white/10 hidden md:block" />
             <div>
-              <h2 className="text-2xl font-bold tracking-tight text-white uppercase tracking-widest italic serif">Project Library</h2>
+              <h2 className="text-2xl font-bold tracking-tight text-white uppercase tracking-widest italic serif">Production Slate</h2>
               <div className="flex items-center gap-3 mt-1.5">
                 <span className="text-[10px] font-black text-white/20 uppercase tracking-[0.2em]">Stored Records</span>
                 <div className="w-1 h-1 rounded-full bg-white/10" />
-                <span className="text-[10px] font-black text-brand-emerald uppercase tracking-[0.2em]">{projects.length} Projects</span>
+                <span className="text-[10px] font-black text-brand-emerald uppercase tracking-[0.2em]">{projects.length} Productions</span>
             </div>
           </div>
         </div>
@@ -121,7 +121,7 @@ export default function ProjectManager() {
               <div className="w-16 h-16 rounded-2xl bg-white/[0.03] border border-white/[0.05] flex items-center justify-center mb-6 group-hover:scale-110 group-hover:bg-brand-emerald group-hover:text-brand-obsidian transition-all duration-500">
                 <Plus className="w-8 h-8" />
               </div>
-              <h3 className="text-lg font-bold text-white/40 group-hover:text-white uppercase tracking-widest transition-colors">Create New</h3>
+              <h3 className="text-lg font-bold text-white/40 group-hover:text-white uppercase tracking-widest transition-colors">Initialize New</h3>
               <p className="text-[10px] font-bold text-white/10 uppercase tracking-[0.2em] mt-2">v2.6 Dashboard</p>
             </button>
 
@@ -182,14 +182,14 @@ export default function ProjectManager() {
           <div className="flex gap-4">
             <Link href="/my-images" onClick={() => setProjectManagerOpen(false)} className="px-6 py-3 rounded-full border border-white/5 text-[10px] font-black uppercase tracking-widest text-white/30 hover:text-white hover:bg-white/5 transition-all flex items-center gap-2">
               <ImageIcon className="w-3.5 h-3.5" />
-              My Images
+              Image Library
             </Link>
             <Link href="/my-videos" onClick={() => setProjectManagerOpen(false)} className="px-6 py-3 rounded-full border border-white/5 text-[10px] font-black uppercase tracking-widest text-white/30 hover:text-white hover:bg-white/5 transition-all flex items-center gap-2">
               <Video className="w-3.5 h-3.5" />
-              My Videos
+              Video Library
             </Link>
                       </div>
-          <span className="text-[9px] font-bold text-white/10 uppercase tracking-[0.5em]">Version 2.6.0 | Flowboard Studio</span>
+          <span className="text-[9px] font-bold text-white/10 uppercase tracking-[0.5em]">Version 2.6.0 | geniferAI Studio</span>
         </div>
       </div>
 

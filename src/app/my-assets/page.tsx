@@ -19,6 +19,7 @@ import { getUserAssets, deleteUserAsset } from '@/lib/userMedia'
 import { useAppStore } from '@/lib/store'
 import toast from 'react-hot-toast'
 import Link from 'next/link'
+import Logo from '@/components/ui/Logo'
 
 export default function MyAssetsPage() {
   const router = useRouter()
@@ -81,9 +82,9 @@ export default function MyAssetsPage() {
   const filteredAssets = assets.filter(asset => {
     const matchesType = !filterType || asset.type === filterType
     const matchesSearch = !searchQuery || 
-      (asset.name && asset.name.toLowerCase().includes(searchQuery.toLowerCase())) ||
-      (asset.prompt && asset.prompt.toLowerCase().includes(searchQuery.toLowerCase())) ||
-      (asset.description && asset.description.toLowerCase().includes(searchQuery.toLowerCase()))
+    (asset.name && asset.name.toLowerCase().includes(searchQuery.toLowerCase())) ||
+    (asset.prompt && asset.prompt.toLowerCase().includes(searchQuery.toLowerCase())) ||
+    (asset.description && asset.description.toLowerCase().includes(searchQuery.toLowerCase()))
     return matchesType && matchesSearch
   })
 
@@ -103,12 +104,7 @@ export default function MyAssetsPage() {
         <div className="max-w-7xl mx-auto px-8 h-20 flex items-center justify-between">
           <div className="flex items-center gap-6">
             <Link href="/" className="flex items-center gap-2 group">
-              <div className="w-8 h-8 bg-white/5 rounded-full flex items-center justify-center border border-white/10 group-hover:bg-white/10 transition-all duration-500">
-                <ArrowLeft className="w-4 h-4 text-white/40 group-hover:text-white" />
-              </div>
-              <span className="text-[11px] font-black uppercase tracking-[0.3em] text-white/40 group-hover:text-white transition-colors">
-                Dashboard
-              </span>
+              <Logo size="sm" />
             </Link>
             <div className="h-4 w-[1px] bg-white/10" />
             <div className="flex items-center gap-3">
@@ -284,10 +280,10 @@ export default function MyAssetsPage() {
             <span className="text-[10px] font-black uppercase tracking-[0.5em]">Bin Protocol v1.0</span>
           </div>
           <div className="text-[10px] font-black uppercase tracking-[0.3em]">
-            Asset Orchestration Bin
+            geniferAI Studio | Asset Orchestration Bin
           </div>
           <div>
-            <span className="text-[10px] font-black uppercase tracking-[0.5em]">Flowboard © 2026</span>
+            <span className="text-[10px] font-black uppercase tracking-[0.5em]">geniferAI © 2026</span>
           </div>
         </div>
       </footer>

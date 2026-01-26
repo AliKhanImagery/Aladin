@@ -135,7 +135,7 @@ export default function CreateProjectModal({ isOpen, onClose, onSuccess }: Creat
             </div>
             <div>
               <h2 className="text-xl font-bold tracking-tight text-white uppercase tracking-widest">Initialize Production</h2>
-              <p className="text-[10px] font-bold text-white/20 uppercase tracking-[0.2em] mt-1">Configure New Foundry Project</p>
+              <p className="text-[10px] font-bold text-white/20 uppercase tracking-[0.2em] mt-1">Configure New Cinematic Sequence</p>
             </div>
           </div>
           <button
@@ -149,12 +149,12 @@ export default function CreateProjectModal({ isOpen, onClose, onSuccess }: Creat
         <form onSubmit={handleSubmit} className="p-10 space-y-8 relative z-10">
           <div className="space-y-3">
             <label className="text-[10px] font-black uppercase tracking-[0.3em] text-white/30 ml-1">
-              Production Identity
+              Production Title
             </label>
             <Input
               value={projectName}
               onChange={(e) => setProjectName(e.target.value)}
-              placeholder="e.g. Project Neo-Noir Campaign"
+              placeholder="e.g. Neo-Noir Brand Story"
               required
               className="h-16 bg-white/[0.02] border-white/10 text-xl font-bold tracking-tight text-white placeholder:text-white/5 
                        focus:border-brand-emerald/40 focus:ring-0 rounded-2xl px-6 transition-all duration-500"
@@ -163,7 +163,7 @@ export default function CreateProjectModal({ isOpen, onClose, onSuccess }: Creat
           
           <div className="space-y-3">
             <label className="text-[10px] font-black uppercase tracking-[0.3em] text-white/30 ml-1">
-              Mission Parameters (Optional)
+              Production Parameters (Optional)
             </label>
             <Textarea
               value={projectDescription}
@@ -193,7 +193,7 @@ export default function CreateProjectModal({ isOpen, onClose, onSuccess }: Creat
               ) : (
                 <div className="flex items-center gap-3">
                   <Sparkles className="w-4 h-4 group-hover:rotate-12 transition-transform" />
-                  <span>Construct Production</span>
+                  <span>Initialize Production</span>
                 </div>
               )}
             </Button>

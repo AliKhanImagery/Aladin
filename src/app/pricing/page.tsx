@@ -14,6 +14,7 @@ import {
 
 import { useAppStore } from '@/lib/store'
 import { toast } from 'react-hot-toast'
+import Logo from '@/components/ui/Logo'
 
 export default function PricingPage() {
   const [isYearly, setIsYearly] = useState(false)
@@ -35,7 +36,7 @@ export default function PricingPage() {
     // Construct Lemon Squeezy Checkout URL
     // Pass user_id in custom data so webhook can fulfill credits
     // Pre-fill email for better UX
-    const checkoutUrl = `https://store.lemonsqueezy.com/checkout/buy/${variantId}?checkout[custom][user_id]=${user.id}&checkout[email]=${user.email}`
+    const checkoutUrl = `https://geniferai.lemonsqueezy.com/checkout/buy/${variantId}?checkout[custom][user_id]=${user.id}&checkout[email]=${user.email}`
     
     window.open(checkoutUrl, '_blank')
   }
@@ -72,21 +73,22 @@ export default function PricingPage() {
 
       <header className="relative z-10 max-w-7xl mx-auto px-6 py-6 flex justify-between items-center">
         <Link href="/" className="flex items-center gap-2 group">
-          <div className="w-8 h-8 bg-brand-emerald rounded-lg flex items-center justify-center glow-emerald transition-transform group-hover:scale-105">
-            <Zap className="w-4 h-4 text-brand-obsidian fill-current" />
-          </div>
-          <span className="text-lg font-bold tracking-tight">Flowboard</span>
+          <Logo size="sm" />
         </Link>
-        <Link href="/login">
-          <Button variant="ghost" className="text-white/60 hover:text-white">Sign In</Button>
-        </Link>
+        <Button 
+          variant="ghost" 
+          className="text-white/60 hover:text-white"
+          onClick={() => setShowAuthModal(true)}
+        >
+          Sign In
+        </Button>
       </header>
 
       <main className="relative z-10 py-20 px-6 max-w-7xl mx-auto">
         {/* Header Section */}
         <div className="text-center mb-16 space-y-4 animate-fade-in">
           <h1 className="text-4xl md:text-6xl font-bold tracking-tight">
-            Simple, Transparent <span className="text-brand-emerald">Credit Pricing.</span>
+            Simple, Transparent <span className="text-brand-emerald">geniferAI Credits.</span>
           </h1>
           <p className="text-lg text-white/40 max-w-2xl mx-auto">
             Pay only for what you generate. Unused credits roll over for 30 days.
