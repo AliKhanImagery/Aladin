@@ -23,7 +23,11 @@ import {
   ChevronRight,
   ShieldCheck,
   Trash2,
-  ZoomIn
+  ZoomIn,
+  ChevronDown,
+  Film,
+  Video,
+  Sparkles as SparklesIcon
 } from 'lucide-react'
 import { IdeaAnalysis, DetectedItem, AssetActionState, AssetContext } from '@/types'
 import { supabase } from '@/lib/supabase'
@@ -45,6 +49,9 @@ export default function IdeaAnalysisScreen({ analysis, onContinue, onBack }: Ide
   const [toneInput, setToneInput] = useState('')
   const [brandCueInput, setBrandCueInput] = useState('')
   const [settingsConfirmed, setSettingsConfirmed] = useState(false)
+  const [mediaType, setMediaType] = useState<string>(analysis.analysis.type)
+  const [isMediaTypeDropdownOpen, setIsMediaTypeDropdownOpen] = useState(false)
+  const [isMediaTypeOverridden, setIsMediaTypeOverridden] = useState(false)
   
   const [assets, setAssets] = useState<AssetActionState[]>(() => {
     return analysis.analysis.detectedItems.map(item => ({
@@ -70,10 +77,30 @@ export default function IdeaAnalysisScreen({ analysis, onContinue, onBack }: Ide
     updateAnalysisSettings({
       tone,
       brandCues,
-      type: analysis.analysis.type,
+      type: mediaType,
       confirmed: settingsConfirmed
     })
-  }, [tone, brandCues, settingsConfirmed, analysis.analysis.type, updateAnalysisSettings])
+  }, [tone, brandCues, settingsConfirmed, mediaType, updateAnalysisSettings])
+
+  const handleMediaTypeChange = (newType: string) => {
+    setMediaType(newType)
+    setIsMediaTypeOverridden(newType !== analysis.analysis.type)
+    setIsMediaTypeDropdownOpen(false)
+  }
+
+  const resetMediaType = () => {
+    setMediaType(analysis.analysis.type)
+    setIsMediaTypeOverridden(false)
+    setIsMediaTypeDropdownOpen(false)
+  }
+
+  const MEDIA_TYPES = [
+    { id: 'DVC', label: 'DVC', description: 'Digital Video Content (short-form, social media)', icon: Video },
+    { id: 'TVC', label: 'TVC', description: 'Television Commercial', icon: Film },
+    { id: 'Film', label: 'Film', description: 'Traditional film or video production', icon: Film },
+    { id: 'Content/UGC', label: 'Content/UGC', description: 'User-generated content style', icon: SparklesIcon },
+    { id: 'Animated/3D/ComputerGenerated', label: 'Animated/3D', description: 'Animated or CGI content', icon: SparklesIcon }
+  ]
 
   const addTone = () => {
     if (toneInput.trim() && !tone.includes(toneInput.trim())) {
@@ -386,7 +413,7 @@ export default function IdeaAnalysisScreen({ analysis, onContinue, onBack }: Ide
       settings: {
         tone,
         brandCues,
-        type: analysis.analysis.type,
+        type: mediaType,
         confirmed: true
       }
     }
@@ -411,7 +438,7 @@ export default function IdeaAnalysisScreen({ analysis, onContinue, onBack }: Ide
   }
 
   return (
-    <div className="max-w-6xl mx-auto space-y-12 pb-20 animate-fade-in">
+      <div className="max-w-6xl mx-auto space-y-12 pb-20 animate-fade-in">
       {/* Header */}
       <div className="text-center space-y-4">
         <div className="inline-flex items-center justify-center w-20 h-20 bg-brand-emerald/10 rounded-3xl mb-4 glow-emerald">
@@ -419,6 +446,94 @@ export default function IdeaAnalysisScreen({ analysis, onContinue, onBack }: Ide
         </div>
         <h2 className="text-4xl font-bold text-white tracking-tight">Production Analysis</h2>
         <p className="text-gray-400 text-lg">We've mapped your concept. Confirm your production settings.</p>
+      </div>
+
+      {/* Media Type Badge with Dropdown */}
+      <div className="flex items-center justify-center">
+        <div className="relative">
+          <button
+            onClick={() => setIsMediaTypeDropdownOpen(!isMediaTypeDropdownOpen)}
+            className={`inline-flex items-center gap-2 px-4 py-2 rounded-full border transition-all duration-300 group ${
+              isMediaTypeOverridden
+                ? 'bg-brand-amber/10 border-brand-amber/30 hover:bg-brand-amber/15'
+                : 'bg-brand-emerald/10 border-brand-emerald/30 hover:bg-brand-emerald/15'
+            }`}
+          >
+            <div className={`flex items-center gap-2 ${isMediaTypeOverridden ? 'text-brand-amber' : 'text-brand-emerald'}`}>
+              <span className="text-[9px] font-black uppercase tracking-widest opacity-60">
+                {isMediaTypeOverridden ? 'Overridden' : 'Detected'}:
+              </span>
+              <span className="text-sm font-bold tracking-tight">
+                {MEDIA_TYPES.find(m => m.id === mediaType)?.label || mediaType}
+              </span>
+            </div>
+            <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-300 ${isMediaTypeOverridden ? 'text-brand-amber/60' : 'text-brand-emerald/60'} ${isMediaTypeDropdownOpen ? 'rotate-180' : ''}`} />
+          </button>
+
+          {isMediaTypeDropdownOpen && (
+            <>
+              <div 
+                className="fixed inset-0 z-40" 
+                onClick={() => setIsMediaTypeDropdownOpen(false)}
+              />
+              <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 w-72 bg-[#09090b]/95 backdrop-blur-xl rounded-2xl border border-white/10 shadow-2xl z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-300">
+                <div className="p-2">
+                  {MEDIA_TYPES.map((type) => {
+                    const Icon = type.icon
+                    const isActive = mediaType === type.id
+                    const isDetected = type.id === analysis.analysis.type
+                    return (
+                      <button
+                        key={type.id}
+                        onClick={() => handleMediaTypeChange(type.id)}
+                        className={`w-full flex items-start gap-3 p-3 rounded-xl transition-all duration-300 ${
+                          isActive 
+                            ? 'bg-brand-emerald/10 border border-brand-emerald/30' 
+                            : 'hover:bg-white/[0.05] border border-transparent'
+                        }`}
+                      >
+                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 transition-colors duration-300 ${
+                          isActive ? 'bg-brand-emerald text-brand-obsidian' : 'bg-white/5 text-white/20'
+                        }`}>
+                          <Icon className="w-4 h-4" />
+                        </div>
+                        <div className="flex-1 text-left min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className={`text-sm font-bold tracking-tight transition-colors duration-300 ${isActive ? 'text-white' : 'text-white/70'}`}>
+                              {type.label}
+                            </span>
+                            {isDetected && (
+                              <span className="text-[9px] font-black uppercase tracking-widest text-brand-emerald/60">
+                                DETECTED
+                              </span>
+                            )}
+                          </div>
+                          <div className={`text-xs font-medium transition-colors duration-300 ${isActive ? 'text-brand-emerald' : 'text-white/40'}`}>
+                            {type.description}
+                          </div>
+                        </div>
+                        {isActive && (
+                          <div className="w-1.5 h-1.5 rounded-full bg-brand-emerald shadow-[0_0_8px_rgba(16,185,129,0.5)] flex-shrink-0" />
+                        )}
+                      </button>
+                    )
+                  })}
+                  {isMediaTypeOverridden && (
+                    <div className="mt-2 pt-2 border-t border-white/5">
+                      <button
+                        onClick={resetMediaType}
+                        className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-bold text-brand-amber hover:bg-brand-amber/10 transition-colors duration-300"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5" />
+                        Reset to Detected
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
+        </div>
       </div>
 
       <div className="grid lg:grid-cols-3 gap-8">

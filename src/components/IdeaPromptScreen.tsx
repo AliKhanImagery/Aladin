@@ -6,7 +6,7 @@ import { useAppStore } from '@/lib/store'
 import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Briefcase, Zap, Film, Layout, Command, ArrowRight } from 'lucide-react'
+import { Briefcase, Zap, Film, Layout, Command, ArrowRight, ChevronDown } from 'lucide-react'
 import { Project } from '@/types'
 import UserMenu from './UserMenu'
 import CreditsBadge from './CreditsBadge'
@@ -59,6 +59,7 @@ export default function IdeaPromptScreen() {
   const [selectedImageModel, setSelectedImageModel] = useState<'flux-2-pro' | 'nano-banana' | 'reeve'>('flux-2-pro')
   const [isCreating, setIsCreating] = useState(false)
   const [activePersona, setActivePersona] = useState(PERSONAS[0])
+  const [isPersonaDropdownOpen, setIsPersonaDropdownOpen] = useState(false)
   
   useEffect(() => {
     const savedIdea = localStorage.getItem('pendingIdea')
@@ -211,34 +212,71 @@ export default function IdeaPromptScreen() {
                   </div>
                 </div>
 
-                {/* Persona Selector - Integrated */}
-                <div className="px-4 py-2">
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                    {PERSONAS.map((persona) => {
-                      const Icon = persona.icon
-                      const isActive = activePersona.id === persona.id
-                      return (
-                        <button
-                          key={persona.id}
-                          onClick={() => setActivePersona(persona)}
-                          className={`flex flex-col items-center justify-center p-3 rounded-2xl transition-all duration-500 border ${
-                            isActive 
-                              ? 'bg-white/[0.05] border-brand-emerald/30 shadow-lg shadow-brand-emerald/5' 
-                              : 'bg-white/[0.01] border-white/[0.02] hover:bg-white/[0.03] hover:border-white/05'
-                          }`}
-                        >
-                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center mb-2 transition-colors duration-500 ${
-                            isActive ? 'bg-brand-emerald text-brand-obsidian' : 'bg-white/5 text-white/20'
-                          }`}>
-                            <Icon className="w-4 h-4" />
-                          </div>
-                          <span className={`text-[10px] font-bold tracking-tight uppercase transition-colors duration-500 ${isActive ? 'text-white' : 'text-white/30'}`}>
-                            {persona.title}
-                          </span>
-                        </button>
-                      )
-                    })}
-                  </div>
+                {/* Persona Selector - Minimal Pill Dropdown */}
+                <div className="px-4 py-2 relative">
+                  {(() => {
+                    const ActivePersonaIcon = activePersona.icon
+                    return (
+                      <button
+                        onClick={() => setIsPersonaDropdownOpen(!isPersonaDropdownOpen)}
+                        className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/[0.02] border border-white/[0.05] hover:bg-white/[0.04] transition-all duration-300 group"
+                      >
+                        <ActivePersonaIcon className="w-4 h-4 text-brand-emerald" />
+                        <span className="text-[11px] font-bold uppercase tracking-wider text-white/60 group-hover:text-white transition-colors">
+                          I'm a {activePersona.title}
+                        </span>
+                        <ChevronDown className={`w-3.5 h-3.5 text-white/30 transition-transform duration-300 ${isPersonaDropdownOpen ? 'rotate-180' : ''}`} />
+                      </button>
+                    )
+                  })()}
+                  
+                  {isPersonaDropdownOpen && (
+                    <>
+                      <div 
+                        className="fixed inset-0 z-40" 
+                        onClick={() => setIsPersonaDropdownOpen(false)}
+                      />
+                      <div className="absolute top-full left-0 mt-2 w-80 bg-[#09090b]/95 backdrop-blur-xl rounded-2xl border border-white/10 shadow-2xl z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-300">
+                        <div className="p-2">
+                          {PERSONAS.map((persona) => {
+                            const Icon = persona.icon
+                            const isActive = activePersona.id === persona.id
+                            return (
+                              <button
+                                key={persona.id}
+                                onClick={() => {
+                                  setActivePersona(persona)
+                                  setIsPersonaDropdownOpen(false)
+                                }}
+                                className={`w-full flex items-center gap-3 p-3 rounded-xl transition-all duration-300 ${
+                                  isActive 
+                                    ? 'bg-brand-emerald/10 border border-brand-emerald/30' 
+                                    : 'hover:bg-white/[0.05] border border-transparent'
+                                }`}
+                              >
+                                <div className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors duration-300 ${
+                                  isActive ? 'bg-brand-emerald text-brand-obsidian' : 'bg-white/5 text-white/20'
+                                }`}>
+                                  <Icon className="w-4 h-4" />
+                                </div>
+                                <div className="flex-1 text-left">
+                                  <div className={`text-sm font-bold tracking-tight transition-colors duration-300 ${isActive ? 'text-white' : 'text-white/70'}`}>
+                                    {persona.title}
+                                  </div>
+                                  <div className={`text-xs font-medium transition-colors duration-300 ${isActive ? 'text-brand-emerald' : 'text-white/40'}`}>
+                                    {persona.hook}
+                                  </div>
+                                </div>
+                                {isActive && (
+                                  <div className="w-1.5 h-1.5 rounded-full bg-brand-emerald shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
+                                )}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    </>
+                  )}
                 </div>
 
                 {/* Bottom Controls */}
