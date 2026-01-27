@@ -8,6 +8,8 @@ import { Play, Pause, Download, Volume2, VolumeX, Settings, Sparkles, Loader2, C
 import { Clip } from '@/types'
 // Note: saveUserVideo removed - API now handles storage automatically
 import toast from 'react-hot-toast'
+import JSZip from 'jszip'
+import { saveAs } from 'file-saver'
 
 // Video model options
 const VIDEO_MODELS: SelectOption[] = [
@@ -39,6 +41,7 @@ export default function TimelineTab() {
   const [hasSFX, setHasSFX] = useState(false)
   const [currentClipIndex, setCurrentClipIndex] = useState(0)
   const [isGeneratingTimeline, setIsGeneratingTimeline] = useState(false)
+  const [isExporting, setIsExporting] = useState(false)
   const [selectedVideoModel, setSelectedVideoModel] = useState<string>('vidu')
   const videoRef = useRef<HTMLVideoElement>(null)
   const timelineRef = useRef<HTMLDivElement>(null)
@@ -296,6 +299,67 @@ export default function TimelineTab() {
     const mins = Math.floor(seconds / 60)
     const secs = Math.floor(seconds % 60)
     return `${mins}:${secs.toString().padStart(2, '0')}`
+  }
+
+  // Export to ZIP
+  const handleExportZip = async () => {
+    if (!currentProject || allClips.length === 0) return
+
+    setIsExporting(true)
+    const toastId = toast.loading('Preparing assets for export...')
+
+    try {
+      const zip = new JSZip()
+      const sanitizedProjectName = currentProject.name.replace(/[^a-z0-9]/gi, '_').toLowerCase() || 'project'
+      const folder = zip.folder(sanitizedProjectName)
+      
+      if (!folder) throw new Error('Failed to create zip folder')
+
+      const exportableClips = allClips.filter(c => c.generatedVideo || c.generatedImage)
+      
+      if (exportableClips.length === 0) {
+        throw new Error('No generated media found to export')
+      }
+
+      let processedCount = 0
+      
+      await Promise.all(exportableClips.map(async (clip, index) => {
+        const url = clip.generatedVideo || clip.generatedImage
+        if (!url) return
+
+        try {
+          const response = await fetch(url)
+          if (!response.ok) throw new Error(`Failed to fetch media for clip ${index + 1}`)
+          
+          const blob = await response.blob()
+          const extension = clip.generatedVideo ? 'mp4' : 'png'
+          
+          const safeSceneName = (clip.sceneName || 'Scene').replace(/[^a-z0-9]/gi, '_')
+          const safeClipName = (clip.name || `Clip${index}`).replace(/[^a-z0-9]/gi, '_')
+          const filename = `${String(index + 1).padStart(2, '0')}_${safeSceneName}_${safeClipName}.${extension}`
+          
+          folder.file(filename, blob)
+          processedCount++
+        } catch (err) {
+          console.error(`Failed to export clip ${clip.name}:`, err)
+        }
+      }))
+
+      if (processedCount === 0) {
+        throw new Error('Failed to download any clips. They may have expired.')
+      }
+
+      toast.loading('Compressing archive...', { id: toastId })
+      const content = await zip.generateAsync({ type: 'blob' })
+      saveAs(content, `${sanitizedProjectName}_export.zip`)
+      
+      toast.success(`Exported ${processedCount} files successfully!`, { id: toastId })
+    } catch (error: any) {
+      console.error('Export error:', error)
+      toast.error(`Export failed: ${error.message}`, { id: toastId })
+    } finally {
+      setIsExporting(false)
+    }
   }
 
   // Generate videos for all clips that need them
@@ -1015,11 +1079,13 @@ export default function TimelineTab() {
               </Button>
             )}
             <Button
+              onClick={handleExportZip}
+              disabled={isExporting || allClips.length === 0}
               variant="outline"
-              className="border-[#3AAFA9] text-[#3AAFA9] hover:bg-[#3AAFA9] hover:text-black px-4 py-2 rounded-xl"
+              className="border-[#3AAFA9] text-[#3AAFA9] hover:bg-[#3AAFA9] hover:text-black px-4 py-2 rounded-xl disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <Download className="w-4 h-4 mr-2" />
-              Export
+              {isExporting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Download className="w-4 h-4 mr-2" />}
+              {isExporting ? 'Zipping...' : 'Export ZIP'}
             </Button>
           </div>
         </div>
