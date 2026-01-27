@@ -111,7 +111,7 @@ export interface Clip {
   sceneId: string;
   order: number;
   name: string;
-  
+  description?: string;
   // Content
   imagePrompt: string;
   videoPrompt: string;
