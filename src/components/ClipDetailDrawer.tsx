@@ -54,7 +54,7 @@ export default function ClipDetailDrawer() {
   const [isImageModalOpen, setIsImageModalOpen] = useState(false)
   const [modalImageUrl, setModalImageUrl] = useState<string | null>(null)
   const [isAssetPickerOpen, setIsAssetPickerOpen] = useState(false)
-  const [activeAssetContext, setActiveAssetContext] = useState<'image_reference' | 'video_start' | 'video_reference' | 'nano_input'>('image_reference')
+  const [activeAssetContext, setActiveAssetContext] = useState<'image_reference' | 'video_start' | 'video_reference' | 'nano_input' | 'clip_media'>('image_reference')
   const [activeAssetIndex, setActiveAssetIndex] = useState<number>(0)
   const [isUploadingAsset, setIsUploadingAsset] = useState(false)
 
@@ -220,6 +220,11 @@ export default function ClipDetailDrawer() {
       const updated = [...nanoBananaInputImages]
       updated[activeAssetIndex] = url
       setNanoBananaInputImages(updated)
+    } else if (activeAssetContext === 'clip_media') {
+      handleUpdateClip({ 
+        generatedImage: url,
+        previewImage: url
+      })
     }
     setIsAssetPickerOpen(false)
   }
@@ -458,7 +463,7 @@ export default function ClipDetailDrawer() {
                 alt={selectedClip.name}
                   className="w-full h-full object-contain"
               />
-                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-all flex items-center justify-center opacity-0 group-hover:opacity-100">
+                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-all flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100">
                 <Button
                   variant="ghost"
                   size="icon"
@@ -466,20 +471,37 @@ export default function ClipDetailDrawer() {
                     setModalImageUrl(selectedClip.generatedImage || null)
                     setIsImageModalOpen(true)
                   }}
-                    className="bg-black/50 hover:bg-black/70 rounded-full text-white border border-white/20"
+                    className="bg-black/50 hover:bg-black/70 rounded-full text-white border border-white/20 w-10 h-10"
+                    title="Maximize Preview"
                 >
                     <Maximize2 className="w-5 h-5" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => handleOpenAssetPicker('clip_media')}
+                    className="bg-black/50 hover:bg-black/70 rounded-full text-white border border-white/20 w-10 h-10"
+                    title="Change Media"
+                >
+                    <Image className="w-5 h-5" />
                 </Button>
                 </div>
               </>
             ) : (
-              <div className="flex flex-col items-center justify-center text-gray-600">
+              <div className="flex flex-col items-center justify-center text-gray-600 group cursor-pointer" onClick={() => handleOpenAssetPicker('clip_media')}>
                 {activeMode === 'animate' ? (
-                    <Video className="w-12 h-12 mb-2 opacity-20" />
+                    <Video className="w-12 h-12 mb-2 opacity-20 group-hover:opacity-40 transition-opacity" />
                 ) : (
-                    <Image className="w-12 h-12 mb-2 opacity-20" />
+                    <Image className="w-12 h-12 mb-2 opacity-20 group-hover:opacity-40 transition-opacity" />
                 )}
-                <p className="text-xs uppercase tracking-widest font-bold opacity-50">Empty Canvas</p>
+                <p className="text-xs uppercase tracking-widest font-bold opacity-50 group-hover:opacity-80 transition-opacity mb-2">Empty Canvas</p>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="opacity-0 group-hover:opacity-100 transition-opacity text-xs h-8 border-white/20 text-gray-400 hover:text-white hover:bg-white/5"
+                >
+                  <Upload className="w-3 h-3 mr-1.5" /> Select Media
+                </Button>
                 </div>
               )}
 
