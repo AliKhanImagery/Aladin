@@ -335,6 +335,11 @@ export async function POST(request: NextRequest) {
       const ltxInput: any = {
         prompt: prompt.trim(),
       }
+      
+      // Pass duration if provided (API expects seconds as number/string)
+      if (duration) {
+         ltxInput.duration = duration.toString()
+      }
 
       // image_url is REQUIRED for image-to-video generation
       if (!image_url || !image_url.trim()) {

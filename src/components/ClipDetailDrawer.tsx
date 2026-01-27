@@ -157,9 +157,7 @@ export default function ClipDetailDrawer() {
       // 2. Force local update if we're setting the currently selected clip
       // This is a bit of a hack but ensures the UI reacts instantly to clicks
       // The store update will follow through and keep things consistent
-      if (updates.generatedImage) {
-        setSelectedClip({ ...selectedClip, ...updates })
-      }
+      setSelectedClip({ ...selectedClip, ...updates })
     }
   }
 
@@ -386,9 +384,14 @@ export default function ClipDetailDrawer() {
         requestBody.videoModel = 'vidu'
       }
 
+      const { supabase } = await import('@/lib/supabase')
+      const { data: { session } } = await supabase.auth.getSession()
+      const headers: HeadersInit = { 'Content-Type': 'application/json' }
+      if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`
+
       const response = await fetch('/api/generate-video', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify(requestBody),
       })
 
