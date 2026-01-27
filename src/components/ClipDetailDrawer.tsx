@@ -63,28 +63,9 @@ export default function ClipDetailDrawer() {
   const [isLoadingHistory, setIsLoadingHistory] = useState(false)
   const historyStripRef = useRef<HTMLDivElement>(null)
   
-  // Sync local state when selectedClip changes
+  // 1. Selection Change Effect: Run only when a NEW clip is selected
   useEffect(() => {
-    if (selectedClip) {
-      setLocalImagePrompt(selectedClip.imagePrompt || '')
-      setLocalVideoPrompt(selectedClip.videoPrompt || '')
-      
-      // Update image model from project settings if not manually changed
-      if (currentProject?.settings?.imageModel) {
-        setImageModel(currentProject.settings.imageModel as any)
-      }
-      
-      // Sync generating status from global state
-      const currentStatus = clipGeneratingStatus[selectedClip.id]
-      if (currentStatus === 'image') {
-        setIsGeneratingImage(true)
-      } else if (currentStatus === 'video') {
-        setIsGeneratingVideo(true)
-      } else {
-        setIsGeneratingImage(false)
-        setIsGeneratingVideo(false)
-      }
-
+    if (selectedClip?.id) {
       // Auto-set initial mode based on content
       if (selectedClip.generatedVideo) {
         setActiveMode('animate')
@@ -95,7 +76,36 @@ export default function ClipDetailDrawer() {
       // Fetch generation history for this clip
       fetchHistory()
     }
-  }, [selectedClip?.id, selectedClip?.imagePrompt, selectedClip?.videoPrompt, clipGeneratingStatus, currentProject?.settings?.imageModel])
+  }, [selectedClip?.id])
+
+  // 2. Prompt Sync Effect: Keep local prompts in sync with global store
+  useEffect(() => {
+    if (selectedClip) {
+      if (selectedClip.imagePrompt !== localImagePrompt) setLocalImagePrompt(selectedClip.imagePrompt || '')
+      if (selectedClip.videoPrompt !== localVideoPrompt) setLocalVideoPrompt(selectedClip.videoPrompt || '')
+    }
+  }, [selectedClip?.imagePrompt, selectedClip?.videoPrompt])
+
+  // 3. Status & Settings Sync Effect
+  useEffect(() => {
+    if (selectedClip?.id) {
+       // Update image model from project settings
+       if (currentProject?.settings?.imageModel) {
+        setImageModel(currentProject.settings.imageModel as any)
+      }
+      
+      // Sync generating status
+      const currentStatus = clipGeneratingStatus[selectedClip.id]
+      if (currentStatus === 'image') {
+        setIsGeneratingImage(true)
+      } else if (currentStatus === 'video') {
+        setIsGeneratingVideo(true)
+      } else {
+        setIsGeneratingImage(false)
+        setIsGeneratingVideo(false)
+      }
+    }
+  }, [selectedClip?.id, clipGeneratingStatus, currentProject?.settings?.imageModel])
 
   const fetchHistory = async () => {
     if (!selectedClip?.id) return
