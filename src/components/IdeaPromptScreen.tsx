@@ -196,6 +196,48 @@ export default function IdeaPromptScreen() {
             </p>
           </div>
 
+          {/* Persona Selector Hook - Moved Upstream */}
+          <div className="w-full max-w-4xl mx-auto mb-8">
+            <div className="flex items-center gap-4 mb-4 px-2">
+              <div className="h-[1px] flex-1 bg-white/[0.05]" />
+              <span className="text-[9px] font-black uppercase tracking-[0.3em] text-white/20 whitespace-nowrap">Select Your Role</span>
+              <div className="h-[1px] flex-1 bg-white/[0.05]" />
+            </div>
+            
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {PERSONAS.map((persona) => {
+                const Icon = persona.icon
+                const isActive = activePersona.id === persona.id
+                return (
+                  <button
+                    key={persona.id}
+                    onClick={() => setActivePersona(persona)}
+                    className={`relative p-4 rounded-2xl text-left transition-all duration-500 group border ${
+                      isActive 
+                        ? 'bg-white/[0.05] border-brand-emerald/30 shadow-lg shadow-brand-emerald/5' 
+                        : 'bg-white/[0.01] border-white/[0.05] hover:bg-white/[0.03] hover:border-white/10'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3 mb-2">
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors duration-500 ${
+                        isActive ? 'bg-brand-emerald text-brand-obsidian' : 'bg-white/5 text-white/20 group-hover:text-white/40'
+                      }`}>
+                        <Icon className="w-4 h-4" />
+                      </div>
+                      <span className={`text-xs font-bold tracking-tight transition-colors duration-500 ${isActive ? 'text-white' : 'text-white/40 group-hover:text-white/60'}`}>
+                        {persona.title}
+                      </span>
+                    </div>
+                    
+                    <p className={`text-[10px] font-medium leading-relaxed transition-colors duration-500 ${isActive ? 'text-brand-emerald' : 'text-white/20'}`}>
+                      {persona.hook}
+                    </p>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
           {/* Director's Console Area */}
           <div className="relative group max-w-4xl mx-auto">
             <div className="absolute -inset-1 bg-gradient-to-r from-brand-emerald/10 to-transparent rounded-[3rem] blur-2xl opacity-20 group-focus-within:opacity-40 transition duration-1000" />
@@ -281,49 +323,7 @@ export default function IdeaPromptScreen() {
           </div>
         </div>
 
-        {/* Persona Selector Hook */}
-        <div className="w-full max-w-7xl mx-auto mt-32">
-          <div className="flex items-center gap-6 mb-16 px-4">
-            <span className="text-[10px] font-black uppercase tracking-[0.4em] text-white/10 whitespace-nowrap">Choose your use case</span>
-            <div className="h-[1px] w-full bg-white/[0.03]" />
-          </div>
-          
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {PERSONAS.map((persona) => {
-              const Icon = persona.icon
-              const isActive = activePersona.id === persona.id
-              return (
-                <button
-                  key={persona.id}
-                  onClick={() => setActivePersona(persona)}
-                  className={`relative p-10 rounded-[2.5rem] text-left transition-all duration-1000 group ${
-                    isActive 
-                      ? 'bg-white/[0.03] border-white/[0.1] shadow-2xl scale-[1.02]' 
-                      : 'bg-transparent border-transparent hover:bg-white/[0.01]'
-                  } border`}
-                >
-                  <div className={`w-14 h-14 rounded-2xl flex items-center justify-center mb-8 transition-all duration-700 ${
-                    isActive ? 'bg-white text-black shadow-[0_0_30px_rgba(255,255,255,0.1)]' : 'bg-white/5 text-white/10 group-hover:text-white/20'
-                  }`}>
-                    <Icon className="w-6 h-6" />
-                  </div>
-                  <h3 className={`text-xl font-bold tracking-tight mb-3 transition-colors duration-700 ${isActive ? 'text-white' : 'text-white/20'}`}>
-                    {persona.title}
-                  </h3>
-                  <p className={`text-sm font-medium leading-relaxed transition-colors duration-1000 ${isActive ? 'text-white/40' : 'text-white/10'}`}>
-                    {persona.hook}
-                  </p>
-                  
-                  {isActive && (
-                    <div className="absolute top-10 right-10">
-                      <div className="w-1.5 h-1.5 rounded-full bg-brand-emerald shadow-[0_0_10px_rgba(16,185,129,0.5)]" />
-                    </div>
-                  )}
-                </button>
-              )
-            })}
-          </div>
-        </div>
+        {/* Persona Selector Hook - Removed (Moved Upstream) */}
       </main>
 
       <footer className="py-16 px-8 border-t border-white/[0.02]">
