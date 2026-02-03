@@ -15,6 +15,7 @@ import {
 import { useAppStore } from '@/lib/store'
 import { toast } from 'react-hot-toast'
 import Logo from '@/components/ui/Logo'
+import Footer from '@/components/Footer'
 
 export default function PricingPage() {
   const [isYearly, setIsYearly] = useState(false)
@@ -229,6 +230,8 @@ export default function PricingPage() {
           </Button>
         </div>
       </main>
+
+      <Footer />
     </div>
   )
 }

@@ -43,6 +43,8 @@ const PERSONAS = [
   }
 ]
 
+import Footer from './Footer'
+
 export default function IdeaPromptScreen() {
   const { 
     createProject, 
@@ -342,20 +344,7 @@ export default function IdeaPromptScreen() {
         </div>
       </main>
 
-      <footer className="py-16 px-8 border-t border-white/[0.02]">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-12">
-          <div className="flex items-center gap-4 opacity-10">
-            <div className="w-2 h-2 rounded-full bg-brand-emerald" />
-            <span className="text-[10px] font-black uppercase tracking-[0.5em]">Version 2.6.0</span>
-          </div>
-          <div className="text-[10px] font-black uppercase tracking-[0.3em] text-white/10">
-            Professional AI video production platform
-          </div>
-          <div className="opacity-10">
-            <span className="text-[10px] font-black uppercase tracking-[0.5em]">geniferAI © 2026</span>
-        </div>
-      </div>
-      </footer>
+      <Footer />
     </div>
   )
 }
