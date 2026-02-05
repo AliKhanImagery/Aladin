@@ -17,7 +17,8 @@ export function StudioLayout() {
     updateAudioTrack, 
     addAudioClip, 
     selectedClip, 
-    setSelectedClip 
+    setSelectedClip,
+    setAudioDrawerOpen
   } = useAppStore()
   
   const [isPlaying, setIsPlaying] = useState(false)
@@ -26,6 +27,43 @@ export function StudioLayout() {
   
   // Use a ref for the timeline container to sync scrolling
   const timelineRef = useRef<HTMLDivElement>(null)
+  
+  // Playback Loop
+  useEffect(() => {
+    let animationFrameId: number
+    let lastTime = performance.now()
+
+    const animate = (time: number) => {
+      if (!isPlaying) return
+
+      const deltaTime = (time - lastTime) / 1000 // Convert to seconds
+      lastTime = time
+
+      setCurrentTime(prev => {
+        const nextTime = prev + deltaTime
+        // Loop or stop at end? Let's stop at end for now.
+        if (nextTime >= totalDuration) {
+          setIsPlaying(false)
+          return 0 // Reset or stay at end? Let's reset.
+        }
+        return nextTime
+      })
+
+      animationFrameId = requestAnimationFrame(animate)
+    }
+
+    if (isPlaying) {
+      lastTime = performance.now()
+      animationFrameId = requestAnimationFrame(animate)
+    }
+
+    return () => {
+      if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId)
+      }
+    }
+  }, [isPlaying, totalDuration])
+
 
   // Derive video clips from scenes
   const videoClips = useMemo(() => {
@@ -54,22 +92,8 @@ export function StudioLayout() {
   }
 
   const handleAddAudioClip = (trackId: string, time: number) => {
-      // Placeholder for opening the Audio Generation Drawer
-      console.log('Open audio drawer for track', trackId, 'at time', time)
-      // For testing, let's add a dummy clip
-      /*
-      const newClip: AudioClip = {
-          id: crypto.randomUUID(),
-          trackId,
-          name: 'Generated Audio',
-          assetUrl: '',
-          startTime: time,
-          duration: 5,
-          offset: 0,
-          volume: 1
-      }
-      addAudioClip(trackId, newClip)
-      */
+      // Open the drawer with the correct context
+      setAudioDrawerOpen(true, trackId, time)
   }
 
   const handleUpdateTrack = (trackId: string, updates: Partial<AudioTrackType>) => {
@@ -81,7 +105,8 @@ export function StudioLayout() {
       let time = 0
       for (const clip of videoClips) {
           if (currentTime >= time && currentTime < time + clip.duration) {
-              return clip
+              // Return clip with local time offset
+              return { ...clip, localTime: currentTime - time }
           }
           time += clip.duration
       }
@@ -100,8 +125,18 @@ export function StudioLayout() {
                  <video 
                     src={currentVideoClip.generatedVideo}
                     className="w-full h-full object-contain"
-                    // controls={false}
-                    // This is a simplified preview, normally we'd sync this with currentTime
+                    // Sync video time with timeline time
+                    ref={el => {
+                        if (el && Math.abs(el.currentTime - (currentVideoClip.localTime || 0)) > 0.5) {
+                            el.currentTime = currentVideoClip.localTime || 0
+                        }
+                        if (el && isPlaying && el.paused) {
+                            el.play().catch(() => {})
+                        } else if (el && !isPlaying && !el.paused) {
+                            el.pause()
+                        }
+                    }}
+                    muted={false} // Enable audio from video? Maybe mute if we have separate audio tracks later.
                  />
              ) : currentVideoClip?.generatedImage ? (
                  <img 

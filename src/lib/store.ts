@@ -17,6 +17,12 @@ interface AppState {
   selectedClip: Clip | null
   isDrawerOpen: boolean
   isProjectManagerOpen: boolean
+  
+  // Audio Drawer State
+  isAudioDrawerOpen: boolean
+  activeAudioTrackId: string | null
+  activeAudioTime: number | null
+
   showAuthModal: boolean
   showProfileSettingsModal: boolean
   pendingIdea: string | null // Store idea when user needs to auth before creating
@@ -54,6 +60,10 @@ interface AppState {
   setSelectedClip: (clip: Clip | null) => void
   setDrawerOpen: (open: boolean) => void
   setProjectManagerOpen: (open: boolean) => void
+  
+  // Audio Drawer Actions
+  setAudioDrawerOpen: (open: boolean, trackId?: string, time?: number) => void
+
   setShowAuthModal: (open: boolean) => void
   setShowProfileSettingsModal: (open: boolean) => void
   setPendingIdea: (idea: string | null) => void
@@ -128,6 +138,9 @@ export const useAppStore = create<AppState>((set, get) => ({
   selectedClip: null,
   isDrawerOpen: false,
   isProjectManagerOpen: false,
+  isAudioDrawerOpen: false,
+  activeAudioTrackId: null,
+  activeAudioTime: null,
   showAuthModal: false,
   showProfileSettingsModal: false,
   pendingIdea: null,
@@ -661,6 +674,11 @@ export const useAppStore = create<AppState>((set, get) => ({
   setSelectedClip: (clip) => set({ selectedClip: clip }),
   setDrawerOpen: (open) => set({ isDrawerOpen: open }),
   setProjectManagerOpen: (open) => set({ isProjectManagerOpen: open }),
+  setAudioDrawerOpen: (open, trackId, time) => set({ 
+    isAudioDrawerOpen: open,
+    activeAudioTrackId: trackId || null,
+    activeAudioTime: time !== undefined ? time : null
+  }),
   setShowAuthModal: (open) => set({ showAuthModal: open }),
   setShowProfileSettingsModal: (open) => set({ showProfileSettingsModal: open }),
   setPendingIdea: (idea) => set({ pendingIdea: idea }),
