@@ -22,6 +22,7 @@ export interface Project {
   metadata: ProjectMetadata;
   permissions: ProjectPermissions;
   budget: BudgetSettings;
+  timeline?: Timeline; // New: Persistent timeline data
 }
 
 // Story & Planning
@@ -241,8 +242,30 @@ export interface Timeline {
   id: string;
   projectId: string;
   clips: TimelineClip[];
+  audioTracks: AudioTrack[]; // New: Audio tracks
   comments: TimelineComment[];
   exports: TimelineExport[];
+}
+
+export interface AudioTrack {
+  id: string;
+  name: string;
+  type: 'bg_music' | 'sfx' | 'voiceover';
+  clips: AudioClip[];
+  volume: number; // 0 to 1
+  muted: boolean;
+  locked: boolean;
+}
+
+export interface AudioClip {
+  id: string;
+  trackId: string;
+  name: string;
+  assetUrl: string;
+  startTime: number; // seconds (timeline position)
+  duration: number; // seconds
+  offset: number; // seconds (start point within the source file)
+  volume: number; // 0 to 1
 }
 
 export interface TimelineClip {

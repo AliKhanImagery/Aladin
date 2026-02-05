@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { Project, Scene, Clip, Character, IdeaAnalysis, AssetContext, AssetActionState } from '@/types'
+import { Project, Scene, Clip, Character, IdeaAnalysis, AssetContext, AssetActionState, AudioTrack, AudioClip } from '@/types'
 import { queueAutoSave, saveImmediately } from './autoSave'
 
 interface AppState {
@@ -107,6 +107,14 @@ interface AppState {
   addCharacter: (character: Character) => void
   updateCharacter: (characterId: string, updates: Partial<Character>) => void
   deleteCharacter: (characterId: string) => void
+
+  // Audio actions
+  addAudioTrack: (track: AudioTrack) => void
+  updateAudioTrack: (trackId: string, updates: Partial<AudioTrack>) => void
+  deleteAudioTrack: (trackId: string) => void
+  addAudioClip: (trackId: string, clip: AudioClip) => void
+  updateAudioClip: (trackId: string, clipId: string, updates: Partial<AudioClip>) => void
+  deleteAudioClip: (trackId: string, clipId: string) => void
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -417,6 +425,195 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
     
     // Auto-save if user is authenticated
+    if (state.isAuthenticated && state.user?.id) {
+      queueAutoSave(updatedProject, state.user.id)
+    }
+    
+    return {
+      currentProject: updatedProject,
+      projects: state.projects.map(p => 
+        p.id === state.currentProject!.id ? updatedProject : p
+      )
+    }
+  }),
+
+  // Audio actions
+  addAudioTrack: (track) => set((state) => {
+    if (!state.currentProject) return state
+    
+    // Initialize timeline if it doesn't exist
+    const timeline = state.currentProject.timeline || {
+      id: `timeline-${state.currentProject.id}`,
+      projectId: state.currentProject.id,
+      clips: [],
+      audioTracks: [],
+      comments: [],
+      exports: []
+    }
+    
+    const updatedTimeline = {
+      ...timeline,
+      audioTracks: [...(timeline.audioTracks || []), track]
+    }
+    
+    const updatedProject = {
+      ...state.currentProject,
+      updatedAt: new Date(),
+      timeline: updatedTimeline
+    }
+    
+    if (state.isAuthenticated && state.user?.id) {
+      queueAutoSave(updatedProject, state.user.id)
+    }
+    
+    return {
+      currentProject: updatedProject,
+      projects: state.projects.map(p => 
+        p.id === state.currentProject!.id ? updatedProject : p
+      )
+    }
+  }),
+
+  updateAudioTrack: (trackId, updates) => set((state) => {
+    if (!state.currentProject || !state.currentProject.timeline) return state
+    
+    const updatedTimeline = {
+      ...state.currentProject.timeline,
+      audioTracks: state.currentProject.timeline.audioTracks.map(t =>
+        t.id === trackId ? { ...t, ...updates } : t
+      )
+    }
+    
+    const updatedProject = {
+      ...state.currentProject,
+      updatedAt: new Date(),
+      timeline: updatedTimeline
+    }
+    
+    if (state.isAuthenticated && state.user?.id) {
+      queueAutoSave(updatedProject, state.user.id)
+    }
+    
+    return {
+      currentProject: updatedProject,
+      projects: state.projects.map(p => 
+        p.id === state.currentProject!.id ? updatedProject : p
+      )
+    }
+  }),
+
+  deleteAudioTrack: (trackId) => set((state) => {
+    if (!state.currentProject || !state.currentProject.timeline) return state
+    
+    const updatedTimeline = {
+      ...state.currentProject.timeline,
+      audioTracks: state.currentProject.timeline.audioTracks.filter(t => t.id !== trackId)
+    }
+    
+    const updatedProject = {
+      ...state.currentProject,
+      updatedAt: new Date(),
+      timeline: updatedTimeline
+    }
+    
+    if (state.isAuthenticated && state.user?.id) {
+      queueAutoSave(updatedProject, state.user.id)
+    }
+    
+    return {
+      currentProject: updatedProject,
+      projects: state.projects.map(p => 
+        p.id === state.currentProject!.id ? updatedProject : p
+      )
+    }
+  }),
+
+  addAudioClip: (trackId, clip) => set((state) => {
+    if (!state.currentProject || !state.currentProject.timeline) return state
+    
+    const updatedTimeline = {
+      ...state.currentProject.timeline,
+      audioTracks: state.currentProject.timeline.audioTracks.map(t =>
+        t.id === trackId 
+          ? { ...t, clips: [...t.clips, clip] }
+          : t
+      )
+    }
+    
+    const updatedProject = {
+      ...state.currentProject,
+      updatedAt: new Date(),
+      timeline: updatedTimeline
+    }
+    
+    if (state.isAuthenticated && state.user?.id) {
+      queueAutoSave(updatedProject, state.user.id)
+    }
+    
+    return {
+      currentProject: updatedProject,
+      projects: state.projects.map(p => 
+        p.id === state.currentProject!.id ? updatedProject : p
+      )
+    }
+  }),
+
+  updateAudioClip: (trackId, clipId, updates) => set((state) => {
+    if (!state.currentProject || !state.currentProject.timeline) return state
+    
+    const updatedTimeline = {
+      ...state.currentProject.timeline,
+      audioTracks: state.currentProject.timeline.audioTracks.map(t =>
+        t.id === trackId
+          ? {
+              ...t,
+              clips: t.clips.map(c =>
+                c.id === clipId ? { ...c, ...updates } : c
+              )
+            }
+          : t
+      )
+    }
+    
+    const updatedProject = {
+      ...state.currentProject,
+      updatedAt: new Date(),
+      timeline: updatedTimeline
+    }
+    
+    if (state.isAuthenticated && state.user?.id) {
+      queueAutoSave(updatedProject, state.user.id)
+    }
+    
+    return {
+      currentProject: updatedProject,
+      projects: state.projects.map(p => 
+        p.id === state.currentProject!.id ? updatedProject : p
+      )
+    }
+  }),
+
+  deleteAudioClip: (trackId, clipId) => set((state) => {
+    if (!state.currentProject || !state.currentProject.timeline) return state
+    
+    const updatedTimeline = {
+      ...state.currentProject.timeline,
+      audioTracks: state.currentProject.timeline.audioTracks.map(t =>
+        t.id === trackId
+          ? {
+              ...t,
+              clips: t.clips.filter(c => c.id !== clipId)
+            }
+          : t
+      )
+    }
+    
+    const updatedProject = {
+      ...state.currentProject,
+      updatedAt: new Date(),
+      timeline: updatedTimeline
+    }
+    
     if (state.isAuthenticated && state.user?.id) {
       queueAutoSave(updatedProject, state.user.id)
     }
