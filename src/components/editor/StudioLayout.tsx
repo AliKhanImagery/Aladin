@@ -20,10 +20,6 @@ export function StudioLayout() {
     setSelectedClip 
   } = useAppStore()
   
-  // #region agent log
-  fetch('http://127.0.0.1:7242/ingest/129050c5-8ab3-425c-8423-399022a83f73',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'src/components/editor/StudioLayout.tsx:21',message:'StudioLayout component mounted',data:{projectId:currentProject?.id},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'slider-mount'})}).catch(()=>{});
-  // #endregion
-
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
   const [zoomLevel, setZoomLevel] = useState(1)
@@ -44,9 +40,6 @@ export function StudioLayout() {
   if (!currentProject) return null
 
   const handleAddTrack = () => {
-     // #region agent log
-     fetch('http://127.0.0.1:7242/ingest/129050c5-8ab3-425c-8423-399022a83f73',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'src/components/editor/StudioLayout.tsx:43',message:'handleAddTrack called',data:{existingTracks:currentProject?.timeline?.audioTracks?.length},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'audio-track'})}).catch(()=>{});
-     // #endregion
      const trackCount = currentProject.timeline?.audioTracks?.length || 0
      const newTrack: AudioTrackType = {
         id: crypto.randomUUID(),
@@ -61,9 +54,6 @@ export function StudioLayout() {
   }
 
   const handleAddAudioClip = (trackId: string, time: number) => {
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/129050c5-8ab3-425c-8423-399022a83f73',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'src/components/editor/StudioLayout.tsx:57',message:'handleAddAudioClip called',data:{trackId, time},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'audio-clip'})}).catch(()=>{});
-      // #endregion
       // Placeholder for opening the Audio Generation Drawer
       console.log('Open audio drawer for track', trackId, 'at time', time)
       // For testing, let's add a dummy clip
@@ -190,12 +180,7 @@ export function StudioLayout() {
               min={0.5} 
               max={2} 
               step={0.1} 
-              onValueChange={(vals) => {
-                  // #region agent log
-                  fetch('http://127.0.0.1:7242/ingest/129050c5-8ab3-425c-8423-399022a83f73',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'src/components/editor/StudioLayout.tsx:184',message:'Slider value changed',data:{newZoom:vals[0]},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'slider-interaction'})}).catch(()=>{});
-                  // #endregion
-                  setZoomLevel(vals[0])
-              }}
+              onValueChange={(vals) => setZoomLevel(vals[0])}
               className="flex-1"
             />
             <ZoomIn className="w-4 h-4 text-gray-400" />
