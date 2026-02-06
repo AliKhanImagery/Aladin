@@ -16,6 +16,7 @@ interface AppState {
   activeTab: 'idea' | 'sequence' | 'timeline'
   selectedClip: Clip | null
   isDrawerOpen: boolean
+  drawerMode: 'visualize' | 'animate' | 'dub' | null // New field
   isProjectManagerOpen: boolean
   
   // Audio Drawer State
@@ -58,7 +59,7 @@ interface AppState {
   setProjects: (projects: Project[]) => void
   setActiveTab: (tab: 'idea' | 'sequence' | 'timeline') => void
   setSelectedClip: (clip: Clip | null) => void
-  setDrawerOpen: (open: boolean) => void
+  setDrawerOpen: (open: boolean, mode?: 'visualize' | 'animate' | 'dub') => void // Updated signature
   setProjectManagerOpen: (open: boolean) => void
   
   // Audio Drawer Actions
@@ -137,6 +138,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   activeTab: 'idea',
   selectedClip: null,
   isDrawerOpen: false,
+  drawerMode: null,
   isProjectManagerOpen: false,
   isAudioDrawerOpen: false,
   activeAudioTrackId: null,
@@ -672,7 +674,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   // UI actions
   setActiveTab: (tab) => set({ activeTab: tab }),
   setSelectedClip: (clip) => set({ selectedClip: clip }),
-  setDrawerOpen: (open) => set({ isDrawerOpen: open }),
+  setDrawerOpen: (open, mode) => set({ isDrawerOpen: open, drawerMode: mode || null }),
   setProjectManagerOpen: (open) => set({ isProjectManagerOpen: open }),
   setAudioDrawerOpen: (open, trackId, time) => set({ 
     isAudioDrawerOpen: open,

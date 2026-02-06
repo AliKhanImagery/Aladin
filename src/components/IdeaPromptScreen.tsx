@@ -196,7 +196,7 @@ export default function IdeaPromptScreen() {
           {/* Director's Console Area */}
           <div className="relative group max-w-4xl mx-auto">
             <div className="absolute -inset-1 bg-gradient-to-r from-brand-emerald/10 to-transparent rounded-[3rem] blur-2xl opacity-20 group-focus-within:opacity-40 transition duration-1000" />
-            <div className="relative glass-panel bg-white/[0.01] border-white/[0.08] rounded-[2.5rem] p-2 md:p-3 overflow-hidden shadow-2xl">
+            <div className="relative glass-panel bg-white/[0.01] border-white/[0.08] rounded-[2.5rem] p-2 md:p-3 shadow-2xl">
               <div className="flex flex-col gap-2">
                 
                 {/* Text Area */}
@@ -225,7 +225,7 @@ export default function IdeaPromptScreen() {
                       >
                         <ActivePersonaIcon className="w-4 h-4 text-brand-emerald" />
                         <span className="text-[11px] font-bold uppercase tracking-wider text-white/60 group-hover:text-white transition-colors">
-                          I'm a {activePersona.title}
+                          I’m a {activePersona.title}
                         </span>
                         <ChevronDown className={`w-3.5 h-3.5 text-white/30 transition-transform duration-300 ${isPersonaDropdownOpen ? 'rotate-180' : ''}`} />
                       </button>

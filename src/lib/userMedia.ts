@@ -27,7 +27,7 @@ export interface SaveVideoParams {
 
 export interface SaveAssetParams {
   name: string
-  type: 'character' | 'product' | 'location'
+  type: 'character' | 'product' | 'location' | 'audio'
   asset_url: string
   storage_path?: string
   storage_bucket?: string
@@ -603,6 +603,29 @@ export async function getUserVideos(projectId?: string, clipId?: string) {
       name: error?.name,
       stack: error?.stack?.substring(0, 500)
     })
+    return []
+  }
+}
+
+/**
+ * Fetch user audio assets
+ */
+export async function getUserAudio(projectId?: string) {
+  try {
+    // Check session first
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+    if (sessionError || !session) {
+      console.warn('⚠️ getUserAudio: No active session found')
+      return []
+    }
+
+    const userId = session.user.id
+    console.log(`🎵 Audio Bin: Synchronizing audio for user ${userId.substring(0, 8)}...`)
+
+    // Reuse executeAssetQuery but filter for audio
+    return await executeAssetQuery(userId, projectId, 'audio')
+  } catch (error: any) {
+    console.error('❌ getUserAudio exception:', error)
     return []
   }
 }

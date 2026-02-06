@@ -83,6 +83,7 @@ export async function loadUserProjects(userId: string): Promise<Project[]> {
       metadata: project.metadata || {},
       permissions: project.permissions || {},
       budget: project.budget || {},
+      timeline: project.timeline || undefined,
     })) as Project[]
 
     // CRITICAL: Restore video URLs from user_videos table
@@ -220,6 +221,7 @@ function serializeProjectForDB(project: Project): any {
     metadata: serializeValue(project.metadata),
     permissions: serializeValue(project.permissions),
     budget: serializeValue(project.budget),
+    timeline: serializeValue(project.timeline),
     updated_at: new Date().toISOString(),
   }
 }

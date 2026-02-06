@@ -445,7 +445,7 @@ export default function IdeaAnalysisScreen({ analysis, onContinue, onBack }: Ide
           <ClipboardList className="w-10 h-10 text-brand-emerald" />
         </div>
         <h2 className="text-4xl font-bold text-white tracking-tight">Production Analysis</h2>
-        <p className="text-gray-400 text-lg">We've mapped your concept. Confirm your production settings.</p>
+        <p className="text-gray-400 text-lg">We’ve mapped your concept. Confirm your production settings.</p>
       </div>
 
       {/* Media Type Badge with Dropdown */}

@@ -12,7 +12,8 @@ import { AudioClip } from '@/types'
 
 const AUDIO_MODELS: SelectOption[] = [
   { value: 'stable-audio', label: 'Stable Audio (Music/SFX)', description: 'Best for music and sound effects' },
-  { value: 'playai-tts', label: 'Play.ai (Voiceover)', description: 'High quality text-to-speech' }
+  { value: 'elevenlabs-sfx', label: 'ElevenLabs (SFX)', description: 'High quality sound effects' },
+  { value: 'elevenlabs-tts', label: 'ElevenLabs (Voiceover)', description: 'High quality text-to-speech' }
 ]
 
 export function AudioGenerationDrawer() {
@@ -22,6 +23,7 @@ export function AudioGenerationDrawer() {
     activeAudioTrackId, 
     activeAudioTime,
     addAudioClip,
+    updateAudioClip,
     currentProject
   } = useAppStore()
 
@@ -45,9 +47,24 @@ export function AudioGenerationDrawer() {
 
     setIsGenerating(true)
     const toastId = toast.loading('Generating audio...')
+    const clipId = crypto.randomUUID()
+    const startTime = activeAudioTime ?? 0
+
+    // Placeholder clip so the user sees "Generating…" on the timeline
+    const placeholderClip: AudioClip = {
+      id: clipId,
+      trackId: activeAudioTrackId,
+      name: prompt.substring(0, 20) + (prompt.length > 20 ? '...' : ''),
+      assetUrl: '',
+      startTime,
+      duration,
+      offset: 0,
+      volume: 1,
+      status: 'generating'
+    }
+    addAudioClip(activeAudioTrackId, placeholderClip)
 
     try {
-      // Call API
       const response = await fetch('/api/generate-audio', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -64,27 +81,24 @@ export function AudioGenerationDrawer() {
       }
 
       const data = await response.json()
-      
-      // Create new clip
-      const newClip: AudioClip = {
-        id: crypto.randomUUID(),
-        trackId: activeAudioTrackId,
-        name: prompt.substring(0, 20) + (prompt.length > 20 ? '...' : ''),
+
+      updateAudioClip(activeAudioTrackId, clipId, {
         assetUrl: data.audioUrl,
-        startTime: activeAudioTime || 0,
-        duration: data.duration || duration,
-        offset: 0,
-        volume: 1
+        duration: data.duration ?? duration,
+        status: 'completed'
+      })
+
+      const { saveProjectNow } = useAppStore.getState()
+      if (currentProject) {
+        saveProjectNow(currentProject.id)
       }
 
-      addAudioClip(activeAudioTrackId, newClip)
-      
       toast.success('Audio generated successfully!', { id: toastId })
       setAudioDrawerOpen(false)
       setPrompt('')
-      
     } catch (error: any) {
       console.error('Audio generation error:', error)
+      updateAudioClip(activeAudioTrackId, clipId, { status: 'failed' })
       toast.error(`Generation failed: ${error.message}`, { id: toastId })
     } finally {
       setIsGenerating(false)
@@ -124,17 +138,28 @@ export function AudioGenerationDrawer() {
               }`}
             >
               <Music className={`w-5 h-5 ${model === 'stable-audio' ? 'text-[#00FFF0]' : ''}`} />
-              <span className="text-sm font-medium">Music / SFX</span>
+              <span className="text-sm font-medium">Stable Audio</span>
             </button>
             <button
-              onClick={() => setModel('playai-tts')}
+              onClick={() => setModel('elevenlabs-sfx')}
               className={`p-3 rounded-lg border flex flex-col items-center gap-2 transition-all ${
-                model === 'playai-tts' 
+                model === 'elevenlabs-sfx' 
                   ? 'bg-[#00FFF0]/10 border-[#00FFF0] text-white' 
                   : 'bg-[#0C0C0C] border-[#3AAFA9]/20 text-gray-400 hover:border-[#3AAFA9]/50'
               }`}
             >
-              <Mic className={`w-5 h-5 ${model === 'playai-tts' ? 'text-[#00FFF0]' : ''}`} />
+              <Volume2 className={`w-5 h-5 ${model === 'elevenlabs-sfx' ? 'text-[#00FFF0]' : ''}`} />
+              <span className="text-sm font-medium">ElevenLabs SFX</span>
+            </button>
+            <button
+              onClick={() => setModel('elevenlabs-tts')}
+              className={`p-3 rounded-lg border flex flex-col items-center gap-2 transition-all ${
+                model === 'elevenlabs-tts' 
+                  ? 'bg-[#00FFF0]/10 border-[#00FFF0] text-white' 
+                  : 'bg-[#0C0C0C] border-[#3AAFA9]/20 text-gray-400 hover:border-[#3AAFA9]/50'
+              }`}
+            >
+              <Mic className={`w-5 h-5 ${model === 'elevenlabs-tts' ? 'text-[#00FFF0]' : ''}`} />
               <span className="text-sm font-medium">Voiceover</span>
             </button>
           </div>
@@ -158,7 +183,7 @@ export function AudioGenerationDrawer() {
         </div>
 
         {/* Duration Slider (only for music/sfx) */}
-        {model === 'stable-audio' && (
+        {(model === 'stable-audio' || model === 'elevenlabs-sfx') && (
           <div className="space-y-2">
              <div className="flex items-center justify-between">
                <label className="text-xs font-medium text-gray-400 uppercase">Duration</label>
@@ -182,7 +207,9 @@ export function AudioGenerationDrawer() {
             <p className="text-xs text-gray-300 leading-relaxed">
               {model === 'stable-audio' 
                 ? "Generates high-quality sound effects or background music using Fal.ai's Stable Audio model."
-                : "Generates realistic voiceovers using Play.ai's advanced TTS model."}
+                : model === 'elevenlabs-sfx'
+                ? "Generates cinematic sound effects using ElevenLabs' advanced audio engine."
+                : "Generates realistic voiceovers using ElevenLabs' advanced TTS model."}
             </p>
           </div>
         </div>

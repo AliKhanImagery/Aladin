@@ -1,8 +1,8 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { X, Upload, Image as ImageIcon, Package, User, MapPin, Search, Loader2 } from 'lucide-react'
-import { getUserAssets, getUserImages } from '@/lib/userMedia'
+import { X, Upload, Image as ImageIcon, Package, User, MapPin, Search, Loader2, Music, Play, Pause } from 'lucide-react'
+import { getUserAssets, getUserImages, getUserAudio } from '@/lib/userMedia'
 import toast from 'react-hot-toast'
 
 interface AssetLibraryModalProps {
@@ -12,16 +12,21 @@ interface AssetLibraryModalProps {
   onUpload: (file: File) => Promise<void>
   isUploading?: boolean
   projectContext?: any // Optional project context for suggestions
+  initialTab?: 'assets' | 'generated' | 'audio'
+  allowedTypes?: ('assets' | 'generated' | 'audio')[]
 }
 
-type Tab = 'assets' | 'generated'
+type Tab = 'assets' | 'generated' | 'audio'
 
-export default function AssetLibraryModal({ isOpen, onClose, onSelect, onUpload, isUploading = false, projectContext }: AssetLibraryModalProps) {
-  const [activeTab, setActiveTab] = useState<Tab>('assets')
+export default function AssetLibraryModal({ isOpen, onClose, onSelect, onUpload, isUploading = false, projectContext, initialTab = 'assets', allowedTypes }: AssetLibraryModalProps) {
+  const [activeTab, setActiveTab] = useState<Tab>(initialTab)
   const [assets, setAssets] = useState<any[]>([])
   const [images, setImages] = useState<any[]>([])
+  const [audioFiles, setAudioFiles] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
+  const [playingAudioId, setPlayingAudioId] = useState<string | null>(null)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
   
   // Naming Modal State
   const [namingAsset, setNamingAsset] = useState<{ url: string, type: 'asset' | 'generated' } | null>(null)
@@ -40,12 +45,22 @@ export default function AssetLibraryModal({ isOpen, onClose, onSelect, onUpload,
   const loadData = useCallback(async () => {
     setIsLoading(true)
     try {
-      const [assetsData, imagesData] = await Promise.all([
-        getUserAssets(),
-        getUserImages()
+      const [assetsData, imagesData, audioData] = await Promise.all([
+        getUserAssets(undefined, undefined), // Get all general assets (excluding filtered ones if needed, but getUserAssets returns based on type param if provided. Here we want generic assets, but getUserAssets(userId) returns everything in user_assets. We might need to filter client side or split queries.)
+        // Actually getUserAssets implementation: executeAssetQuery(userId, projectId, type). 
+        // If type is undefined, it returns all.
+        // But we want to separate 'audio' from 'assets' (character/product/location).
+        // Let's filter on client side for now to keep it simple, or call separately.
+        getUserImages(),
+        getUserAudio()
       ])
-      setAssets(assetsData || [])
+      
+      // Filter audio out of generic assets if they are mixed
+      const nonAudioAssets = (assetsData || []).filter((a: any) => a.type !== 'audio')
+      
+      setAssets(nonAudioAssets)
       setImages(imagesData || [])
+      setAudioFiles(audioData || [])
     } catch (error) {
       console.error('Failed to load library data:', error)
       toast.error('Failed to load library')
@@ -53,6 +68,24 @@ export default function AssetLibraryModal({ isOpen, onClose, onSelect, onUpload,
       setIsLoading(false)
     }
   }, [])
+
+  // Update active tab when initialTab changes
+  useEffect(() => {
+    if (isOpen && initialTab) {
+      setActiveTab(initialTab)
+    }
+  }, [isOpen, initialTab])
+
+  // Cleanup audio on close
+  useEffect(() => {
+    if (!isOpen) {
+        if (audioRef.current) {
+            audioRef.current.pause()
+            audioRef.current = null
+        }
+        setPlayingAudioId(null)
+    }
+  }, [isOpen])
 
   // Load data on open
   useEffect(() => {
@@ -64,6 +97,17 @@ export default function AssetLibraryModal({ isOpen, onClose, onSelect, onUpload,
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
+
+    // Enforce size limits for specific tabs
+    if (activeTab === 'audio') {
+      const maxBytes = 2 * 1024 * 1024 // 2MB
+      if (file.size > maxBytes) {
+        toast.error('Audio file too large. Please upload a file under 2MB.')
+        // Reset file input to allow re-selecting the same file
+        if (fileInputRef.current) fileInputRef.current.value = ''
+        return
+      }
+    }
 
     // Duplicate check logic
     const isDuplicate = assets.some(asset => 
@@ -121,6 +165,21 @@ export default function AssetLibraryModal({ isOpen, onClose, onSelect, onUpload,
   // Filter items based on search
   const filteredAssets = assets.filter(a => a.name?.toLowerCase().includes(searchQuery.toLowerCase()))
   const filteredImages = images.filter(i => i.prompt?.toLowerCase().includes(searchQuery.toLowerCase()))
+  const filteredAudio = audioFiles.filter(a => a.name?.toLowerCase().includes(searchQuery.toLowerCase()))
+
+  const handlePlayAudio = (e: React.MouseEvent, url: string, id: string) => {
+    e.stopPropagation()
+    if (playingAudioId === id) {
+        if (audioRef.current) audioRef.current.pause()
+        setPlayingAudioId(null)
+    } else {
+        if (audioRef.current) audioRef.current.pause()
+        audioRef.current = new Audio(url)
+        audioRef.current.play()
+        audioRef.current.onended = () => setPlayingAudioId(null)
+        setPlayingAudioId(id)
+    }
+  }
 
   if (!isOpen) return null
 
@@ -200,6 +259,7 @@ export default function AssetLibraryModal({ isOpen, onClose, onSelect, onUpload,
             <h2 className="text-xl font-bold text-white">Media Library</h2>
             <div className="h-6 w-[1px] bg-white/10" />
             <div className="flex bg-black/40 rounded-xl p-1 border border-white/5">
+              {(!allowedTypes || allowedTypes.includes('assets')) && (
               <button
                 onClick={() => setActiveTab('assets')}
                 className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
@@ -210,6 +270,8 @@ export default function AssetLibraryModal({ isOpen, onClose, onSelect, onUpload,
               >
                 Asset Bin
               </button>
+              )}
+              {(!allowedTypes || allowedTypes.includes('generated')) && (
               <button
                 onClick={() => setActiveTab('generated')}
                 className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
@@ -220,6 +282,19 @@ export default function AssetLibraryModal({ isOpen, onClose, onSelect, onUpload,
               >
                 Generated
               </button>
+              )}
+              {(!allowedTypes || allowedTypes.includes('audio')) && (
+              <button
+                onClick={() => setActiveTab('audio')}
+                className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                  activeTab === 'audio' 
+                    ? 'bg-brand-emerald text-brand-obsidian shadow-lg shadow-brand-emerald/20' 
+                    : 'text-gray-400 hover:text-white'
+                }`}
+              >
+                Audio
+              </button>
+              )}
             </div>
           </div>
           
@@ -350,6 +425,72 @@ export default function AssetLibraryModal({ isOpen, onClose, onSelect, onUpload,
                     ))
                   )}
                 </div>
+              )}
+
+              {activeTab === 'audio' && (
+                <>
+                   {/* Upload New Audio Section */}
+                   <div className="mb-8">
+                    <input
+                      type="file"
+                      ref={fileInputRef}
+                      className="hidden"
+                      accept="audio/*"
+                      onChange={handleFileSelect}
+                    />
+                    <button
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={isUploading}
+                      className="w-full h-24 border-2 border-dashed border-white/10 rounded-2xl flex flex-row items-center justify-center gap-4 text-gray-500 hover:text-brand-emerald hover:border-brand-emerald/30 hover:bg-brand-emerald/5 transition-all group disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {isUploading ? (
+                        <>
+                          <Loader2 className="w-6 h-6 animate-spin text-brand-emerald" />
+                          <span className="text-sm font-bold uppercase tracking-widest">Uploading...</span>
+                        </>
+                      ) : (
+                        <>
+                          <div className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
+                            <Upload className="w-5 h-5" />
+                          </div>
+                          <div className="text-left">
+                            <p className="text-sm font-bold uppercase tracking-widest">Upload New Audio</p>
+                            <p className="text-xs text-gray-600 mt-1">MP3, WAV, M4A up to 2MB</p>
+                          </div>
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {filteredAudio.length === 0 ? (
+                      <div className="col-span-full text-center py-20 text-gray-600">
+                        <Music className="w-12 h-12 mx-auto mb-4 opacity-20" />
+                        <p>No audio files found</p>
+                      </div>
+                    ) : (
+                      filteredAudio.map((audio) => (
+                        <div
+                          key={audio.id}
+                          onClick={() => handleAssetClick(audio.asset_url, 'asset')}
+                          className="group relative flex items-center gap-3 p-3 rounded-xl bg-white/5 border border-white/10 overflow-hidden cursor-pointer hover:border-brand-emerald/50 hover:bg-white/10 transition-all"
+                        >
+                          <button
+                             onClick={(e) => handlePlayAudio(e, audio.asset_url, audio.id)}
+                             className="w-10 h-10 rounded-full bg-black/40 flex items-center justify-center text-brand-emerald hover:bg-brand-emerald hover:text-black transition-colors shrink-0"
+                          >
+                             {playingAudioId === audio.id ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 ml-0.5" />}
+                          </button>
+                          
+                          <div className="flex-1 min-w-0">
+                             <p className="text-sm font-medium text-white truncate">{audio.name}</p>
+                             <p className="text-[10px] text-gray-500 uppercase tracking-wider">{audio.type}</p>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </>
               )}
             </>
           )}

@@ -1,14 +1,16 @@
 'use client'
 
 import { useAppStore } from '@/lib/store'
-import { useRef, useState, useMemo } from 'react'
-import { Play, Pause, SkipBack, SkipForward, ZoomIn, ZoomOut, Plus, Settings } from 'lucide-react'
+import { useRef, useState, useMemo, useEffect } from 'react'
+import { Play, Pause, SkipBack, SkipForward, ZoomIn, ZoomOut, Plus, Settings, Info } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Slider } from '@/components/ui/slider'
 import { VideoTrack } from './VideoTrack'
 import { AudioTrack } from './AudioTrack'
 import { AudioTrack as AudioTrackType, AudioClip, Clip } from '@/types'
 import { cn } from '@/lib/utils'
+import { AudioClipInspectorDrawer } from '@/components/drawers/AudioClipInspectorDrawer'
+import ClipDetailDrawer from '@/components/ClipDetailDrawer'
 
 export function StudioLayout() {
   const { 
@@ -16,34 +18,119 @@ export function StudioLayout() {
     addAudioTrack, 
     updateAudioTrack, 
     addAudioClip, 
+    updateAudioClip,
     selectedClip, 
     setSelectedClip,
-    setAudioDrawerOpen
+    setAudioDrawerOpen,
+    setDrawerOpen // New destructuring
   } = useAppStore()
   
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
   const [zoomLevel, setZoomLevel] = useState(1)
-  
+  // Removed local isInspectorOpen state
+  const [selectedAudioClip, setSelectedAudioClip] = useState<AudioClip | null>(null)
+  const [isAudioInspectorOpen, setIsAudioInspectorOpen] = useState(false)
+
   // Use a ref for the timeline container to sync scrolling
   const timelineRef = useRef<HTMLDivElement>(null)
+
+  // Derive video clips from scenes
+  const videoClips = useMemo(() => {
+    if (!currentProject) return []
+    return [...currentProject.scenes]
+      .sort((a, b) => a.order - b.order)
+      .flatMap(scene => [...scene.clips].sort((a, b) => a.order - b.order))
+  }, [currentProject])
+
+  const totalDuration = videoClips.reduce((acc, clip) => acc + clip.duration, 0)
+
+  // Determine current video clip based on currentTime
+  const currentVideoClip = useMemo(() => {
+      let time = 0
+      for (const clip of videoClips) {
+          if (currentTime >= time && currentTime < time + clip.duration) {
+              const localTime = currentTime - time
+              // Return clip with local time offset
+              return { ...clip, localTime }
+          }
+          time += clip.duration
+      }
+      return null
+  }, [videoClips, currentTime])
   
   // Playback Loop
   useEffect(() => {
     let animationFrameId: number
     let lastTime = performance.now()
+    const audioElements: HTMLAudioElement[] = []
+
+    // Helper to sync audio
+    const syncAudio = (time: number, playing: boolean) => {
+        if (!currentProject?.timeline?.audioTracks) return
+
+        currentProject.timeline.audioTracks.forEach(track => {
+            track.clips.forEach(clip => {
+                // Find or create audio element
+                let audio = document.getElementById(`audio-${clip.id}`) as HTMLAudioElement
+                
+                if (!audio) {
+                    audio = document.createElement('audio')
+                    audio.id = `audio-${clip.id}`
+                    audio.src = clip.assetUrl
+                    audio.volume = (clip.volume ?? 1) * (track.volume ?? 1)
+                    audio.muted = track.muted
+                    document.body.appendChild(audio)
+                    audioElements.push(audio)
+                }
+
+                // Calculate clip local time
+                const clipStart = clip.startTime
+                const clipEnd = clip.startTime + clip.duration
+                
+                if (time >= clipStart && time < clipEnd) {
+                    const localTime = time - clipStart + (clip.offset || 0)
+                    
+                    // If audio is not playing or drifted significantly, sync it
+                    if (Math.abs(audio.currentTime - localTime) > 0.3) {
+                        audio.currentTime = localTime
+                    }
+                    
+                    if (playing && audio.paused) {
+                        audio.play().catch(() => {})
+                    } else if (!playing && !audio.paused) {
+                        audio.pause()
+                    }
+                } else {
+                    // Outside clip range
+                    if (!audio.paused) {
+                        audio.pause()
+                        audio.currentTime = 0
+                    }
+                }
+            })
+        })
+    }
 
     const animate = (time: number) => {
-      if (!isPlaying) return
+      if (!isPlaying) {
+        syncAudio(currentTime, false)
+        return
+      }
 
       const deltaTime = (time - lastTime) / 1000 // Convert to seconds
       lastTime = time
 
       setCurrentTime(prev => {
         const nextTime = prev + deltaTime
+        
+        // Sync audio for the next frame
+        syncAudio(nextTime, true)
+
         // Loop or stop at end? Let's stop at end for now.
         if (nextTime >= totalDuration) {
           setIsPlaying(false)
+          syncAudio(0, false) // Reset audio
           return 0 // Reset or stay at end? Let's reset.
         }
         return nextTime
@@ -55,25 +142,31 @@ export function StudioLayout() {
     if (isPlaying) {
       lastTime = performance.now()
       animationFrameId = requestAnimationFrame(animate)
+    } else {
+      // Ensure audio is paused if not playing
+      syncAudio(currentTime, false)
     }
 
     return () => {
       if (animationFrameId) {
         cancelAnimationFrame(animationFrameId)
       }
+      // Cleanup audio elements
+      audioElements.forEach(el => {
+        if (!el.paused) el.pause()
+        el.remove()
+      })
+      // Also cleanup any we missed (created in syncAudio)
+      if (currentProject?.timeline?.audioTracks) {
+          currentProject.timeline.audioTracks.forEach(track => {
+              track.clips.forEach(clip => {
+                  const el = document.getElementById(`audio-${clip.id}`)
+                  if (el) el.remove()
+              })
+          })
+      }
     }
-  }, [isPlaying, totalDuration])
-
-
-  // Derive video clips from scenes
-  const videoClips = useMemo(() => {
-    if (!currentProject) return []
-    return [...currentProject.scenes]
-      .sort((a, b) => a.order - b.order)
-      .flatMap(scene => [...scene.clips].sort((a, b) => a.order - b.order))
-  }, [currentProject])
-
-  const totalDuration = videoClips.reduce((acc, clip) => acc + clip.duration, 0)
+  }, [isPlaying, totalDuration, currentProject?.timeline?.audioTracks])
 
   if (!currentProject) return null
 
@@ -100,23 +193,11 @@ export function StudioLayout() {
       updateAudioTrack(trackId, updates)
   }
 
-  // Determine current video clip based on currentTime
-  const currentVideoClip = useMemo(() => {
-      let time = 0
-      for (const clip of videoClips) {
-          if (currentTime >= time && currentTime < time + clip.duration) {
-              // Return clip with local time offset
-              return { ...clip, localTime: currentTime - time }
-          }
-          time += clip.duration
-      }
-      return null
-  }, [videoClips, currentTime])
-
   return (
-    <div className="flex flex-col h-[calc(100vh-140px)] bg-[#0C0C0C] rounded-xl overflow-hidden border border-[#3AAFA9]/20">
+    <div className="flex flex-col h-[calc(100vh-120px)] bg-[#0C0C0C] overflow-hidden">
       {/* Theater Section (Top) */}
-      <div className="flex-1 flex min-h-0 bg-[#0C0C0C]">
+      {/* Flexible height: takes available space, but has max height on desktop to ensure timeline visibility */}
+      <div className="flex-1 flex min-h-0 bg-[#0C0C0C] lg:max-h-[60vh] relative">
         {/* Main Preview Area */}
         <div className="flex-1 relative flex items-center justify-center p-4">
           <div className="aspect-video w-full max-h-full bg-black rounded-lg border border-[#3AAFA9]/10 relative overflow-hidden shadow-2xl">
@@ -145,52 +226,22 @@ export function StudioLayout() {
                     alt="Preview"
                  />
              ) : (
-                <div className="absolute inset-0 flex items-center justify-center text-gray-500 bg-[#1E1F22]">
-                  <span className="flex items-center gap-2">
-                    <Play className="w-8 h-8 opacity-50" />
-                    Preview Not Available
-                  </span>
-                </div>
+                 <div className="absolute inset-0 flex items-center justify-center text-gray-500 bg-[#1E1F22]">
+                   <span className="flex items-center gap-2">
+                     <Play className="w-8 h-8 opacity-50" />
+                     Preview Not Available
+                   </span>
+                 </div>
              )}
              
              {/* Overlay Info */}
-             <div className="absolute top-4 left-4 bg-black/50 backdrop-blur-md px-3 py-1 rounded-full border border-white/10">
+             <div className="absolute top-4 left-4 bg-black/50 backdrop-blur-md px-3 py-1 rounded-full border border-white/10 z-10">
                 <span className="text-xs font-mono text-white">
                     {new Date(currentTime * 1000).toISOString().substr(11, 8)} 
                     <span className="text-gray-400"> / {new Date(totalDuration * 1000).toISOString().substr(11, 8)}</span>
                 </span>
              </div>
           </div>
-        </div>
-
-        {/* Inspector / Asset Browser (Right Side) */}
-        <div className="w-80 bg-[#1E1F22] border-l border-[#3AAFA9]/20 flex flex-col hidden lg:flex">
-           <div className="p-4 border-b border-[#3AAFA9]/10 flex items-center justify-between">
-               <h3 className="text-sm font-semibold text-white">Inspector</h3>
-               <Settings className="w-4 h-4 text-gray-400" />
-           </div>
-           
-           <div className="flex-1 p-4 overflow-y-auto">
-               {selectedClip ? (
-                   <div className="space-y-4">
-                       <div>
-                           <label className="text-xs text-gray-400 uppercase font-bold tracking-wider">Clip Name</label>
-                           <p className="text-sm text-white mt-1">{selectedClip.name}</p>
-                       </div>
-                       <div>
-                           <label className="text-xs text-gray-400 uppercase font-bold tracking-wider">Prompt</label>
-                           <p className="text-xs text-gray-300 mt-1 line-clamp-4 italic">
-                               "{selectedClip.videoPrompt || selectedClip.imagePrompt}"
-                           </p>
-                       </div>
-                       {/* Add more properties here */}
-                   </div>
-               ) : (
-                   <div className="h-full flex items-center justify-center text-gray-500 text-xs">
-                       Select a clip to view properties
-                   </div>
-               )}
-           </div>
         </div>
       </div>
 
@@ -208,22 +259,40 @@ export function StudioLayout() {
             </Button>
          </div>
          
-         <div className="flex items-center gap-2 w-48">
-            <ZoomOut className="w-4 h-4 text-gray-400" />
-            <Slider 
-              value={[zoomLevel]} 
-              min={0.5} 
-              max={2} 
-              step={0.1} 
-              onValueChange={(vals) => setZoomLevel(vals[0])}
-              className="flex-1"
-            />
-            <ZoomIn className="w-4 h-4 text-gray-400" />
+         <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2 w-48">
+                <ZoomOut className="w-4 h-4 text-gray-400" />
+                <Slider 
+                value={[zoomLevel]} 
+                min={0.5} 
+                max={2} 
+                step={0.1} 
+                onValueChange={(vals) => setZoomLevel(vals[0])}
+                className="flex-1"
+                />
+                <ZoomIn className="w-4 h-4 text-gray-400" />
+            </div>
+
+            <Button 
+                variant="ghost" 
+                size="icon" 
+                className={cn("text-gray-400 hover:text-white")} // simplified class
+                onClick={() => {
+                    if (selectedClip) {
+                        setDrawerOpen(true) // Use store action
+                    }
+                }}
+                disabled={!selectedClip}
+                title="Clip Inspector"
+            >
+                <Info className="w-4 h-4" />
+            </Button>
          </div>
       </div>
 
       {/* Timeline Grid (Bottom) */}
-      <div className="h-[400px] bg-[#0C0C0C] border-t border-[#3AAFA9]/20 overflow-hidden flex flex-col relative">
+      {/* Fixed height to prevent wasted space, allowing preview to maximize */}
+      <div className="h-[320px] shrink-0 bg-[#0C0C0C] border-t border-[#3AAFA9]/20 overflow-hidden flex flex-col relative">
          {/* Time Ruler */}
          <div className="h-8 bg-[#1E1F22] border-b border-[#3AAFA9]/10 w-full relative shrink-0">
              {/* Ruler ticks would go here */}
@@ -248,6 +317,14 @@ export function StudioLayout() {
                       clips={videoClips} 
                       zoomLevel={zoomLevel} 
                       onClipClick={(clip) => setSelectedClip(clip)}
+                      onClipContextMenu={(clip) => {
+                          setSelectedClip(clip)
+                          setDrawerOpen(true) // Open omni drawer
+                      }}
+                      onClipDubbing={(clip) => {
+                          setSelectedClip(clip)
+                          setDrawerOpen(true, 'dub') // Open directly in dub mode
+                      }}
                       selectedClipId={selectedClip?.id}
                    />
                </div>
@@ -260,8 +337,13 @@ export function StudioLayout() {
                     track={track}
                     pixelsPerSecond={40 * zoomLevel}
                     onAddClip={(time) => handleAddAudioClip(track.id, time)}
-                    onClipClick={(clip) => console.log('Audio clip clicked', clip)}
-                    selectedClipId="" // Audio clip selection not yet in store
+                    onClipClick={(clip) => setSelectedAudioClip(clip)}
+                    onClipContextMenu={(clip) => {
+                      setSelectedAudioClip(clip)
+                      setIsAudioInspectorOpen(true)
+                    }}
+                    onClipMove={(clip, newStartTime) => updateAudioClip(clip.trackId, clip.id, { startTime: Math.max(0, newStartTime) })}
+                    selectedClipId={selectedAudioClip?.id ?? ''}
                     onUpdateTrack={(updates) => handleUpdateTrack(track.id, updates)}
                 />
             ))}
@@ -276,6 +358,13 @@ export function StudioLayout() {
             </div>
          </div>
       </div>
+
+      <ClipDetailDrawer />
+      <AudioClipInspectorDrawer 
+        isOpen={isAudioInspectorOpen} 
+        onClose={() => { setIsAudioInspectorOpen(false); setSelectedAudioClip(null) }} 
+        clip={selectedAudioClip}
+      />
     </div>
   )
 }

@@ -10,6 +10,8 @@ interface AudioTrackProps {
   pixelsPerSecond: number
   onAddClip: (time: number) => void
   onClipClick: (clip: AudioClip) => void
+  onClipContextMenu?: (clip: AudioClip) => void
+  onClipMove?: (clip: AudioClip, newStartTime: number) => void
   selectedClipId?: string
   onUpdateTrack?: (updates: Partial<AudioTrackType>) => void
 }
@@ -19,6 +21,8 @@ export function AudioTrack({
   pixelsPerSecond, 
   onAddClip, 
   onClipClick, 
+  onClipContextMenu,
+  onClipMove,
   selectedClipId,
   onUpdateTrack 
 }: AudioTrackProps) {
@@ -86,6 +90,8 @@ export function AudioTrack({
                     pixelsPerSecond={pixelsPerSecond}
                     isSelected={selectedClipId === clip.id}
                     onClick={() => onClipClick(clip)}
+                    onContextMenu={() => onClipContextMenu && onClipContextMenu(clip)}
+                    onMoveClip={!track.locked && onClipMove ? (newStartTime) => onClipMove(clip, newStartTime) : undefined}
                     type={track.type}
                  />
              ))}

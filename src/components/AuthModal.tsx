@@ -232,7 +232,7 @@ export default function AuthModal({ isOpen, onClose, onSuccess, context = 'gener
               <div>
                 <h3 className="text-xl font-bold text-white mb-3">Sync Sent.</h3>
                 <p className="text-sm text-white/30 font-medium leading-relaxed max-w-sm">
-                  We've transmitted a recovery blueprint to <br />
+                  We’ve transmitted a recovery blueprint to <br />
                   <strong className="text-white font-black">{email}</strong>
                 </p>
               </div>

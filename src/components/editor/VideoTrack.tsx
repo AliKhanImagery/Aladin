@@ -6,12 +6,14 @@ interface VideoTrackProps {
   clips: Clip[]
   zoomLevel: number
   onClipClick: (clip: Clip) => void
+  onClipContextMenu?: (clip: Clip) => void
+  onClipDubbing?: (clip: Clip) => void // New prop
   selectedClipId?: string
 }
 
 export const BASE_PIXELS_PER_SECOND = 40
 
-export function VideoTrack({ clips, zoomLevel, onClipClick, selectedClipId }: VideoTrackProps) {
+export function VideoTrack({ clips, zoomLevel, onClipClick, onClipContextMenu, onClipDubbing, selectedClipId }: VideoTrackProps) {
   // We want to scroll to the selected clip if it changes, potentially
   
   return (
@@ -23,6 +25,8 @@ export function VideoTrack({ clips, zoomLevel, onClipClick, selectedClipId }: Vi
            width={clip.duration * BASE_PIXELS_PER_SECOND * zoomLevel}
            isSelected={selectedClipId === clip.id}
            onClick={() => onClipClick(clip)}
+           onContextMenu={() => onClipContextMenu && onClipContextMenu(clip)}
+           onDubbingClick={() => onClipDubbing && onClipDubbing(clip)} // Pass it down
         />
       ))}
       {/* Spacer at the end */}

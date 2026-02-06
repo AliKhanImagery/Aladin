@@ -21,6 +21,16 @@ export default function SequenceTab() {
     generationProgress,
     clipGeneratingStatus
   } = useAppStore()
+
+  const aspectRatioClass = (() => {
+    const ratio = currentProject?.story?.aspectRatio || '16:9'
+    switch (ratio) {
+      case '9:16': return 'aspect-[9/16]'
+      case '1:1': return 'aspect-square'
+      default: return 'aspect-video'
+    }
+  })()
+
   const [isAddingScene, setIsAddingScene] = useState(false)
   const [isImageModalOpen, setIsImageModalOpen] = useState(false)
   const [modalImageUrl, setModalImageUrl] = useState<string | null>(null)
@@ -240,7 +250,7 @@ export default function SequenceTab() {
                 <div className="space-y-6">
                   {/* ...Clips Grid Logic... */}
                   {scene.clips.length === 0 ? (
-                    <div className="aspect-video w-full border-2 border-dashed border-white/5 rounded-3xl flex flex-col items-center justify-center gap-4 bg-white/[0.01] hover:bg-white/[0.02] transition-colors cursor-pointer group/empty" onClick={() => handleAddClip(scene.id)}>
+                    <div className={`${aspectRatioClass} w-full border-2 border-dashed border-white/5 rounded-3xl flex flex-col items-center justify-center gap-4 bg-white/[0.01] hover:bg-white/[0.02] transition-colors cursor-pointer group/empty`} onClick={() => handleAddClip(scene.id)}>
                       <div className="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center group-hover/empty:scale-110 transition-transform duration-300">
                         <Plus className="w-6 h-6 text-white/20 group-hover/empty:text-brand-emerald" />
                       </div>
@@ -251,7 +261,7 @@ export default function SequenceTab() {
                       {scene.clips.map((clip, clipIndex) => (
                         <div
                           key={clip.id}
-                          className="group relative aspect-video bg-[#050505] rounded-3xl overflow-hidden border border-white/5 hover:border-brand-emerald/50 transition-all duration-500 shadow-2xl hover:shadow-brand-emerald/10 ring-1 ring-white/0 hover:ring-1 hover:ring-brand-emerald/20"
+                          className={`group relative ${aspectRatioClass} w-full bg-[#050505] rounded-3xl overflow-hidden border border-white/5 hover:border-brand-emerald/50 transition-all duration-500 shadow-2xl hover:shadow-brand-emerald/10 ring-1 ring-white/0 hover:ring-1 hover:ring-brand-emerald/20`}
                           style={{
                             animationDelay: `${clipIndex * 100}ms`,
                             animationFillMode: 'both'
@@ -311,7 +321,7 @@ export default function SequenceTab() {
                                 {clip.status === 'completed' ? (
                                   <>
                                     <Edit className="w-3.5 h-3.5" />
-                                    Director's Suite
+                                    Director’s Suite
                                   </>
                                 ) : (
                                   <>
@@ -374,7 +384,7 @@ export default function SequenceTab() {
                       {!isGeneratingStory && (
                         <div 
                           onClick={() => handleAddClip(scene.id)}
-                          className="aspect-video bg-white/[0.02] hover:bg-white/[0.04] rounded-3xl border border-white/5 border-dashed flex flex-col items-center justify-center gap-3 cursor-pointer transition-all group/add"
+                          className={`${aspectRatioClass} w-full bg-white/[0.02] hover:bg-white/[0.04] rounded-3xl border border-white/5 border-dashed flex flex-col items-center justify-center gap-3 cursor-pointer transition-all group/add`}
                         >
                           <div className="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center group-hover/add:bg-white/10 transition-colors">
                             <Plus className="w-5 h-5 text-white/30 group-hover/add:text-white" />

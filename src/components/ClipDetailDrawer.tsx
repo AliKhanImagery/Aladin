@@ -5,7 +5,7 @@ import { useAppStore } from '@/lib/store'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Input } from '@/components/ui/input'
-import { X, Play, Settings, Image, Video, Zap, Loader2, Plus, Info, Maximize2, Sparkles, Palette, Trash2, Upload, ChevronRight, Wand2, Clock, History } from 'lucide-react'
+import { X, Play, Settings, Image, Video, Zap, Loader2, Plus, Info, Maximize2, Sparkles, Palette, Trash2, Upload, ChevronRight, Wand2, Clock, History, Mic, Music } from 'lucide-react'
 import { FileUpload } from '@/components/ui/fileUpload'
 import ImageModal from './ImageModal'
 import AssetLibraryModal from './AssetLibraryModal'
@@ -25,14 +25,21 @@ export default function ClipDetailDrawer() {
     updateClip,
     currentProject,
     setClipGeneratingStatus,
-    clipGeneratingStatus
+    clipGeneratingStatus,
+    drawerMode // New destructuring
   } = useAppStore()
   
   // Get aspect ratio from project story (default to 16:9)
   const aspectRatio = currentProject?.story?.aspectRatio || '16:9'
   
   // OMNI EDITOR STATE
-  const [activeMode, setActiveMode] = useState<'visualize' | 'animate'>('visualize')
+  const [activeMode, setActiveMode] = useState<'visualize' | 'animate' | 'dub'>('visualize')
+
+  // DUBBING STATE
+  const [dubAudioUrl, setDubAudioUrl] = useState('')
+  const [dubAudioDuration, setDubAudioDuration] = useState(0)
+  const [isDubbing, setIsDubbing] = useState(false)
+  const [dubbingStatus, setDubbingStatus] = useState<string | null>(null)
 
   // IMAGE GENERATION STATE
   const [imageModel, setImageModel] = useState<'flux-2-pro' | 'nano-banana' | 'reeve'>((currentProject?.settings?.imageModel as any) || 'flux-2-pro')
@@ -54,7 +61,7 @@ export default function ClipDetailDrawer() {
   const [isImageModalOpen, setIsImageModalOpen] = useState(false)
   const [modalImageUrl, setModalImageUrl] = useState<string | null>(null)
   const [isAssetPickerOpen, setIsAssetPickerOpen] = useState(false)
-  const [activeAssetContext, setActiveAssetContext] = useState<'image_reference' | 'video_start' | 'video_reference' | 'nano_input' | 'clip_media'>('image_reference')
+  const [activeAssetContext, setActiveAssetContext] = useState<'image_reference' | 'video_start' | 'video_reference' | 'nano_input' | 'clip_media' | 'dub_audio'>('image_reference')
   const [activeAssetIndex, setActiveAssetIndex] = useState<number>(0)
   const [isUploadingAsset, setIsUploadingAsset] = useState(false)
 
@@ -63,10 +70,16 @@ export default function ClipDetailDrawer() {
   const [isLoadingHistory, setIsLoadingHistory] = useState(false)
   const historyStripRef = useRef<HTMLDivElement>(null)
   
-  // 1. Selection Change Effect: Run only when a NEW clip is selected
+  // 1. Selection Change Effect: Run only when a NEW clip is selected or drawer opens
   useEffect(() => {
-    if (selectedClip?.id) {
-      // Auto-set initial mode based on content
+    if (selectedClip?.id && isDrawerOpen) {
+      // Priority 1: Explicit mode passed via setDrawerOpen
+      if (drawerMode) {
+        setActiveMode(drawerMode)
+        return
+      }
+
+      // Priority 2: Auto-detect based on content
       if (selectedClip.generatedVideo) {
         setActiveMode('animate')
       } else {
@@ -76,7 +89,7 @@ export default function ClipDetailDrawer() {
       // Fetch generation history for this clip
       fetchHistory()
     }
-  }, [selectedClip?.id])
+  }, [selectedClip?.id, isDrawerOpen, drawerMode])
 
   // 2. Prompt Sync Effect: Keep local prompts in sync with global store
   useEffect(() => {
@@ -233,6 +246,13 @@ export default function ClipDetailDrawer() {
         generatedImage: url,
         previewImage: url
       })
+    } else if (activeAssetContext === 'dub_audio') {
+      setDubAudioUrl(url)
+      // Attempt to get duration if possible
+      const audio = new Audio(url)
+      audio.onloadedmetadata = () => {
+        setDubAudioDuration(audio.duration)
+      }
     }
     setIsAssetPickerOpen(false)
   }
@@ -252,14 +272,23 @@ export default function ClipDetailDrawer() {
       const { url } = await response.json()
       
       // Save to user_assets library
+      // If we are in dub_audio context, save as audio type
+      const assetType = activeAssetContext === 'dub_audio' ? 'audio' : 'product'
+      
       await saveUserAsset({
         name: file.name,
-        type: 'product', // Defaulting to product/generic for now
+        type: assetType as any, 
         asset_url: url,
         metadata: { originalFilename: file.name, fileSize: file.size }
       })
       
-      // AssetLibraryModal will refresh automatically, but we want to know it's done
+      // If direct upload in dubbing mode (though we are moving to modal, handleAssetUpload is used by modal too)
+      // The modal calls onUpload.
+      // If we are using the modal, we don't need to setDubAudioUrl here, handleAssetSelect will be called by the modal after user selects the uploaded file?
+      // Actually AssetLibraryModal logic: 
+      // await onUpload(file) -> refresh list. User then clicks the file.
+      // So this is correct.
+      
     } catch (e: any) {
       console.error('Asset upload failed:', e)
       alert(`Upload failed: ${e.message}`)
@@ -439,6 +468,70 @@ export default function ClipDetailDrawer() {
     }
   }
 
+  const handleGenerateDub = async () => {
+    if (!selectedClip?.generatedVideo) {
+      alert('Please generate or upload a video for this clip first.')
+      return
+    }
+    if (!dubAudioUrl) {
+      alert('Please upload an audio file.')
+      return
+    }
+
+    setIsDubbing(true)
+    setDubbingStatus('Processing...')
+    if (selectedClip?.id) setClipGeneratingStatus(selectedClip.id, 'video') // Reuse video status for spinner
+
+    try {
+      const response = await fetch('/api/process-dub-and-sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          videoUrl: selectedClip.generatedVideo,
+          audioUrl: dubAudioUrl,
+          videoDuration: selectedClip.duration || 5,
+          audioDuration: dubAudioDuration,
+          prompt: selectedClip.videoPrompt || "Continue the scene naturally, maintaining the same style and motion."
+        })
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || data.details || 'Dubbing failed')
+      }
+
+      handleUpdateClip({
+        generatedVideo: data.videoUrl,
+        previewVideo: data.videoUrl,
+        // Update duration if it was extended
+        duration: data.wasExtended ? Math.max(selectedClip.duration, Math.ceil(dubAudioDuration)) : selectedClip.duration
+      })
+
+      // Save the new video record
+      await saveUserVideo({
+        video_url: data.videoUrl,
+        prompt: `Lip Sync: ${selectedClip.videoPrompt || 'Original scene'}`,
+        model: 'kling-lipsync',
+        duration: data.wasExtended ? Math.ceil(dubAudioDuration) : selectedClip.duration,
+        aspect_ratio: aspectRatio,
+        project_id: currentProject?.id,
+        clip_id: selectedClip?.id,
+        thumbnail_url: selectedClip.generatedImage || undefined,
+        storeExternally: true
+      })
+
+      alert('Lip Sync Complete!')
+    } catch (error: any) {
+      console.error('Dubbing error:', error)
+      alert(`Dubbing Failed: ${error.message}`)
+    } finally {
+      setIsDubbing(false)
+      setDubbingStatus(null)
+      if (selectedClip?.id) setClipGeneratingStatus(selectedClip.id, null)
+    }
+  }
+
   // --- RENDER HELPERS ---
   const addReferenceAsset = () => setReferenceAssets([...referenceAssets, { url: '' }])
   const removeReferenceAsset = (index: number) => {
@@ -579,6 +672,17 @@ export default function ClipDetailDrawer() {
             <Video className="w-3.5 h-3.5" />
             Animate
           </button>
+          <button
+            onClick={() => setActiveMode('dub')}
+            className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${
+              activeMode === 'dub' 
+                ? 'bg-[#00FFF0] text-black shadow-lg shadow-[#00FFF0]/20' 
+                : 'bg-[#1E1F22] text-gray-400 hover:bg-white/5 hover:text-white'
+            }`}
+          >
+            <Mic className="w-3.5 h-3.5" />
+            Lip Sync
+          </button>
                   </div>
 
         {/* 3. INSPECTOR (Scrollable Controls) */}
@@ -691,6 +795,62 @@ export default function ClipDetailDrawer() {
                     </div>
                 )}
                   </div>
+            </div>
+          )}
+
+          {/* --- DUBBING MODE CONTROLS --- */}
+          {activeMode === 'dub' && (
+            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-2">
+                   <Music className="w-3 h-3 text-[#00FFF0]" />
+                   Audio Source
+                </label>
+                
+                {!dubAudioUrl ? (
+                  <button 
+                    onClick={() => handleOpenAssetPicker('dub_audio')}
+                    className="w-full border-2 border-dashed border-[#3AAFA9]/20 rounded-xl p-6 flex flex-col items-center justify-center bg-[#0C0C0C] hover:bg-[#0C0C0C]/50 transition-colors group cursor-pointer"
+                  >
+                      <div className="w-12 h-12 rounded-full bg-[#1E1F22] flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+                        <Upload className="w-5 h-5 text-gray-400 group-hover:text-[#00FFF0]" />
+                      </div>
+                      <span className="text-sm font-bold text-white mb-1">Select Audio</span>
+                      <span className="text-[10px] text-gray-500">From Library or Upload New</span>
+                  </button>
+                ) : (
+                  <div className="bg-[#0C0C0C] rounded-xl p-4 border border-[#3AAFA9]/20">
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-xs font-bold text-white flex items-center gap-2">
+                        <Music className="w-3 h-3 text-[#00FFF0]" />
+                        Audio Track
+                      </span>
+                      <button onClick={() => setDubAudioUrl('')} className="text-gray-500 hover:text-white">
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                    <audio src={dubAudioUrl} controls className="w-full h-8 mb-2" />
+                    <div className="flex justify-between text-[10px] text-gray-500 font-mono">
+                      <span>Duration: {dubAudioDuration.toFixed(1)}s</span>
+                      {dubAudioDuration > 10 && (
+                        <span className="text-orange-400">⚠️ Extends {'>'}10s</span>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="bg-[#1E1F22]/50 p-4 rounded-xl border border-white/5">
+                <h4 className="text-xs font-bold text-white mb-2 flex items-center gap-2">
+                  <Info className="w-3 h-3 text-[#00FFF0]" />
+                  Sync Behavior
+                </h4>
+                <ul className="text-[10px] text-gray-400 space-y-1.5 list-disc pl-4">
+                  <li>If audio is shorter than video, we just sync the lips.</li>
+                  <li>If audio is longer (up to 10s), we <strong>extend</strong> the video first.</li>
+                  <li>Videos longer than 10s are not fully supported yet.</li>
+                </ul>
+              </div>
             </div>
           )}
 
@@ -833,16 +993,18 @@ export default function ClipDetailDrawer() {
         {/* 4. ACTION BAR (Bottom Fixed) */}
         <div className="p-4 bg-[#1E1F22] border-t border-[#3AAFA9]/20">
                 <Button
-            onClick={activeMode === 'visualize' ? handleGenerateImage : handleGenerateVideo}
+            onClick={activeMode === 'visualize' ? handleGenerateImage : activeMode === 'dub' ? handleGenerateDub : handleGenerateVideo}
             disabled={
                 activeMode === 'visualize' 
                     ? (isGeneratingImage || clipGeneratingStatus[selectedClip.id] === 'image' || !localImagePrompt.trim())
+                    : activeMode === 'dub'
+                    ? (isDubbing || !dubAudioUrl || !selectedClip.generatedVideo)
                     : (isGeneratingVideo || clipGeneratingStatus[selectedClip.id] === 'video' || !localVideoPrompt.trim())
             }
             className={`w-full h-11 font-bold tracking-wide uppercase transition-all ${
                 activeMode === 'visualize'
                     ? 'bg-[#00FFF0] text-black hover:bg-[#00FFF0]/80'
-                    : 'bg-[#FF0055] text-white hover:bg-[#FF0055]/80' // Different color for video action? Or keep uniform? Let's use brand teal for visual, maybe standard for video. Actually sticking to Teal is safer for brand consistency.
+                    : 'bg-[#FF0055] text-white hover:bg-[#FF0055]/80'
             }`}
           >
             {activeMode === 'visualize' ? (
@@ -850,6 +1012,12 @@ export default function ClipDetailDrawer() {
                     <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Generating Preview...</>
                 ) : (
                     <><Sparkles className="w-4 h-4 mr-2" /> Generate Visual</>
+                )
+            ) : activeMode === 'dub' ? (
+                isDubbing ? (
+                    <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> {dubbingStatus || 'Syncing...'}</>
+                ) : (
+                    <><Mic className="w-4 h-4 mr-2" /> Generate Lip Sync</>
                 )
             ) : (
                 isGeneratingVideo ? (
@@ -881,6 +1049,8 @@ export default function ClipDetailDrawer() {
         onUpload={handleAssetUpload}
         isUploading={isUploadingAsset}
         projectContext={currentProject}
+        initialTab={activeAssetContext === 'dub_audio' ? 'audio' : 'assets'}
+        allowedTypes={activeAssetContext === 'dub_audio' ? ['audio'] : ['assets', 'generated']}
       />
     </div>
   )

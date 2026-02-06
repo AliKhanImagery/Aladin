@@ -62,7 +62,7 @@ export default function TermsOfService() {
             <section>
               <h2 className="text-white text-lg font-bold uppercase tracking-wider mb-4">4. Limitation of Liability</h2>
               <p>
-                geniferAI is provided "as is". We make no warranties regarding the uptime, availability, or accuracy of the service. 
+                geniferAI is provided &quot;as is&quot;. We make no warranties regarding the uptime, availability, or accuracy of the service. 
                 We are not liable for any indirect damages arising from your use of the platform.
               </p>
             </section>

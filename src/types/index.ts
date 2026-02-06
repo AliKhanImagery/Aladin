@@ -266,6 +266,8 @@ export interface AudioClip {
   duration: number; // seconds
   offset: number; // seconds (start point within the source file)
   volume: number; // 0 to 1
+  /** Shown on the clip while generating or after failure */
+  status?: 'generating' | 'completed' | 'failed';
 }
 
 export interface TimelineClip {

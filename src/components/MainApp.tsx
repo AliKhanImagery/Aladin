@@ -138,8 +138,8 @@ export default function MainApp() {
       )}
 
       {/* Main Content Viewport */}
-      <main className={`max-w-7xl mx-auto px-6 py-10 relative z-10 ${!hasGeneratedStory ? 'pt-4' : ''}`}>
-        <div className="animate-fade-in">
+      <main className={`relative z-10 ${activeTab === 'timeline' ? 'h-[calc(100vh-120px)]' : 'max-w-7xl mx-auto px-6 py-10'} ${!hasGeneratedStory ? 'pt-4' : ''}`}>
+        <div className="animate-fade-in h-full">
         {activeTab === 'idea' && <IdeaTab />}
         {activeTab === 'sequence' && <SequenceTab />}
         {activeTab === 'timeline' && <TimelineTab />}
