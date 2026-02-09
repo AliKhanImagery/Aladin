@@ -16,11 +16,13 @@ interface AssetLibraryModalProps {
   projectContext?: any // Optional project context for suggestions
   initialTab?: 'assets' | 'generated' | 'audio'
   allowedTypes?: ('assets' | 'generated' | 'audio')[]
+  /** When set (e.g. detected asset from idea analysis), skip the "Name this Reference" step and use this name. */
+  presetName?: string
 }
 
 type Tab = 'assets' | 'generated' | 'audio'
 
-export default function AssetLibraryModal({ isOpen, onClose, onSelect, onUpload, isUploading = false, projectContext, initialTab = 'assets', allowedTypes }: AssetLibraryModalProps) {
+export default function AssetLibraryModal({ isOpen, onClose, onSelect, onUpload, isUploading = false, projectContext, initialTab = 'assets', allowedTypes, presetName }: AssetLibraryModalProps) {
   const [activeTab, setActiveTab] = useState<Tab>(initialTab)
   const [assets, setAssets] = useState<any[]>([])
   const [images, setImages] = useState<any[]>([])
@@ -144,6 +146,12 @@ export default function AssetLibraryModal({ isOpen, onClose, onSelect, onUpload,
   }
 
   const handleAssetClick = (url: string, type: 'asset' | 'generated') => {
+    // When presetName is set (e.g. detected asset), skip naming and confirm immediately
+    if (presetName?.trim()) {
+      onSelect(url, presetName.trim())
+      onClose()
+      return
+    }
     setNamingAsset({ url, type })
     setAssetName('') // Reset name
   }

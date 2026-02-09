@@ -49,17 +49,21 @@ export async function POST(request: NextRequest) {
             description: string; 
             assetUrl?: string;
             roleInClip?: string;
+            visualDna?: string;
           }
           const identityToken = `[[IDENTITY:${char.name.toUpperCase().replace(/\s+/g, '_')}]]`
-          characterStrings.push(`${identityToken} - ${char.name}: ${char.appearanceDetails || char.description}. ${char.assetUrl ? 'USE PROVIDED REFERENCE IMAGE.' : ''}`)
+          // "Name, DNA" format: name from story, detail from vision (visualDna) for consistency
+          const appearance = char.visualDna ? `${char.name}, ${char.visualDna}` : (char.appearanceDetails || char.description)
+          characterStrings.push(`${identityToken} - ${appearance}. ${char.assetUrl ? 'USE PROVIDED REFERENCE IMAGE.' : ''}`)
         }
       }
       
       if (assetContext.products && Array.isArray(assetContext.products) && assetContext.products.length > 0) {
         for (const p of assetContext.products) {
-          const product = p as { name: string; description: string; assetUrl?: string }
+          const product = p as { name: string; description: string; assetUrl?: string; visualDna?: string }
           const productToken = `[[PRODUCT:${product.name.toUpperCase().replace(/\s+/g, '_')}]]`
-          productStrings.push(`${productToken} - ${product.name}: ${product.description}. ${product.assetUrl ? 'USE PROVIDED REFERENCE IMAGE.' : ''}`)
+          const appearance = product.visualDna ? `${product.name}, ${product.visualDna}` : product.description
+          productStrings.push(`${productToken} - ${appearance}. ${product.assetUrl ? 'USE PROVIDED REFERENCE IMAGE.' : ''}`)
         }
       }
       
