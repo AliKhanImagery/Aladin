@@ -381,7 +381,7 @@ export default function IdeaAnalysisScreen({ analysis, onContinue, onBack }: Ide
     }
   }
 
-  const finalizeAndContinue = () => {
+  const finalizeAndContinue = (dnaByAssetId?: Record<string, string>) => {
     const assetContext: AssetContext = {
       characters: assets.filter(a => a.type === 'character').map(a => ({
           id: a.assetId,
@@ -391,6 +391,7 @@ export default function IdeaAnalysisScreen({ analysis, onContinue, onBack }: Ide
           assetUrl: a.resultImageUrl,
           assetAction: a.action || 'auto',
         appearanceDetails: a.prompt || '',
+          ...((dnaByAssetId?.[a.assetId] ?? a.visualDna) && { visualDna: dnaByAssetId?.[a.assetId] ?? a.visualDna }),
           createdAt: new Date()
         })),
       products: assets.filter(a => a.type === 'product').map(a => ({
@@ -400,6 +401,7 @@ export default function IdeaAnalysisScreen({ analysis, onContinue, onBack }: Ide
           assetUrl: a.resultImageUrl,
           assetAction: a.action || 'auto',
           needsExactMatch: analysis.analysis.detectedItems.find(item => item.id === a.assetId)?.needsExactMatch || false,
+          ...((dnaByAssetId?.[a.assetId] ?? a.visualDna) && { visualDna: dnaByAssetId?.[a.assetId] ?? a.visualDna }),
           createdAt: new Date()
         })),
       locations: assets.filter(a => a.type === 'location').map(a => ({
@@ -428,13 +430,42 @@ export default function IdeaAnalysisScreen({ analysis, onContinue, onBack }: Ide
 
     const pendingAutoAssets = assets.filter(a => a.action === 'auto' && !a.resultImageUrl)
     if (pendingAutoAssets.length > 0) {
-    setIsGeneratingAutoAssets(true)
+      setIsGeneratingAutoAssets(true)
       for (const asset of pendingAutoAssets) {
-          await handleGenerateImage(asset)
+        await handleGenerateImage(asset)
       }
       setIsGeneratingAutoAssets(false)
     }
-      finalizeAndContinue()
+
+    // Extract visual DNA once for each character/product with an image (saves cost, runs at init only)
+    const dnaByAssetId: Record<string, string> = {}
+    const withImage = assets.filter(
+      a => (a.type === 'character' || a.type === 'product') && a.resultImageUrl
+    )
+    if (withImage.length > 0) {
+      setIsGeneratingAutoAssets(true)
+      const assetTypeForApi = (t: string) => (t === 'character' ? 'character' : 'product')
+      for (const asset of withImage) {
+        try {
+          const res = await fetch('/api/extract-asset-dna', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              imageUrl: asset.resultImageUrl,
+              assetType: assetTypeForApi(asset.type),
+            }),
+          })
+          const data = await res.json().catch(() => ({}))
+          const dna = data?.dna
+          if (dna) dnaByAssetId[asset.assetId] = dna
+        } catch (err) {
+          console.warn('Vision DNA extraction failed for asset', asset.assetId, err)
+        }
+      }
+      setIsGeneratingAutoAssets(false)
+    }
+
+    finalizeAndContinue(dnaByAssetId)
   }
 
   return (
@@ -799,28 +830,25 @@ export default function IdeaAnalysisScreen({ analysis, onContinue, onBack }: Ide
         </Button>
       </div>
 
-      {/* Asset Library Modal */}
+      {/* Asset Library Modal — presetName skips "Name this Reference" for detected assets */}
       {isLibraryOpen && activeAssetId && (
         <AssetLibraryModal
           isOpen={isLibraryOpen}
-          onClose={() => setIsLibraryOpen(false)}
+          onClose={() => { setActiveAssetId(null); setIsLibraryOpen(false) }}
           onSelect={(url) => {
             setAssets(prev => prev.map(a => 
               a.assetId === activeAssetId ? { ...a, resultImageUrl: url } : a
             ))
-            // Also update the asset action state if needed or trigger a save? 
-            // The original logic saved to user_assets bin on upload/generate.
-            // If selecting existing, we might just want to use it for this project context.
-            // But let's stick to just setting the URL for now as per requirement.
+            setActiveAssetId(null)
             setIsLibraryOpen(false)
           }}
           onUpload={async (file) => {
             await handleFileUpload(activeAssetId, file)
-            // Modal stays open or closes? Usually closes on selection, but upload might need to finish.
-            // handleFileUpload sets state. Let's close modal after upload if successful.
+            setActiveAssetId(null)
             setIsLibraryOpen(false)
           }}
           isUploading={uploadStatus[activeAssetId] === 'uploading'}
+          presetName={assets.find(a => a.assetId === activeAssetId)?.name}
         />
       )}
 

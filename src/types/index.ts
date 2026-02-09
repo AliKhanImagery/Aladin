@@ -508,6 +508,8 @@ export interface AssetContext {
     assetUrl?: string;
     assetAction: 'upload' | 'generate' | 'remix' | 'auto';
     appearanceDetails: string;
+    /** Vision-derived visual DNA (one short sentence) from asset image; injected as "Name, DNA" in prompts. */
+    visualDna?: string;
     createdAt: Date;
   }>;
   products: Array<{
@@ -517,6 +519,8 @@ export interface AssetContext {
     assetUrl?: string;
     assetAction: 'upload' | 'generate' | 'remix' | 'auto';
     needsExactMatch: boolean;
+    /** Vision-derived visual DNA from asset image; injected as "Name, DNA" in prompts. */
+    visualDna?: string;
     createdAt: Date;
   }>;
   locations: Array<{
@@ -548,4 +552,6 @@ export interface AssetActionState {
   baseImageUrl?: string;
   resultImageUrl?: string;
   error?: string;
+  /** Filled when user continues: vision-derived DNA from resultImageUrl (character/product only). */
+  visualDna?: string;
 }

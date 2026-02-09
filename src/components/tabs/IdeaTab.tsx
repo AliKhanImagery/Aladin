@@ -660,7 +660,6 @@ export default function IdeaTab() {
                 }
                 
                 // 2. Fallback to Project Level Global Assets (confirmedAssetContext)
-                // This handles cases where clip metadata is missing the URL but the character is known globally
                 if (type === 'character' && confirmedAssetContext?.characters) {
                   const globalChar = confirmedAssetContext.characters.find((c: any) => c.name.toLowerCase().trim() === normalizedName)
                   if (globalChar?.assetUrl) return globalChar.assetUrl
@@ -673,6 +672,16 @@ export default function IdeaTab() {
                 return null
               }
 
+              // Helper to find character/product object (for visualDna "Name, DNA" injection)
+              const findCharacter = (name: string): any =>
+                [...(metadata?.assetContext?.characters || []), ...(confirmedAssetContext?.characters || [])].find(
+                  (c: any) => c.name.toLowerCase().trim() === name.toLowerCase().trim()
+                )
+              const findProduct = (name: string): any =>
+                [...(metadata?.assetContext?.products || []), ...(confirmedAssetContext?.products || [])].find(
+                  (p: any) => p.name.toLowerCase().trim() === name.toLowerCase().trim()
+                )
+
               // Collect all relevant assets mentioned in prompt OR context
               const consistencyInstructions: string[] = []
               
@@ -683,17 +692,17 @@ export default function IdeaTab() {
               ].map((c: any) => c.name).filter((v, i, a) => a.indexOf(v) === i) // Unique names
 
               allKnownCharacters.forEach((charName: string) => {
-                // If character is mentioned in prompt OR explicitly listed in this clip's context
                 const isMentioned = enhancedPrompt.toLowerCase().includes(charName.toLowerCase())
                 const isExplicitlyInContext = metadata?.assetContext?.characters?.some((c: any) => c.name.toLowerCase() === charName.toLowerCase())
                 
                 if (isMentioned || isExplicitlyInContext) {
                   const assetUrl = findAssetUrl(charName, 'character')
                   if (assetUrl) {
+                    const char = findCharacter(charName)
+                    const dnaSuffix = char?.visualDna ? ` Appearance: ${charName}, ${char.visualDna}.` : ''
                     consistencyInstructions.push(
-                      `CRITICAL: ${charName.toUpperCase()} MUST match the reference image EXACTLY - same face, same features, same appearance, same build, same skin tone, same hair, same eyes. The reference image is provided and must be followed precisely.`
+                      `CRITICAL: ${charName.toUpperCase()} MUST match the reference image EXACTLY - same face, same features, same appearance, same build, same skin tone, same hair, same eyes. The reference image is provided and must be followed precisely.${dnaSuffix}`
                     )
-                    // Ensure this URL is included in reference images if not already there
                     if (!referenceImageUrls.includes(assetUrl)) {
                       referenceImageUrls.push(assetUrl)
                     }
@@ -714,8 +723,10 @@ export default function IdeaTab() {
                 if (isMentioned || isExplicitlyInContext) {
                   const assetUrl = findAssetUrl(prodName, 'product')
                   if (assetUrl) {
+                    const prod = findProduct(prodName)
+                    const dnaSuffix = prod?.visualDna ? ` Appearance: ${prodName}, ${prod.visualDna}.` : ''
                     consistencyInstructions.push(
-                      `PRODUCT: ${prodName.toUpperCase()} must match reference exactly in shape, color, and design.`
+                      `PRODUCT: ${prodName.toUpperCase()} must match reference exactly in shape, color, and design.${dnaSuffix}`
                     )
                     if (!referenceImageUrls.includes(assetUrl)) {
                       referenceImageUrls.push(assetUrl)
