@@ -196,7 +196,7 @@ export default function AssetLibraryModal({ isOpen, onClose, onSelect, onUpload,
 
   // Naming Modal View
   const namingModalContent = namingAsset ? (
-    <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/95 backdrop-blur-xl animate-in fade-in duration-300 p-4">
+    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/95 backdrop-blur-sm animate-in fade-in duration-300 p-4">
         {/* ... existing modal content ... */}
         <div className="w-full max-w-md bg-[#151619] border border-white/10 rounded-2xl overflow-hidden flex flex-col shadow-2xl">
           <div className="p-4 border-b border-white/5 flex items-center justify-between">
@@ -258,7 +258,7 @@ export default function AssetLibraryModal({ isOpen, onClose, onSelect, onUpload,
         </div>
     </div>
   ) : (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 backdrop-blur-xl animate-in fade-in duration-300 p-4">
+    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/95 backdrop-blur-sm animate-in fade-in duration-300 p-4">
       {/* ... existing main modal content ... */}
       <div className="w-full max-w-5xl h-[85vh] bg-[#09090b] border border-white/10 rounded-3xl overflow-hidden flex flex-col shadow-2xl">
         
