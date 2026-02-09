@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useAppStore } from '@/lib/store'
 import { Button } from '@/components/ui/button'
-import { Layout, Grid3X3, Clock, Edit2, Play, ChevronRight } from 'lucide-react'
+import { Layout, Grid3X3, Clock, Edit2, ChevronRight, Download } from 'lucide-react'
 import IdeaTab from './tabs/IdeaTab'
 import SequenceTab from './tabs/SequenceTab'
 import TimelineTab from './tabs/TimelineTab'
@@ -13,6 +13,7 @@ import UserMenu from './UserMenu'
 import CreditsBadge from './CreditsBadge'
 import ProjectManager from './ProjectManager'
 import EditProjectNameModal from './EditProjectNameModal'
+import ExportModal from './ExportModal'
 import Logo from './ui/Logo'
 
 export default function MainApp() {
@@ -25,6 +26,7 @@ export default function MainApp() {
     isProjectManagerOpen
   } = useAppStore()
   const [isEditNameModalOpen, setIsEditNameModalOpen] = useState(false)
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false)
 
   // Helper function to truncate project name
   const truncateProjectName = (name: string) => {
@@ -108,30 +110,41 @@ export default function MainApp() {
       {hasGeneratedStory && (
         <nav className="sticky top-16 left-0 right-0 z-40 glass-panel border-b border-white/5">
           <div className="max-w-7xl mx-auto px-6">
-            <div className="flex space-x-1 justify-center items-center h-14">
-              {tabs.map((tab, idx) => {
-                const Icon = tab.icon
-                const isActive = activeTab === tab.id
-                
-                return (
-                  <div key={tab.id} className="flex items-center">
-                  <button
-                    onClick={() => setActiveTab(tab.id as any)}
-                      className={`flex items-center gap-2 py-2 px-4 rounded-xl text-xs font-bold uppercase tracking-wider transition-all duration-300 ${
-                      isActive
-                          ? 'bg-brand-emerald/10 text-brand-emerald border border-brand-emerald/30'
-                          : 'text-gray-500 hover:text-white hover:bg-white/5'
-                    }`}
-                  >
-                    <Icon className="w-4 h-4" />
-                    {tab.label}
-                  </button>
-                    {idx < tabs.length - 1 && (
-                      <ChevronRight className="w-4 h-4 text-white/5 mx-2" />
-                    )}
-                  </div>
-                )
-              })}
+            <div className="flex items-center justify-between h-14">
+              <div className="flex space-x-1 items-center flex-1 justify-center">
+                {tabs.map((tab, idx) => {
+                  const Icon = tab.icon
+                  const isActive = activeTab === tab.id
+                  return (
+                    <div key={tab.id} className="flex items-center">
+                      <button
+                        onClick={() => setActiveTab(tab.id as any)}
+                        className={`flex items-center gap-2 py-2 px-4 rounded-xl text-xs font-bold uppercase tracking-wider transition-all duration-300 ${
+                          isActive
+                            ? 'bg-brand-emerald/10 text-brand-emerald border border-brand-emerald/30'
+                            : 'text-gray-500 hover:text-white hover:bg-white/5'
+                        }`}
+                      >
+                        <Icon className="w-4 h-4" />
+                        {tab.label}
+                      </button>
+                      {idx < tabs.length - 1 && (
+                        <ChevronRight className="w-4 h-4 text-white/5 mx-2" />
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="shrink-0 text-gray-400 hover:text-white hover:bg-white/5 gap-2 border border-white/5"
+                onClick={() => setIsExportModalOpen(true)}
+                title="Export settings & download assets"
+              >
+                <Download className="w-4 h-4" />
+                <span className="text-xs font-bold uppercase tracking-wider">Export</span>
+              </Button>
             </div>
           </div>
         </nav>
@@ -155,6 +168,12 @@ export default function MainApp() {
         isOpen={isEditNameModalOpen}
         onClose={() => setIsEditNameModalOpen(false)}
         currentName={currentProject.name}
+      />
+      <ExportModal
+        isOpen={isExportModalOpen}
+        onClose={() => setIsExportModalOpen(false)}
+        project={currentProject}
+        clips={currentProject?.scenes?.flatMap((s) => s.clips || []) ?? []}
       />
     </div>
   )

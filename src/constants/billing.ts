@@ -62,7 +62,7 @@ export const BILLING_PLANS_V2 = {
 
 export const CREDIT_COSTS = {
   VIDEO_GENERATION: '25-110', // Range covers LTX (25) to Kling 10s (110)
-  NANO_BANANA: '12',          // Matches image.nano_banana.text_to_image (12)
+  NANO_BANANA: '12',          // Nano Pro & Nano Fast: image.nano_banana.text_to_image (12)
   EDITS: '15-18',             // Matches image.flux.edit (15) and image.nano_banana.edit (18)
 } as const;
 

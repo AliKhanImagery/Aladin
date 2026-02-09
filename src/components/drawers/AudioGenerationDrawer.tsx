@@ -2,16 +2,18 @@
 
 import { useState } from 'react'
 import { useAppStore } from '@/lib/store'
-import { X, Mic, Music, Volume2, Sparkles, Loader2 } from 'lucide-react'
+import { X, Mic, Music, Volume2, Sparkles, Loader2, FolderOpen, Upload } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectOption } from '@/components/ui/select'
 import toast from 'react-hot-toast'
 import { AudioClip } from '@/types'
+import AssetLibraryModal from '@/components/AssetLibraryModal'
+import { saveUserAsset } from '@/lib/userMedia'
 
 const AUDIO_MODELS: SelectOption[] = [
-  { value: 'stable-audio', label: 'Stable Audio (Music/SFX)', description: 'Best for music and sound effects' },
+  { value: 'elevenlabs-music', label: 'Music/BGM', description: 'Generate soundtracks and background music' },
   { value: 'elevenlabs-sfx', label: 'ElevenLabs (SFX)', description: 'High quality sound effects' },
   { value: 'elevenlabs-tts', label: 'ElevenLabs (Voiceover)', description: 'High quality text-to-speech' }
 ]
@@ -28,11 +30,84 @@ export function AudioGenerationDrawer() {
   } = useAppStore()
 
   const [prompt, setPrompt] = useState('')
-  const [duration, setDuration] = useState(5)
-  const [model, setModel] = useState('stable-audio')
+  const [duration, setDuration] = useState(10)
+  const [model, setModel] = useState('elevenlabs-music')
   const [isGenerating, setIsGenerating] = useState(false)
+  const [isLibraryOpen, setIsLibraryOpen] = useState(false)
+  const [isUploadingAsset, setIsUploadingAsset] = useState(false)
 
   if (!isAudioDrawerOpen) return null
+
+  const handleAssetUpload = async (file: File) => {
+    setIsUploadingAsset(true)
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      const response = await fetch('/api/upload-file', { method: 'POST', body: formData })
+      
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Upload failed')
+      }
+      
+      const { url } = await response.json()
+      
+      // Save to user_assets library as audio
+      await saveUserAsset({
+        name: file.name,
+        type: 'audio',
+        asset_url: url,
+        metadata: { originalFilename: file.name, fileSize: file.size }
+      })
+      
+    } catch (e: any) {
+      console.error('Asset upload failed:', e)
+      toast.error(`Upload failed: ${e.message}`)
+    } finally {
+      setIsUploadingAsset(false)
+    }
+  }
+
+  const handleSelectFromLibrary = (url: string, name?: string) => {
+    if (!activeAudioTrackId) return
+
+    // Create a temporary audio element to get duration
+    const audio = new Audio(url)
+    const toastId = toast.loading('Loading audio...')
+    
+    audio.onloadedmetadata = () => {
+        const audioDuration = audio.duration
+        const clipId = crypto.randomUUID()
+        const startTime = activeAudioTime ?? 0
+
+        const newClip: AudioClip = {
+            id: clipId,
+            trackId: activeAudioTrackId,
+            name: name || 'Audio Clip',
+            assetUrl: url,
+            startTime,
+            duration: audioDuration,
+            offset: 0,
+            volume: 1,
+            status: 'completed'
+        }
+
+        addAudioClip(activeAudioTrackId, newClip)
+        
+        const { saveProjectNow } = useAppStore.getState()
+        if (currentProject) {
+            saveProjectNow(currentProject.id)
+        }
+
+        toast.success('Audio added to timeline', { id: toastId })
+        setIsLibraryOpen(false)
+        setAudioDrawerOpen(false)
+    }
+
+    audio.onerror = () => {
+        toast.error('Failed to load audio details', { id: toastId })
+    }
+  }
 
   const handleGenerate = async () => {
     if (!prompt) {
@@ -111,7 +186,7 @@ export function AudioGenerationDrawer() {
       <div className="p-4 border-b border-[#3AAFA9]/10 flex items-center justify-between bg-[#0C0C0C]/50">
         <h2 className="text-lg font-semibold text-white flex items-center gap-2">
           <Music className="w-5 h-5 text-[#00FFF0]" />
-          Generate Audio
+          Add Audio
         </h2>
         <Button 
           variant="ghost" 
@@ -125,20 +200,46 @@ export function AudioGenerationDrawer() {
 
       {/* Content */}
       <div className="flex-1 p-6 space-y-6 overflow-y-auto">
+        
+        {/* Quick Library Access */}
+        <div className="bg-[#0C0C0C] rounded-xl p-4 border border-[#3AAFA9]/20 flex flex-col items-center gap-3">
+            <div className="text-center">
+                <h3 className="text-sm font-bold text-white">Have audio ready?</h3>
+                <p className="text-xs text-gray-500">Select from your library or uploads.</p>
+            </div>
+            <Button 
+                onClick={() => setIsLibraryOpen(true)}
+                variant="outline"
+                className="w-full border-[#3AAFA9]/30 hover:bg-[#3AAFA9]/10 hover:text-[#00FFF0] text-gray-300"
+            >
+                <FolderOpen className="w-4 h-4 mr-2" />
+                Open Audio Library
+            </Button>
+        </div>
+
+        <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+                <span className="w-full border-t border-[#3AAFA9]/10" />
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-[#1E1F22] px-2 text-gray-500 font-bold tracking-wider">Or Generate New</span>
+            </div>
+        </div>
+
         {/* Model Selection */}
         <div className="space-y-2">
           <label className="text-xs font-medium text-gray-400 uppercase">Model</label>
           <div className="grid grid-cols-2 gap-2">
             <button
-              onClick={() => setModel('stable-audio')}
+              onClick={() => setModel('elevenlabs-music')}
               className={`p-3 rounded-lg border flex flex-col items-center gap-2 transition-all ${
-                model === 'stable-audio' 
+                model === 'elevenlabs-music' 
                   ? 'bg-[#00FFF0]/10 border-[#00FFF0] text-white' 
                   : 'bg-[#0C0C0C] border-[#3AAFA9]/20 text-gray-400 hover:border-[#3AAFA9]/50'
               }`}
             >
-              <Music className={`w-5 h-5 ${model === 'stable-audio' ? 'text-[#00FFF0]' : ''}`} />
-              <span className="text-sm font-medium">Stable Audio</span>
+              <Music className={`w-5 h-5 ${model === 'elevenlabs-music' ? 'text-[#00FFF0]' : ''}`} />
+              <span className="text-sm font-medium">Music/BGM</span>
             </button>
             <button
               onClick={() => setModel('elevenlabs-sfx')}
@@ -149,7 +250,7 @@ export function AudioGenerationDrawer() {
               }`}
             >
               <Volume2 className={`w-5 h-5 ${model === 'elevenlabs-sfx' ? 'text-[#00FFF0]' : ''}`} />
-              <span className="text-sm font-medium">ElevenLabs SFX</span>
+              <span className="text-sm font-medium">SFX</span>
             </button>
             <button
               onClick={() => setModel('elevenlabs-tts')}
@@ -168,14 +269,16 @@ export function AudioGenerationDrawer() {
         {/* Prompt Input */}
         <div className="space-y-2">
           <label className="text-xs font-medium text-gray-400 uppercase">
-            {model === 'stable-audio' ? 'Description' : 'Text to Speak'}
+            {model === 'elevenlabs-music' || model === 'elevenlabs-sfx' ? 'Description' : 'Text to Speak'}
           </label>
           <Textarea
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
             placeholder={
-              model === 'stable-audio' 
+              model === 'elevenlabs-music' 
                 ? "Cinematic orchestral buildup, suspenseful, dark atmosphere..." 
+                : model === 'elevenlabs-sfx'
+                ? "Footsteps on gravel, door creaking..."
                 : "Enter the dialogue for the character..."
             }
             className="min-h-[120px] bg-[#0C0C0C] border-[#3AAFA9]/20 focus:border-[#00FFF0] text-white resize-none"
@@ -183,7 +286,7 @@ export function AudioGenerationDrawer() {
         </div>
 
         {/* Duration Slider (only for music/sfx) */}
-        {(model === 'stable-audio' || model === 'elevenlabs-sfx') && (
+        {(model === 'elevenlabs-music' || model === 'elevenlabs-sfx') && (
           <div className="space-y-2">
              <div className="flex items-center justify-between">
                <label className="text-xs font-medium text-gray-400 uppercase">Duration</label>
@@ -205,8 +308,8 @@ export function AudioGenerationDrawer() {
           <div className="flex items-start gap-2">
             <Sparkles className="w-4 h-4 text-[#00FFF0] mt-0.5" />
             <p className="text-xs text-gray-300 leading-relaxed">
-              {model === 'stable-audio' 
-                ? "Generates high-quality sound effects or background music using Fal.ai's Stable Audio model."
+              {model === 'elevenlabs-music' 
+                ? "Generates high-quality background music using ElevenLabs' Music model."
                 : model === 'elevenlabs-sfx'
                 ? "Generates cinematic sound effects using ElevenLabs' advanced audio engine."
                 : "Generates realistic voiceovers using ElevenLabs' advanced TTS model."}
@@ -235,6 +338,17 @@ export function AudioGenerationDrawer() {
           )}
         </Button>
       </div>
+
+      <AssetLibraryModal
+        isOpen={isLibraryOpen}
+        onClose={() => setIsLibraryOpen(false)}
+        onSelect={(url, name) => handleSelectFromLibrary(url, name)}
+        onUpload={handleAssetUpload}
+        isUploading={isUploadingAsset}
+        projectContext={currentProject}
+        initialTab="audio"
+        allowedTypes={['audio']}
+      />
     </div>
   )
 }

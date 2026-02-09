@@ -196,19 +196,33 @@ export async function POST(request: NextRequest) {
 
     // Model-Specific Dispatching Logic
     if (imageModel === 'nano-banana') {
-      // Nano Banana Strategy: Hyper-fast, instruction-dense
+      // Nano Banana Pro: fal-ai/nano-banana
       endpoint = 'fal-ai/nano-banana'
       falInput.prompt = finalPrompt
       if (mode === 'remix' || mode === 'edit') {
-      falInput.image_url = sanitizedReferenceUrls[0]
+        falInput.image_url = sanitizedReferenceUrls[0]
+      }
+    } else if (imageModel === 'nano-banana-flash') {
+      // Nano Banana (Fast): fal-ai/gemini-25-flash-image
+      const isEdit = (mode === 'remix' || mode === 'edit') && sanitizedReferenceUrls.length > 0
+      endpoint = isEdit ? 'fal-ai/gemini-25-flash-image/edit' : 'fal-ai/gemini-25-flash-image'
+      falInput.prompt = finalPrompt
+      if (isEdit) {
+        falInput.image_urls = sanitizedReferenceUrls
       }
     } else if (imageModel === 'reeve') {
       // Reeve Strategy: Naturalistic, story-driven
       endpoint = 'fal-ai/reve/text-to-image' // Defaulting to Reve for Reeve artistic style
-      if (mode === 'remix') endpoint = 'fal-ai/reve/remix'
+      
+      if (mode === 'remix') {
+        endpoint = 'fal-ai/reve/remix'
+        falInput.image_url = sanitizedReferenceUrls[0]
+      } else if (mode === 'edit') {
+        endpoint = 'fal-ai/reve/edit'
+        falInput.image_url = sanitizedReferenceUrls[0]
+      }
       
       falInput.prompt = finalPrompt
-      if (mode === 'remix') falInput.image_url = sanitizedReferenceUrls[0]
     } else {
       // Default / FLUX.2 Pro Strategy
       // FIX: If mode is edit/remix but no reference images, fallback to text-to-image
@@ -301,8 +315,9 @@ export async function POST(request: NextRequest) {
 
       const billingClient = await getServerSupabaseClient(accessToken)
 
+      const isNanoPricing = endpoint.includes('nano-banana') || endpoint.includes('gemini-25-flash-image')
       const pricingKey =
-        endpoint.includes('nano-banana')
+        isNanoPricing
           ? sanitizedReferenceUrls.length > 0 && (mode === 'edit' || mode === 'remix')
             ? 'image.nano_banana.edit'
             : 'image.nano_banana.text_to_image'
@@ -393,7 +408,7 @@ export async function POST(request: NextRequest) {
     // Profit Tracking: Record exact USD cost
     if (transactionLedgerId) {
         let providerCost = 0.05 // Default Flux Pro estimate
-        if (endpoint.includes('nano-banana')) providerCost = 0.005
+        if (endpoint.includes('nano-banana') || endpoint.includes('gemini-25-flash-image')) providerCost = 0.005
         else if (endpoint.includes('flux-2-pro')) providerCost = 0.05
         else if (endpoint.includes('reve')) providerCost = 0.04
         

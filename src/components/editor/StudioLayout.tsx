@@ -2,7 +2,7 @@
 
 import { useAppStore } from '@/lib/store'
 import { useRef, useState, useMemo, useEffect } from 'react'
-import { Play, Pause, SkipBack, SkipForward, ZoomIn, ZoomOut, Plus, Settings, Info } from 'lucide-react'
+import { Play, Pause, SkipBack, SkipForward, ZoomIn, ZoomOut, Plus, Settings, Info, Download } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Slider } from '@/components/ui/slider'
 import { VideoTrack } from './VideoTrack'
@@ -11,6 +11,10 @@ import { AudioTrack as AudioTrackType, AudioClip, Clip } from '@/types'
 import { cn } from '@/lib/utils'
 import { AudioClipInspectorDrawer } from '@/components/drawers/AudioClipInspectorDrawer'
 import ClipDetailDrawer from '@/components/ClipDetailDrawer'
+import ExportModal from '@/components/ExportModal'
+import toast from 'react-hot-toast'
+
+const REORDER_TOAST = 'Project structure updated. Storyboard and timeline are in sync.'
 
 export function StudioLayout() {
   const { 
@@ -22,7 +26,8 @@ export function StudioLayout() {
     selectedClip, 
     setSelectedClip,
     setAudioDrawerOpen,
-    setDrawerOpen // New destructuring
+    setDrawerOpen,
+    reorderClips
   } = useAppStore()
   
   const [isPlaying, setIsPlaying] = useState(false)
@@ -31,6 +36,7 @@ export function StudioLayout() {
   // Removed local isInspectorOpen state
   const [selectedAudioClip, setSelectedAudioClip] = useState<AudioClip | null>(null)
   const [isAudioInspectorOpen, setIsAudioInspectorOpen] = useState(false)
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false)
 
   // Use a ref for the timeline container to sync scrolling
   const timelineRef = useRef<HTMLDivElement>(null)
@@ -44,6 +50,19 @@ export function StudioLayout() {
   }, [currentProject])
 
   const totalDuration = videoClips.reduce((acc, clip) => acc + clip.duration, 0)
+
+  const handleTimelineReorder = (fromFlatIndex: number, toFlatIndex: number) => {
+    if (fromFlatIndex === toFlatIndex || !currentProject) return
+    const fromClip = videoClips[fromFlatIndex]
+    const toClip = videoClips[toFlatIndex]
+    if (!fromClip || !toClip || fromClip.sceneId !== toClip.sceneId) return
+    const sceneId = fromClip.sceneId
+    const fromIndexInScene = videoClips.slice(0, fromFlatIndex).filter(c => c.sceneId === sceneId).length
+    let toIndexInScene = videoClips.slice(0, toFlatIndex).filter(c => c.sceneId === sceneId).length
+    if (fromIndexInScene < toIndexInScene) toIndexInScene -= 1
+    reorderClips(sceneId, fromIndexInScene, toIndexInScene)
+    toast.success(REORDER_TOAST, { id: 'reorder-structure', duration: 2500 })
+  }
 
   // Determine current video clip based on currentTime
   const currentVideoClip = useMemo(() => {
@@ -203,8 +222,10 @@ export function StudioLayout() {
           <div className="aspect-video w-full max-h-full bg-black rounded-lg border border-[#3AAFA9]/10 relative overflow-hidden shadow-2xl">
              {/* Video Player Placeholder */}
              {currentVideoClip?.generatedVideo ? (
-                 <video 
+                 <video
                     src={currentVideoClip.generatedVideo}
+                    preload="auto"
+                    playsInline
                     className="w-full h-full object-contain"
                     // Sync video time with timeline time
                     ref={el => {
@@ -260,6 +281,16 @@ export function StudioLayout() {
          </div>
          
          <div className="flex items-center gap-4">
+            <Button 
+                variant="ghost" 
+                size="sm" 
+                className="text-gray-400 hover:text-white gap-2"
+                onClick={() => setIsExportModalOpen(true)}
+            >
+                <Download className="w-4 h-4" />
+                <span className="hidden sm:inline">Export</span>
+            </Button>
+
             <div className="flex items-center gap-2 w-48">
                 <ZoomOut className="w-4 h-4 text-gray-400" />
                 <Slider 
@@ -326,6 +357,7 @@ export function StudioLayout() {
                           setDrawerOpen(true, 'dub') // Open directly in dub mode
                       }}
                       selectedClipId={selectedClip?.id}
+                      onReorder={handleTimelineReorder}
                    />
                </div>
             </div>
@@ -365,6 +397,15 @@ export function StudioLayout() {
         onClose={() => { setIsAudioInspectorOpen(false); setSelectedAudioClip(null) }} 
         clip={selectedAudioClip}
       />
+      
+      {currentProject && (
+        <ExportModal 
+          isOpen={isExportModalOpen} 
+          onClose={() => setIsExportModalOpen(false)} 
+          project={currentProject} 
+          clips={videoClips} 
+        />
+      )}
     </div>
   )
 }

@@ -3,9 +3,12 @@
 import { useState } from 'react'
 import { useAppStore } from '@/lib/store'
 import { Button } from '@/components/ui/button'
-import { Plus, Play, Edit, Lock, Unlock, Loader2, Trash2, Maximize2, Clock, Sparkles, ChevronRight } from 'lucide-react'
+import { Plus, Edit, Lock, Unlock, Loader2, Trash2, Maximize2, Clock, Sparkles, GripVertical } from 'lucide-react'
 import ImageModal from '../ImageModal'
+import toast from 'react-hot-toast'
 import { Scene, Clip } from '@/types'
+
+const REORDER_TOAST = 'Project structure updated. Storyboard and timeline are in sync.'
 
 export default function SequenceTab() {
   const { 
@@ -14,6 +17,7 @@ export default function SequenceTab() {
     addClip, 
     deleteScene,
     deleteClip,
+    reorderClips,
     setSelectedClip, 
     setDrawerOpen,
     isDrawerOpen,
@@ -84,10 +88,12 @@ export default function SequenceTab() {
   }
 
   const handleAddClip = (sceneId: string) => {
+    const scene = currentProject.scenes.find(s => s.id === sceneId)
+    const nextOrder = scene ? scene.clips.length : 0
     const newClip: Clip = {
       id: crypto.randomUUID(),
       sceneId,
-      order: 0,
+      order: nextOrder,
       name: 'New Clip',
       imagePrompt: '',
       videoPrompt: '',
@@ -120,6 +126,30 @@ export default function SequenceTab() {
   const handleEditClip = (clip: Clip) => {
     setSelectedClip(clip)
     setDrawerOpen(true)
+  }
+
+  const handleClipDragStart = (e: React.DragEvent, sceneId: string, clipId: string, fromIndex: number) => {
+    e.dataTransfer.setData('application/x-scene-id', sceneId)
+    e.dataTransfer.setData('application/x-clip-id', clipId)
+    e.dataTransfer.setData('application/x-from-index', String(fromIndex))
+    e.dataTransfer.effectAllowed = 'move'
+  }
+
+  const handleClipDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+  }
+
+  const handleClipDrop = (e: React.DragEvent, sceneId: string, toIndex: number) => {
+    e.preventDefault()
+    const fromSceneId = e.dataTransfer.getData('application/x-scene-id')
+    const fromIndexStr = e.dataTransfer.getData('application/x-from-index')
+    if (fromSceneId !== sceneId || fromIndexStr === '') return
+    const fromIndex = parseInt(fromIndexStr, 10)
+    const adjToIndex = fromIndex < toIndex ? toIndex - 1 : toIndex
+    if (fromIndex === adjToIndex) return
+    reorderClips(sceneId, fromIndex, adjToIndex)
+    toast.success(REORDER_TOAST, { id: 'reorder-structure', duration: 2500 })
   }
 
   const handleDeleteScene = (sceneId: string, sceneName: string) => {
@@ -257,11 +287,13 @@ export default function SequenceTab() {
                       <p className="text-white/20 font-bold uppercase tracking-widest text-xs group-hover/empty:text-brand-emerald/60">Initialize First Shot</p>
                     </div>
                   ) : (
-                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-                      {scene.clips.map((clip, clipIndex) => (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                      {[...scene.clips].sort((a, b) => a.order - b.order).map((clip, clipIndex) => (
                         <div
                           key={clip.id}
-                          className={`group relative ${aspectRatioClass} w-full bg-[#050505] rounded-3xl overflow-hidden border border-white/5 hover:border-brand-emerald/50 transition-all duration-500 shadow-2xl hover:shadow-brand-emerald/10 ring-1 ring-white/0 hover:ring-1 hover:ring-brand-emerald/20`}
+                          onDragOver={!isGeneratingStory ? handleClipDragOver : undefined}
+                          onDrop={!isGeneratingStory ? (e) => handleClipDrop(e, scene.id, clipIndex) : undefined}
+                          className={`group relative ${aspectRatioClass} w-full bg-[#050505] rounded-xl overflow-hidden border border-white/5 hover:border-brand-emerald/50 transition-all duration-500 shadow-2xl hover:shadow-brand-emerald/10 ring-1 ring-white/0 hover:ring-1 hover:ring-brand-emerald/20`}
                           style={{
                             animationDelay: `${clipIndex * 100}ms`,
                             animationFillMode: 'both'
@@ -290,7 +322,7 @@ export default function SequenceTab() {
 
                           {/* Top HUD */}
                           <div className="absolute top-0 left-0 right-0 p-5 flex justify-between items-start z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-300 transform -translate-y-2 group-hover:translate-y-0">
-                            <div className="flex gap-2">
+                            <div className="flex gap-2 items-center">
                               <div className="px-3 py-1.5 rounded-full bg-black/40 backdrop-blur-xl border border-white/10 text-[9px] font-black text-white/90 uppercase tracking-widest shadow-xl">
                                 {clip.framing || 'Wide Shot'}
                               </div>
@@ -345,9 +377,21 @@ export default function SequenceTab() {
                                 {clip.imagePrompt || clip.description || 'No prompt defined for this shot.'}
                               </p>
                               
-                              {/* Footer Actions */}
-                              <div className="mt-4 pt-4 border-t border-white/10 flex items-center justify-between opacity-0 group-hover:opacity-100 transition-all duration-500 delay-100">
-                                <div className="flex items-center gap-4">
+                              {/* Footer Actions: Drag left, Expand + Delete right */}
+                              <div className="mt-4 pt-4 border-t border-white/10 flex items-center justify-between gap-4 opacity-0 group-hover:opacity-100 transition-all duration-500 delay-100">
+                                {!isGeneratingStory ? (
+                                  <div
+                                    draggable
+                                    onDragStart={(e) => { e.stopPropagation(); handleClipDragStart(e, scene.id, clip.id, clipIndex) }}
+                                    className="p-1.5 rounded touch-none cursor-grab active:cursor-grabbing text-white/50 hover:text-white/80 hover:bg-white/5 shrink-0"
+                                    title="Drag to reorder"
+                                  >
+                                    <GripVertical className="w-4 h-4" />
+                                  </div>
+                                ) : (
+                                  <div className="shrink-0" />
+                                )}
+                                <div className="flex items-center gap-2 ml-auto shrink-0">
                                   {clip.generatedImage && (
                                     <button
                                       onClick={(e) => {
@@ -361,19 +405,18 @@ export default function SequenceTab() {
                                       Expand
                                     </button>
                                   )}
+                                  {!isGeneratingStory && (
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleDeleteClip(clip.id, clip.name, scene.id);
+                                      }}
+                                      className="w-7 h-7 rounded-full flex items-center justify-center hover:bg-red-500/20 text-white/20 hover:text-red-400 transition-all"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  )}
                                 </div>
-                                
-                                {!isGeneratingStory && (
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleDeleteClip(clip.id, clip.name, scene.id);
-                                    }}
-                                    className="w-7 h-7 rounded-full flex items-center justify-center hover:bg-red-500/20 text-white/20 hover:text-red-400 transition-all"
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </button>
-                                )}
                               </div>
                             </div>
                           </div>
@@ -384,7 +427,7 @@ export default function SequenceTab() {
                       {!isGeneratingStory && (
                         <div 
                           onClick={() => handleAddClip(scene.id)}
-                          className={`${aspectRatioClass} w-full bg-white/[0.02] hover:bg-white/[0.04] rounded-3xl border border-white/5 border-dashed flex flex-col items-center justify-center gap-3 cursor-pointer transition-all group/add`}
+                          className={`${aspectRatioClass} w-full bg-white/[0.02] hover:bg-white/[0.04] rounded-xl border border-white/5 border-dashed flex flex-col items-center justify-center gap-3 cursor-pointer transition-all group/add`}
                         >
                           <div className="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center group-hover/add:bg-white/10 transition-colors">
                             <Plus className="w-5 h-5 text-white/30 group-hover/add:text-white" />

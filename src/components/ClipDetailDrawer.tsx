@@ -42,7 +42,7 @@ export default function ClipDetailDrawer() {
   const [dubbingStatus, setDubbingStatus] = useState<string | null>(null)
 
   // IMAGE GENERATION STATE
-  const [imageModel, setImageModel] = useState<'flux-2-pro' | 'nano-banana' | 'reeve'>((currentProject?.settings?.imageModel as any) || 'flux-2-pro')
+  const [imageModel, setImageModel] = useState<'flux-2-pro' | 'nano-banana' | 'nano-banana-flash' | 'reeve'>((currentProject?.settings?.imageModel as any) || 'flux-2-pro')
   const [nanoBananaMode, setNanoBananaMode] = useState<'text-to-image' | 'multi-image-edit'>('text-to-image')
   const [remixMode, setRemixMode] = useState<'edit' | 'remix' | 'text-to-image'>('remix')
   const [isGeneratingImage, setIsGeneratingImage] = useState(false)
@@ -70,6 +70,49 @@ export default function ClipDetailDrawer() {
   const [isLoadingHistory, setIsLoadingHistory] = useState(false)
   const historyStripRef = useRef<HTMLDivElement>(null)
   
+  // ASPECT RATIO PROMPT HELPER
+  const injectAspectRatioPrompt = (basePrompt: string) => {
+    // Defines optimized suffixes for each model & aspect ratio combination
+    const ASPECT_RATIO_PROMPTS: Record<string, Record<string, string>> = {
+      'flux-2-pro': {
+        '16:9': ', cinematic 16:9 composition',
+        '9:16': ', tall 9:16 portrait composition',
+        '1:1': ', square 1:1 composition'
+      },
+      'nano-banana': {
+        '16:9': ', (16:9 aspect ratio), wide shot',
+        '9:16': ', (9:16 aspect ratio), tall shot',
+        '1:1': ', (1:1 aspect ratio), square shot'
+      },
+      'nano-banana-flash': {
+        '16:9': ', (16:9 aspect ratio), wide shot',
+        '9:16': ', (9:16 aspect ratio), tall shot',
+        '1:1': ', (1:1 aspect ratio), square shot'
+      },
+      'reeve': {
+        '16:9': ', wide 16:9 format',
+        '9:16': ', tall 9:16 format',
+        '1:1': ', square 1:1 format'
+      }
+    }
+
+    const currentModel = imageModel || 'flux-2-pro'
+    const currentRatio = aspectRatio || '16:9'
+    
+    // Get the suffix for current model/ratio
+    const suffix = ASPECT_RATIO_PROMPTS[currentModel]?.[currentRatio] || ''
+    
+    // Check if the prompt already contains this suffix (or similar key terms to avoid duplication)
+    // We check for the core ratio "16:9" or "9:16" to be safe, but specifically the suffix helps consistency
+    if (suffix && !basePrompt.includes(suffix.trim()) && !basePrompt.includes(`aspect ratio`)) {
+        // If prompt is empty, just return the text (without leading comma if possible, or keep it consistent)
+        if (!basePrompt.trim()) return suffix.replace(/^, /, '') // Remove leading comma
+        return `${basePrompt}${suffix}`
+    }
+    
+    return basePrompt
+  }
+
   // 1. Selection Change Effect: Run only when a NEW clip is selected or drawer opens
   useEffect(() => {
     if (selectedClip?.id && isDrawerOpen) {
@@ -84,6 +127,17 @@ export default function ClipDetailDrawer() {
         setActiveMode('animate')
       } else {
         setActiveMode('visualize')
+        
+        // AUTO-INJECT ASPECT RATIO PROMPT
+        // Only if we have a prompt (or even if empty) to ensure dimensions are respected
+        const currentPrompt = selectedClip.imagePrompt || ''
+        const enhancedPrompt = injectAspectRatioPrompt(currentPrompt)
+        
+        if (enhancedPrompt !== currentPrompt) {
+            setLocalImagePrompt(enhancedPrompt)
+            // We update the local state so the user sees it immediately
+            // We DON'T auto-save to DB yet to let user confirm/edit
+        }
       }
 
       // Fetch generation history for this clip
@@ -557,9 +611,11 @@ export default function ClipDetailDrawer() {
           {/* Main Visual Stage - Fixed Aspect Ratio Container */}
           <div className="relative w-full aspect-video flex items-center justify-center bg-[#0C0C0C] overflow-hidden group">
             {activeMode === 'animate' && selectedClip.generatedVideo ? (
-              <video 
-                src={selectedClip.generatedVideo} 
-                controls 
+              <video
+                src={selectedClip.generatedVideo}
+                controls
+                preload="auto"
+                playsInline
                 className="w-full h-full object-contain"
               />
             ) : selectedClip.generatedImage ? (
@@ -768,7 +824,8 @@ export default function ClipDetailDrawer() {
                         className="bg-[#0C0C0C] text-xs text-white border border-[#3AAFA9]/20 rounded-md p-2 outline-none focus:border-[#00FFF0]"
                     >
                         <option value="flux-2-pro">Flux 2 Pro (Premium)</option>
-                        <option value="nano-banana">Nano Banana (Fast)</option>
+                        <option value="nano-banana">Nano Banana Pro</option>
+                        <option value="nano-banana-flash">Nano Banana (Fast)</option>
                         <option value="reeve">Reeve (Artistic)</option>
                     </select>
                     
@@ -780,21 +837,32 @@ export default function ClipDetailDrawer() {
                     </select>
                   </div>
 
-                {/* Sub-modes for Reeve/Nano */}
+                {/* Sub-modes for Reeve */}
                 {imageModel === 'reeve' && (
-                    <div className="mt-2 flex gap-1">
-                        {['edit', 'remix', 'text-to-image'].map((m) => (
-                            <button
-                                key={m}
-                                onClick={() => setRemixMode(m as any)}
-                                className={`flex-1 py-1 text-[10px] uppercase font-bold rounded ${remixMode === m ? 'bg-[#00FFF0]/20 text-[#00FFF0]' : 'bg-[#0C0C0C] text-gray-500'}`}
-                            >
-                                {m}
-                            </button>
-                        ))}
+                  <div className="mt-2 space-y-2">
+                    <div className="flex gap-1">
+                      {(['text-to-image', 'edit', 'remix'] as const).map((m) => (
+                        <button
+                          key={m}
+                          onClick={() => setRemixMode(m)}
+                          className={`flex-1 py-1.5 text-[10px] uppercase font-bold rounded transition-all ${
+                            remixMode === m
+                              ? 'bg-[#00FFF0]/20 text-[#00FFF0] border border-[#00FFF0]/50'
+                              : 'bg-[#0C0C0C] text-gray-500 border border-[#3AAFA9]/10 hover:text-gray-300'
+                          }`}
+                        >
+                          {m === 'text-to-image' ? 'Create New' : m === 'edit' ? 'Edit Image' : 'Remix Style'}
+                        </button>
+                      ))}
                     </div>
-                )}
+                    <p className="text-[10px] text-gray-500 px-1">
+                      {remixMode === 'text-to-image' && 'Generates a new image from scratch using your prompt.'}
+                      {remixMode === 'edit' && 'Modifies the reference image based on your prompt instructions.'}
+                      {remixMode === 'remix' && 'Blends the reference image structure with new styles.'}
+                    </p>
                   </div>
+                )}
+              </div>
             </div>
           )}
 

@@ -358,7 +358,7 @@ export interface ProjectSettings {
   consentRequired: boolean;
   offlineMode: boolean;
   dontGenerateImages: boolean; // If true, skip auto-generating images for clips
-  imageModel?: 'flux-2-pro' | 'nano-banana' | 'reeve'; // The cinematography engine used for images
+  imageModel?: 'flux-2-pro' | 'nano-banana' | 'nano-banana-flash' | 'reeve'; // nano-banana = Pro, nano-banana-flash = Fast (Gemini)
 }
 
 // Style & Branding
@@ -532,7 +532,7 @@ export interface AssetContext {
     brandCues: string[];
     type: string;
     confirmed: boolean;
-    imageModel?: 'flux-2-pro' | 'nano-banana' | 'reeve';
+    imageModel?: 'flux-2-pro' | 'nano-banana' | 'nano-banana-flash' | 'reeve';
   };
 }
 

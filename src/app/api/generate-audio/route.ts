@@ -148,23 +148,56 @@ export async function POST(req: NextRequest) {
             audioUrl = publicUrl
         }
 
-    } else if (model === 'stable-audio') {
-        // Use Stable Audio
-        result = await fal.subscribe('fal-ai/stable-audio', {
-            input: {
-                prompt: prompt,
-                seconds_total: duration || 5
-            },
-            logs: true,
-            onQueueUpdate: (update) => {
-                if (update.status === 'IN_PROGRESS') {
-                    console.log('Stable Audio generation in progress...')
-                }
-            },
-        })
+    } else if (model === 'elevenlabs-music') {
+        const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY
         
-        // Stable Audio returns { audio_file: { url: string, ... } }
-        audioUrl = result.data.audio_file.url
+        if (!ELEVENLABS_API_KEY) {
+            throw new Error('ElevenLabs API key not configured')
+        }
+
+        // Use sound-generation endpoint which supports music/bgm generation
+        const response = await fetch('https://api.elevenlabs.io/v1/sound-generation', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'xi-api-key': ELEVENLABS_API_KEY,
+            },
+            body: JSON.stringify({
+                text: prompt,
+                duration_seconds: duration || 10,
+                prompt_influence: 0.5,
+            }),
+        })
+
+        if (!response.ok) {
+            const errorData = await response.json()
+            throw new Error(errorData.detail?.message || 'ElevenLabs music generation failed')
+        }
+
+        const audioBuffer = await response.arrayBuffer()
+        
+        // Upload to Supabase Storage
+        const { supabase } = await import('@/lib/supabase')
+        const safeProjectId = projectId || 'no-project'
+        const filename = `audio/${safeProjectId}/${Date.now()}_music.mp3`
+
+        const { error: uploadError } = await supabase.storage
+            .from('projects')
+            .upload(filename, audioBuffer, {
+                contentType: 'audio/mpeg',
+                upsert: false
+            })
+
+        if (uploadError) {
+            console.error('Storage upload failed:', uploadError)
+            const base64 = Buffer.from(audioBuffer).toString('base64')
+            audioUrl = `data:audio/mpeg;base64,${base64}`
+        } else {
+            const { data: { publicUrl } } = supabase.storage
+                .from('projects')
+                .getPublicUrl(filename)
+            audioUrl = publicUrl
+        }
 
     } else if (model === 'playai-tts') {
         // Use Play.ai via Fal (or similar TTS endpoint available on Fal)

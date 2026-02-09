@@ -58,7 +58,7 @@ export default function IdeaPromptScreen() {
   
   const [idea, setIdea] = useState('')
   const [dontGenerateImages, setDontGenerateImages] = useState(false)
-  const [selectedImageModel, setSelectedImageModel] = useState<'flux-2-pro' | 'nano-banana' | 'reeve'>('flux-2-pro')
+  const [selectedImageModel, setSelectedImageModel] = useState<'flux-2-pro' | 'nano-banana' | 'nano-banana-flash' | 'reeve'>('flux-2-pro')
   const [isCreating, setIsCreating] = useState(false)
   const [activePersona, setActivePersona] = useState(PERSONAS[0])
   const [isPersonaDropdownOpen, setIsPersonaDropdownOpen] = useState(false)
@@ -304,7 +304,8 @@ export default function IdeaPromptScreen() {
                       <div className="flex items-center gap-2 p-1 bg-white/[0.02] rounded-full border border-white/[0.05]">
                         {[
                           { id: 'flux-2-pro', label: 'Premium' },
-                          { id: 'nano-banana', label: 'Fast' },
+                          { id: 'nano-banana', label: 'Nano Pro' },
+                          { id: 'nano-banana-flash', label: 'Nano Fast' },
                           { id: 'reeve', label: 'Artistic' }
                         ].map((m) => (
                           <button

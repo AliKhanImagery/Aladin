@@ -7,18 +7,17 @@ interface VideoTrackProps {
   zoomLevel: number
   onClipClick: (clip: Clip) => void
   onClipContextMenu?: (clip: Clip) => void
-  onClipDubbing?: (clip: Clip) => void // New prop
+  onClipDubbing?: (clip: Clip) => void
   selectedClipId?: string
+  onReorder?: (fromFlatIndex: number, toFlatIndex: number) => void
 }
 
 export const BASE_PIXELS_PER_SECOND = 40
 
-export function VideoTrack({ clips, zoomLevel, onClipClick, onClipContextMenu, onClipDubbing, selectedClipId }: VideoTrackProps) {
-  // We want to scroll to the selected clip if it changes, potentially
-  
+export function VideoTrack({ clips, zoomLevel, onClipClick, onClipContextMenu, onClipDubbing, selectedClipId, onReorder }: VideoTrackProps) {
   return (
     <div className="flex h-full items-center pl-2">
-      {clips.map((clip) => (
+      {clips.map((clip, flatIndex) => (
         <VideoClipItem 
            key={clip.id} 
            clip={clip} 
@@ -26,7 +25,9 @@ export function VideoTrack({ clips, zoomLevel, onClipClick, onClipContextMenu, o
            isSelected={selectedClipId === clip.id}
            onClick={() => onClipClick(clip)}
            onContextMenu={() => onClipContextMenu && onClipContextMenu(clip)}
-           onDubbingClick={() => onClipDubbing && onClipDubbing(clip)} // Pass it down
+           onDubbingClick={() => onClipDubbing && onClipDubbing(clip)}
+           flatIndex={flatIndex}
+           onReorder={onReorder}
         />
       ))}
       {/* Spacer at the end */}

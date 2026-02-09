@@ -233,6 +233,10 @@ export async function saveProject(project: Project, userId: string): Promise<{ s
     const clipsWithVideos = project.scenes?.flatMap(s => s.clips || []).filter(c => c.generatedVideo).length || 0
     const totalClips = project.scenes?.reduce((sum, s) => sum + (s.clips?.length || 0), 0) || 0
     
+    // Check timeline stats
+    const audioTracksCount = project.timeline?.audioTracks?.length || 0
+    const audioClipsCount = project.timeline?.audioTracks?.reduce((sum, t) => sum + (t.clips?.length || 0), 0) || 0
+    
     console.log('💾 saveProject: Starting save for project:', {
       projectId: project.id,
       projectName: project.name,
@@ -240,7 +244,9 @@ export async function saveProject(project: Project, userId: string): Promise<{ s
       scenesCount: project.scenes?.length || 0,
       totalClips,
       clipsWithVideos,
-      clipsWithImages: project.scenes?.flatMap(s => s.clips || []).filter(c => c.generatedImage && !c.generatedVideo).length || 0
+      audioTracksCount,
+      audioClipsCount,
+      hasTimeline: !!project.timeline
     })
     
     // Log video URLs being saved

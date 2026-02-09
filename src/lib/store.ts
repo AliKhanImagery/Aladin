@@ -113,6 +113,7 @@ interface AppState {
   addClip: (sceneId: string, clip: Clip) => void
   updateClip: (clipId: string, updates: Partial<Clip>) => void
   deleteClip: (clipId: string) => void
+  reorderClips: (sceneId: string, fromIndex: number, toIndex: number) => void
   
   // Character actions
   addCharacter: (character: Character) => void
@@ -376,6 +377,33 @@ export const useAppStore = create<AppState>((set, get) => ({
         selectedClip: null,
         isDrawerOpen: false
       }
+    }
+    return {
+      currentProject: updatedProject,
+      projects: state.projects.map(p =>
+        p.id === state.currentProject!.id ? updatedProject : p
+      )
+    }
+  }),
+
+  reorderClips: (sceneId, fromIndex, toIndex) => set((state) => {
+    if (!state.currentProject) return state
+    const scene = state.currentProject.scenes.find(s => s.id === sceneId)
+    if (!scene || fromIndex === toIndex) return state
+    const clips = [...scene.clips]
+    if (fromIndex < 0 || fromIndex >= clips.length || toIndex < 0 || toIndex >= clips.length) return state
+    const [removed] = clips.splice(fromIndex, 1)
+    clips.splice(toIndex, 0, removed)
+    const reorderedWithOrder = clips.map((c, i) => ({ ...c, order: i }))
+    const updatedProject = {
+      ...state.currentProject,
+      updatedAt: new Date(),
+      scenes: state.currentProject.scenes.map(s =>
+        s.id === sceneId ? { ...s, clips: reorderedWithOrder } : s
+      )
+    }
+    if (state.isAuthenticated && state.user?.id) {
+      queueAutoSave(updatedProject, state.user.id)
     }
     return {
       currentProject: updatedProject,

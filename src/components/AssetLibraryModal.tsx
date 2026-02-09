@@ -1,5 +1,7 @@
 'use client'
 
+import { createPortal } from 'react-dom'
+
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { X, Upload, Image as ImageIcon, Package, User, MapPin, Search, Loader2, Music, Play, Pause } from 'lucide-react'
 import { getUserAssets, getUserImages, getUserAudio } from '@/lib/userMedia'
@@ -181,12 +183,13 @@ export default function AssetLibraryModal({ isOpen, onClose, onSelect, onUpload,
     }
   }
 
+
   if (!isOpen) return null
 
   // Naming Modal View
-  if (namingAsset) {
-    return (
-      <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/95 backdrop-blur-xl animate-in fade-in duration-300 p-4">
+  const namingModalContent = namingAsset ? (
+    <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/95 backdrop-blur-xl animate-in fade-in duration-300 p-4">
+        {/* ... existing modal content ... */}
         <div className="w-full max-w-md bg-[#151619] border border-white/10 rounded-2xl overflow-hidden flex flex-col shadow-2xl">
           <div className="p-4 border-b border-white/5 flex items-center justify-between">
             <h3 className="text-sm font-bold text-white uppercase tracking-wider">Name this Reference</h3>
@@ -245,12 +248,10 @@ export default function AssetLibraryModal({ isOpen, onClose, onSelect, onUpload,
             </div>
           </div>
         </div>
-      </div>
-    )
-  }
-
-  return (
+    </div>
+  ) : (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 backdrop-blur-xl animate-in fade-in duration-300 p-4">
+      {/* ... existing main modal content ... */}
       <div className="w-full max-w-5xl h-[85vh] bg-[#09090b] border border-white/10 rounded-3xl overflow-hidden flex flex-col shadow-2xl">
         
         {/* Header */}
@@ -498,4 +499,11 @@ export default function AssetLibraryModal({ isOpen, onClose, onSelect, onUpload,
       </div>
     </div>
   )
+
+  // Use Portal to render outside of any potential transform/z-index traps
+  if (typeof document !== 'undefined') {
+    return createPortal(namingModalContent, document.body)
+  }
+  
+  return null
 }

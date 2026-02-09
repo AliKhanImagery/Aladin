@@ -826,43 +826,46 @@ export default function IdeaAnalysisScreen({ analysis, onContinue, onBack }: Ide
 
       {/* Image Zoom Modal */}
       {selectedImageModal && (
-                <div
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 backdrop-blur-xl animate-in fade-in duration-300"
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-md animate-in fade-in duration-300"
           onClick={() => setSelectedImageModal(null)}
         >
-          {/* Action Header */}
-          <div className="absolute top-4 right-4 sm:top-6 sm:right-6 flex items-center gap-3 z-[110]">
-            <button
-              onClick={() => setSelectedImageModal(null)}
-              className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 flex items-center justify-center text-white transition-all duration-300 backdrop-blur-xl shadow-lg hover:text-red-400"
-            >
-              <X className="w-5 h-5 sm:w-6 sm:h-6" />
-            </button>
-                    </div>
-
-          {/* Image Container - Properly constrained */}
+          {/* Image Container - Tight fit */}
           <div 
-            className="w-full h-full flex flex-col items-center justify-center p-4 sm:p-8 pointer-events-none"
+            className="relative inline-block max-w-full max-h-full overflow-hidden rounded-2xl shadow-[0_0_50px_-12px_rgba(0,0,0,0.5)] animate-in zoom-in-95 duration-500 ease-out"
             onClick={(e) => e.stopPropagation()}
           >
             <img 
               src={selectedImageModal.imageUrl} 
               alt={selectedImageModal.assetName}
-              className="max-w-[calc(100vw-2rem)] max-h-[calc(100vh-8rem)] sm:max-w-[calc(100vw-4rem)] sm:max-h-[calc(100vh-12rem)] w-auto h-auto object-contain rounded-2xl shadow-2xl animate-in zoom-in-95 duration-500 ease-out pointer-events-auto"
+              className="block w-auto h-auto object-contain cursor-default"
+              style={{
+                maxWidth: '100vw',
+                maxHeight: '100vh',
+              }}
             />
             
-            {/* Info Badge */}
-            <div className="mt-4 sm:mt-6 px-4 py-2 sm:px-6 sm:py-3 bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl animate-in slide-in-from-bottom-2 duration-500 pointer-events-auto">
-              <div className="flex items-center gap-3 sm:gap-4 flex-wrap">
+            {/* Action Buttons (Overlay - Top Right) */}
+            <div className="absolute top-3 right-3 flex items-center gap-2 z-[110]">
+              <button
+                onClick={() => setSelectedImageModal(null)}
+                className="w-9 h-9 rounded-full bg-black/40 hover:bg-black/60 border border-white/10 flex items-center justify-center text-white transition-all duration-300 backdrop-blur-md shadow-lg hover:text-red-400"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Info Badge Overlay - Bottom Center */}
+            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 w-full max-w-[90%] flex justify-center pointer-events-none">
+              <div className="px-4 py-2 bg-black/40 backdrop-blur-md border border-white/10 rounded-2xl animate-in slide-in-from-bottom-2 duration-500 pointer-events-auto flex items-center gap-4">
                 <div>
-                  <h3 className="text-xs sm:text-sm font-bold text-white uppercase tracking-widest">{selectedImageModal.assetName}</h3>
-                  <p className="text-[9px] sm:text-[10px] text-gray-500 font-bold uppercase mt-0.5">Production Asset • Resolution Verified</p>
+                  <h3 className="text-xs font-bold text-white uppercase tracking-widest truncate max-w-[150px] sm:max-w-[200px]">{selectedImageModal.assetName}</h3>
+                  <p className="text-[9px] text-gray-300 font-bold uppercase mt-0.5">Production Asset</p>
                 </div>
-                <div className="h-6 sm:h-8 w-[1px] bg-white/10 mx-1 sm:mx-2" />
-                <div className="flex items-center gap-2">
+                <div className="h-6 w-[1px] bg-white/20" />
+                <div className="flex items-center gap-1">
                   <button
                     onClick={async () => {
-                      // Delete the image
                       setAssets(assets.map(a => 
                         a.assetId === selectedImageModal.assetId 
                           ? { ...a, resultImageUrl: undefined, uploadedFile: undefined, baseImageUrl: undefined } 
@@ -871,13 +874,13 @@ export default function IdeaAnalysisScreen({ analysis, onContinue, onBack }: Ide
                       toast.success('Image removed')
                       setSelectedImageModal(null)
                     }}
-                    className="p-2 hover:bg-red-500/10 text-gray-400 hover:text-red-400 transition-colors rounded-lg"
+                    className="p-2 hover:bg-red-500/20 text-gray-300 hover:text-red-400 transition-colors rounded-lg"
                     title="Delete Image"
                   >
-                    <Trash2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                    <Trash2 className="w-3.5 h-3.5" />
                   </button>
                   <button
-                onClick={() => {
+                    onClick={() => {
                       handleAssetAction(selectedImageModal.assetId, 'upload')
                       setSelectedImageModal(null)
                       setTimeout(() => {
@@ -885,10 +888,10 @@ export default function IdeaAnalysisScreen({ analysis, onContinue, onBack }: Ide
                         if (fileInput) fileInput.click()
                       }, 100)
                     }}
-                    className="p-2 hover:bg-brand-emerald/10 text-gray-400 hover:text-brand-emerald transition-colors rounded-lg"
+                    className="p-2 hover:bg-brand-emerald/20 text-gray-300 hover:text-brand-emerald transition-colors rounded-lg"
                     title="Upload New"
                   >
-                    <Upload className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                    <Upload className="w-3.5 h-3.5" />
                   </button>
                 </div>
               </div>
