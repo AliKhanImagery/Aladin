@@ -22,6 +22,7 @@ export interface Project {
   metadata: ProjectMetadata;
   permissions: ProjectPermissions;
   budget: BudgetSettings;
+  timeline?: Timeline; // New: Persistent timeline data
 }
 
 // Story & Planning
@@ -241,8 +242,32 @@ export interface Timeline {
   id: string;
   projectId: string;
   clips: TimelineClip[];
+  audioTracks: AudioTrack[]; // New: Audio tracks
   comments: TimelineComment[];
   exports: TimelineExport[];
+}
+
+export interface AudioTrack {
+  id: string;
+  name: string;
+  type: 'bg_music' | 'sfx' | 'voiceover';
+  clips: AudioClip[];
+  volume: number; // 0 to 1
+  muted: boolean;
+  locked: boolean;
+}
+
+export interface AudioClip {
+  id: string;
+  trackId: string;
+  name: string;
+  assetUrl: string;
+  startTime: number; // seconds (timeline position)
+  duration: number; // seconds
+  offset: number; // seconds (start point within the source file)
+  volume: number; // 0 to 1
+  /** Shown on the clip while generating or after failure */
+  status?: 'generating' | 'completed' | 'failed';
 }
 
 export interface TimelineClip {
@@ -333,7 +358,7 @@ export interface ProjectSettings {
   consentRequired: boolean;
   offlineMode: boolean;
   dontGenerateImages: boolean; // If true, skip auto-generating images for clips
-  imageModel?: 'flux-2-pro' | 'nano-banana' | 'reeve'; // The cinematography engine used for images
+  imageModel?: 'flux-2-pro' | 'nano-banana' | 'nano-banana-flash' | 'reeve'; // nano-banana = Pro, nano-banana-flash = Fast (Gemini)
 }
 
 // Style & Branding
@@ -507,7 +532,7 @@ export interface AssetContext {
     brandCues: string[];
     type: string;
     confirmed: boolean;
-    imageModel?: 'flux-2-pro' | 'nano-banana' | 'reeve';
+    imageModel?: 'flux-2-pro' | 'nano-banana' | 'nano-banana-flash' | 'reeve';
   };
 }
 

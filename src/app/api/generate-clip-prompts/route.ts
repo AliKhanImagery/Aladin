@@ -100,8 +100,8 @@ ${locationStrings.length > 0 ? `Locations: \n${locationStrings.join('\n')}` : ''
       ? `KINETIC HANDSHAKE: The previous clip ended with the character ${previousClipVelocity}. This clip must pick up the same momentum - the character should already be in motion at the start, maintaining continuity of velocity and movement energy.`
       : 'KINETIC HANDSHAKE: This is the first clip, so establish the initial movement velocity that subsequent clips will maintain.'
 
-    // Story Boarding Expert & AI Prompting Expert role with High-Density Kinetic Workflow
-    const prompt = `You are an elite Visual Director and Lead Cinematographer implementing a High-Density Kinetic Workflow for Kling 2.5 Standard. Your task is to create ultra-detailed, production-ready image and video prompts that ensure subject integration, lighting consistency, technical accuracy, and kinetic continuity.
+    // Structured Prompt Construction for Cinematic Video Generation (Kling/LTX optimized)
+    const prompt = `You are an elite Visual Director and Lead Cinematographer implementing a High-Density Kinetic Workflow. Your task is to generate STRUCTURED components that will be assembled into final production prompts.
 
 TARGET ENGINE: ${imageModel.toUpperCase()}
 NARRATIVE ROLE: ${narrativeRole}
@@ -129,83 +129,30 @@ ${kineticHandshake}
 
 ${cameraMovementInstruction}
 
-${isFlux ? `
-CRITICAL INSTRUCTIONS FOR FLUX INTEGRATION (TO AVOID "STICKER" LOOK):
-1. SUBJECT ANCHORING: Use [[IDENTITY:NAME]] or [[PRODUCT:NAME]]. Describe exactly how they touch, lean on, or interact with the environment. Mention CONTACT SHADOWS and ambient occlusion.
-2. POSTURE & PHYSICS: Specify weight distribution, muscular tension, and how the subject fits the perspective of the frame. LOCK the exact posture for Clip 1 as the anchor frame.
-3. LIGHTING PHYSICS: Describe how specific light colors (from Brand Cues or Tone) hit the subject (reflections, rim lights, subsurface scattering on skin). Use HEX CODES if colors are specific (e.g., key light #FFA500, fill light #87CEEB). MUST lock lighting with HEX codes.
-4. BRIDGE INSTRUCTIONS: Every prompt MUST include a "Bridge Instruction" that connects the subject to the scene (e.g., "The emerald #10B981 light from the neon sign reflects accurately off the subject's metallic surface").
-5. NO NEGATIVE PROMPTS: Focus on descriptive, positive detail.
-` : ''}
+INSTRUCTIONS:
+Break down the visual description into these EXACT components:
+1. SUBJECT_MAIN: Who is the primary focus? Include appearance, clothing, and "Material DNA" if object-centric.
+2. SUBJECT_ACTION: What is the subject DOING? Be specific about movement, micro-expressions, and posture.
+3. SUBJECT_SECONDARY: (Optional) Is there a second character or background figure?
+4. ENVIRONMENT: The setting, atmosphere, weather, and "Bridge Instructions" (how subject touches environment).
+5. LIGHTING: Detailed lighting setup with HEX CODES (e.g., #FFA500).
+6. CAMERA: Lens, angle, movement, and framing.
+7. RENDER_STYLE: Technical specs (e.g., "cinematic lighting, sharp focus, natural textures"). NO 4K/8K/photorealistic keywords.
 
-${isNanoBanana ? `
-CRITICAL INSTRUCTIONS FOR NANO BANANA (COMMERCIAL PRODUCT PHOTOGRAPHY):
-1. PRIORITIZE SUBJECT CLARITY: The product/subject must be hyper-realistic and perfectly rendered.
-2. STYLE INJECTION: You MUST translate the "SCENE STYLE" (mood, lighting, colors) into commercial photography terms.
-   - Instead of "Cinematic, dark, moody", use "High-contrast commercial photography, studio lighting with [Color] gel, dramatic rim lighting".
-   - Instead of "Natural, soft", use "Soft-box studio lighting, clean commercial look, high-key photography".
-3. LIGHTING MATCHING: You MUST include the specific HEX CODES from the Scene Style in the lighting description to ensure the product matches the film's color grade.
-4. TEXTURE & MATERIAL: Describe the surface materials of the product in extreme detail (e.g., "matte finish aluminum", "condensation droplets on glass", "subsurface scattering on plastic").
-5. COMPOSITION: Place the product in the environment described, but ensure it pops. Use "depth of field" to separate subject from background if needed.
-` : ''}
-
-HIGH-DENSITY KINETIC WORKFLOW REQUIREMENTS:
-
-1. PERFORMANCE & ACTING LOGIC:
-   - kling_motion_prompt MUST specify 'Character Acting' details
-   - Include 'Micro-Expression' keywords: 'Eyes narrowing', 'Breath visible in cold air', 'Lips trembling slightly', 'Brow furrowing', 'Jaw clenching', 'Nostrils flaring', 'Eyes widening', 'Mouth corners lifting'
-   - Include 'Physics-based Body Movement': 'Shifting weight forward', 'Arms pumping rhythmically', 'Shoulders tensing', 'Hips rotating', 'Feet planting firmly', 'Spine straightening', 'Head tilting'
-   - Acting must be 'Motivated' by the narrative_role:
-     * Hook: Subtle curiosity, anticipation, or discovery expressions
-     * Escalation: Building tension, intensity increasing, body language becoming more dynamic
-     * Peak: Intense facial shifts, maximum emotional expression, full body commitment to action
-     * Resolution: Release, satisfaction, or contemplative expressions
-
-2. CAMERA MOTIVATION LOGIC:
-   - Camera movement MUST only be used if it serves the story beat
-   - Follow the camera movement instruction provided above based on narrative_role
-   - Every camera movement must have narrative justification
-
-3. COST & TECHNICAL SPECS:
-   - STRICTLY REMOVE all '4K', '8K', 'ultra-HD', and 'photorealistic' keywords from both prompts
-   - Focus on 'Cinematic lighting', 'Sharp focus', and 'Natural textures' instead
-   - Use quality keywords: "professional", "cinematic", "award-winning", "commercial quality"
-
-4. FLUX IMAGE PROMPT (Anchor):
-   - Must lock the lighting with specific HEX codes (e.g., key light #FFA500, fill light #87CEEB, rim light #FFD700)
-   - Must specify exact posture for Clip 1 as the anchor frame
-   - Include all technical specs: lens, focal length, aperture, depth of field
-   - Focus on cinematic lighting, sharp focus, natural textures
-
-5. KLING MOTION PROMPT (Pivot):
-   - MUST start with: 'Starting from the provided frame, [Subject Name] performs [Action] while the camera [Movement].'
-   - Include Character Acting with Micro-Expressions (motivated by narrative_role)
-   - Include Physics-based Body Movement
-   - Maintain kinetic continuity from previous clip (if applicable)
-   - Focus on cinematic lighting, sharp focus, natural textures
-
-PROMPT STRUCTURE HIERARCHY (Follow strictly):
-1. SUBJECT & ACTION: Who/what and exactly what they are doing, including posture and expression.
-2. ENVIRONMENTAL ANCHORING: Physical relationship between subject and scene (contact, shadows, perspective).
-3. LIGHTING & COLOR GRADE: Detailed lighting setup with HEX codes for color grade locking.
-4. CAMERA & TECHNICALS: Lens choice (e.g., 85mm prime), aperture (e.g., f/1.8), camera movement (motivated by narrative role), and framing details.
-
-Generate a JSON object:
+Generate a JSON object with these distinct fields:
 {
-  "imagePrompt": "PURE TEXT ONLY: Write the visual description directly without any labels, prefixes, or metadata. Start immediately with the subject and scene description. Minimum 150 words with HEX codes for lighting, exact posture details, camera specs, and natural textures. NO labels like 'flux_image_prompt:' or brackets. Follow the hierarchy: 1. SUBJECT & ACTION, 2. ENVIRONMENTAL ANCHORING, 3. LIGHTING & COLOR GRADE (with HEX codes), 4. CAMERA & TECHNICALS.",
-  "videoPrompt": "PURE TEXT ONLY: MUST start with 'Starting from the provided frame, [Subject Name] performs [Action] while the camera [Movement].' Then continue with Character Acting with Micro-Expressions (motivated by ${narrativeRole}), Physics-based Body Movement, and kinetic continuity. Minimum 150 words. Write directly without labels or metadata. Focus on cinematic lighting, sharp focus, natural textures. NO 4K/8K/ultra-HD/photorealistic keywords.",
-  "framing": "Detailed technical framing (e.g., '85mm prime, f/1.8, medium close-up at eye level')",
-  "cameraAngle": "wide|medium|close|insert|extreme-wide|extreme-close",
-  "cameraMovement": "Static|Dolly-in|Dolly-out|Tracking|Handheld|Orbiting|Crane-up|Crane-down|Push-in|Pull-out",
-  "shotType": "Technical cinematography shot type (e.g., 'Three-quarter profile tracking shot')",
-  "kineticHandshake": "Description of velocity/speed/momentum at end of this clip for next clip to pick up (e.g., 'walking briskly forward', 'slowly turning left', 'sprinting toward camera')"
+  "subject_main": "Detailed description of the main subject...",
+  "subject_action": "Specific action and expression...",
+  "subject_secondary": "Description of secondary elements or 'none'...",
+  "environment": "Detailed environmental context...",
+  "lighting": "Lighting setup with HEX codes...",
+  "camera": "Camera movement and lens details...",
+  "render_style": "Visual style keywords...",
+  "kineticHandshake": "Velocity description for next clip...",
+  "cameraAngle": "wide|medium|close...",
+  "cameraMovement": "Static|Dolly-in...",
+  "framing": "Technical framing..."
 }
-
-CRITICAL INSTRUCTIONS FOR JSON OUTPUT:
-- The "imagePrompt" and "videoPrompt" values must be PURE STRINGS without any labels, prefixes, or metadata inside them.
-- Do NOT include text like "flux_image_prompt:", "[flux_image_prompt:", "imagePrompt:", or any other labels in the actual prompt value.
-- The prompt should start directly with the visual description or motion description.
-- Output the JSON exactly as specified - the values should be clean, natural language text only.
 `
 
     const completion = await openai.chat.completions.create({
@@ -213,16 +160,10 @@ CRITICAL INSTRUCTIONS FOR JSON OUTPUT:
       messages: [
         {
           role: 'system',
-          content: `You are an elite Visual Director and Cinematographer implementing a High-Density Kinetic Workflow for Kling 2.5 Standard. You specialize in ${imageModel} prompting with expertise in kinetic continuity, camera motivation, and performance-driven acting.
-          Your goals:
-          - PERFECT subject integration into scene physics (contact shadows, reflections).
-          - EXACT color grade locking using technical descriptions and HEX codes.
-          - CINEMATIC consistency across sequential clips using identity tokens.
-          - BRIDGE INSTRUCTIONS to prevent subjects looking like "stickers" or "overlays".
-          - KINETIC CONTINUITY: Maintain character velocity and momentum between clips.
-          - CAMERA MOTIVATION: Only use camera movement that serves the narrative role (Hook, Escalation, Peak, Resolution).
-          - PERFORMANCE ACTING: Include micro-expressions and physics-based body movement motivated by narrative role.
-          - COST OPTIMIZATION: Remove 4K/8K/ultra-HD/photorealistic keywords, focus on cinematic lighting, sharp focus, natural textures.`,
+          content: `You are an elite Visual Director. You do NOT write prose paragraphs. You write STRUCTURED visual components.
+          - STRICTLY REMOVE words like "4K", "8K", "photorealistic", "ultra-HD".
+          - Focus on "Cinematic lighting", "Sharp focus", "Natural textures", "Award-winning photography".
+          - Use HEX codes for lighting consistency.`,
         },
         {
           role: 'user',
@@ -238,7 +179,41 @@ CRITICAL INSTRUCTIONS FOR JSON OUTPUT:
       throw new Error('No response from OpenAI')
     }
 
-    const clipPrompts = JSON.parse(content)
+    const rawData = JSON.parse(content)
+
+    // ASSEMBLE THE FINAL PROMPTS PROGRAMMATICALLY
+    // This enforces the "Subject -> Action -> Environment -> Tech" structure requested
+    
+    // 1. Clean up "none" fields
+    const secondarySub = rawData.subject_secondary?.toLowerCase() === 'none' ? '' : rawData.subject_secondary;
+
+    // 2. Build Image Prompt (Anchor)
+    // Structure: [Subject Main] [Subject Action (Static)] [Secondary] [Environment] [Lighting] [Camera] [Render]
+    const imagePrompt = [
+      rawData.subject_main,
+      rawData.subject_action, // Even in static, action implies posture
+      secondarySub,
+      `Set in ${rawData.environment}`,
+      `Lighting is ${rawData.lighting}`,
+      `Shot with ${rawData.camera}`,
+      rawData.render_style
+    ].filter(Boolean).join('. ');
+
+    // 3. Build Video Prompt (Motion)
+    // Structure: [Starting State] -> [Action/Movement] -> [Environment/Camera] -> [Tech]
+    // "Starting from the provided frame, [Subject] [Action]..."
+    const videoPrompt = `Starting from the provided frame, ${rawData.subject_main} ${rawData.subject_action}. ${secondarySub ? secondarySub + '. ' : ''}The camera moves via ${rawData.camera}. Lighting: ${rawData.lighting}. Style: ${rawData.render_style}.`;
+
+    const clipPrompts = {
+      imagePrompt: imagePrompt,
+      videoPrompt: videoPrompt,
+      framing: rawData.framing,
+      cameraAngle: rawData.cameraAngle,
+      cameraMovement: rawData.cameraMovement,
+      kineticHandshake: rawData.kineticHandshake,
+      // Pass raw components for debugging/UI if needed
+      components: rawData
+    }
 
     return NextResponse.json({ success: true, data: clipPrompts })
   } catch (error: any) {

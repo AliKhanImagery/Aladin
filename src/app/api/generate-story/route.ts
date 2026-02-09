@@ -54,7 +54,16 @@ export async function POST(request: NextRequest) {
     2. PRODUCTION PERSONA:
     Decide if this is a "Film" (Narrative-driven, slower pacing, character arcs) or "TVC" (Product-focused, montage-heavy, fast rhythmic cuts) based on the idea. Apply this persona to your pacing strategy.
 
-    3. MATERIAL BIBLE (Consistency):
+    3. SCENE ANATOMY & COVERAGE (CRITICAL):
+    A "Scene" is NOT a single clip. It is a narrative container that MUST be broken down into 2-5 distinct shots (Clips) to provide professional coverage.
+    
+    REQUIRED COVERAGE PATTERN PER SCENE:
+    - Clip 1: ESTABLISHING/MASTER (Wide/Extreme Wide). Sets the geography and mood. (3-5s, Kling)
+    - Clip 2: ACTION/DIALOGUE (Medium/Cowboy). The core narrative beat or subject interaction. (3-5s, Kling)
+    - Clip 3: TEXTURE/INSERT (Close-up/Macro). A sensory detail (hands, eyes, object, light, wind) that creates atmosphere. NO FACES. (1-2s, LTX)
+    - Clip 4 (Optional): REACTION/B-ROLL. Environmental response or character reaction. (2-3s, Kling/LTX)
+
+    4. MATERIAL BIBLE (Consistency):
     If the project involves a specific object or material (e.g., a "Carpet", "Bottle", "Watch"), you must define its "Material DNA" (texture, sheen, response to light) in the first clip and strictly carry it through every subsequent clip.
 
     Generate a story structure. Return a JSON object with this exact structure:
@@ -77,9 +86,11 @@ export async function POST(request: NextRequest) {
               "video_engine": "kling|ltx",
               "description": "Director's Notes: Describe the sensory experience and specific emotional target. Use professional onset terminology.",
               "narrative_role": "Hook|Escalation|Peak|Resolution",
+              "clip_type": "Master|Medium|CloseUp|Insert|B-Roll",
+              "visual_focus": "Character|Environment|Object|Texture",
               "visual_continuity": "Kinetic Handshake: Describe how lighting, subject position, environmental elements, AND the velocity/speed/momentum carry over. Mention specific Material DNA if object-centric.",
-              "flux_image_prompt": "Ultra-detailed visual description (150+ words). INCLUDE: composition, lighting HEX codes (e.g., #FFA500), character posture, Material DNA specs, camera specs (lens, focal length), cinematic lighting, natural textures. NO forbidden keywords (4k/8k/photorealistic).",
-              "kling_motion_prompt": "Ultra-detailed motion description (150+ words). INCLUDE: Character Acting with Micro-Expressions, Physics-based Body Movement, camera motivation, and temporal pacing. Acting must be Motivated by the narrative_role.",
+              "flux_image_prompt": "Ultra-detailed visual description...",
+              "kling_motion_prompt": "Ultra-detailed motion description...",
               "cameraAngle": "wide|medium|close|insert|extreme-wide|extreme-close",
               "cameraMovement": "Static|Dolly-in|Dolly-out|Tracking|Handheld|Orbiting|Crane-up|Crane-down|Push-in|Pull-out",
               "framing": "Detailed framing description with technical specs (e.g., 'Medium close-up at 85mm, f/1.8')"

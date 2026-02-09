@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { Project, Scene, Clip, Character, IdeaAnalysis, AssetContext, AssetActionState } from '@/types'
+import { Project, Scene, Clip, Character, IdeaAnalysis, AssetContext, AssetActionState, AudioTrack, AudioClip } from '@/types'
 import { queueAutoSave, saveImmediately } from './autoSave'
 
 interface AppState {
@@ -16,7 +16,14 @@ interface AppState {
   activeTab: 'idea' | 'sequence' | 'timeline'
   selectedClip: Clip | null
   isDrawerOpen: boolean
+  drawerMode: 'visualize' | 'animate' | 'dub' | null // New field
   isProjectManagerOpen: boolean
+  
+  // Audio Drawer State
+  isAudioDrawerOpen: boolean
+  activeAudioTrackId: string | null
+  activeAudioTime: number | null
+
   showAuthModal: boolean
   showProfileSettingsModal: boolean
   pendingIdea: string | null // Store idea when user needs to auth before creating
@@ -52,8 +59,12 @@ interface AppState {
   setProjects: (projects: Project[]) => void
   setActiveTab: (tab: 'idea' | 'sequence' | 'timeline') => void
   setSelectedClip: (clip: Clip | null) => void
-  setDrawerOpen: (open: boolean) => void
+  setDrawerOpen: (open: boolean, mode?: 'visualize' | 'animate' | 'dub') => void // Updated signature
   setProjectManagerOpen: (open: boolean) => void
+  
+  // Audio Drawer Actions
+  setAudioDrawerOpen: (open: boolean, trackId?: string, time?: number) => void
+
   setShowAuthModal: (open: boolean) => void
   setShowProfileSettingsModal: (open: boolean) => void
   setPendingIdea: (idea: string | null) => void
@@ -102,11 +113,20 @@ interface AppState {
   addClip: (sceneId: string, clip: Clip) => void
   updateClip: (clipId: string, updates: Partial<Clip>) => void
   deleteClip: (clipId: string) => void
+  reorderClips: (sceneId: string, fromIndex: number, toIndex: number) => void
   
   // Character actions
   addCharacter: (character: Character) => void
   updateCharacter: (characterId: string, updates: Partial<Character>) => void
   deleteCharacter: (characterId: string) => void
+
+  // Audio actions
+  addAudioTrack: (track: AudioTrack) => void
+  updateAudioTrack: (trackId: string, updates: Partial<AudioTrack>) => void
+  deleteAudioTrack: (trackId: string) => void
+  addAudioClip: (trackId: string, clip: AudioClip) => void
+  updateAudioClip: (trackId: string, clipId: string, updates: Partial<AudioClip>) => void
+  deleteAudioClip: (trackId: string, clipId: string) => void
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -119,7 +139,11 @@ export const useAppStore = create<AppState>((set, get) => ({
   activeTab: 'idea',
   selectedClip: null,
   isDrawerOpen: false,
+  drawerMode: null,
   isProjectManagerOpen: false,
+  isAudioDrawerOpen: false,
+  activeAudioTrackId: null,
+  activeAudioTime: null,
   showAuthModal: false,
   showProfileSettingsModal: false,
   pendingIdea: null,
@@ -361,6 +385,33 @@ export const useAppStore = create<AppState>((set, get) => ({
       )
     }
   }),
+
+  reorderClips: (sceneId, fromIndex, toIndex) => set((state) => {
+    if (!state.currentProject) return state
+    const scene = state.currentProject.scenes.find(s => s.id === sceneId)
+    if (!scene || fromIndex === toIndex) return state
+    const clips = [...scene.clips]
+    if (fromIndex < 0 || fromIndex >= clips.length || toIndex < 0 || toIndex >= clips.length) return state
+    const [removed] = clips.splice(fromIndex, 1)
+    clips.splice(toIndex, 0, removed)
+    const reorderedWithOrder = clips.map((c, i) => ({ ...c, order: i }))
+    const updatedProject = {
+      ...state.currentProject,
+      updatedAt: new Date(),
+      scenes: state.currentProject.scenes.map(s =>
+        s.id === sceneId ? { ...s, clips: reorderedWithOrder } : s
+      )
+    }
+    if (state.isAuthenticated && state.user?.id) {
+      queueAutoSave(updatedProject, state.user.id)
+    }
+    return {
+      currentProject: updatedProject,
+      projects: state.projects.map(p =>
+        p.id === state.currentProject!.id ? updatedProject : p
+      )
+    }
+  }),
   
   // Character actions
   addCharacter: (character) => set((state) => {
@@ -428,6 +479,195 @@ export const useAppStore = create<AppState>((set, get) => ({
       )
     }
   }),
+
+  // Audio actions
+  addAudioTrack: (track) => set((state) => {
+    if (!state.currentProject) return state
+    
+    // Initialize timeline if it doesn't exist
+    const timeline = state.currentProject.timeline || {
+      id: `timeline-${state.currentProject.id}`,
+      projectId: state.currentProject.id,
+      clips: [],
+      audioTracks: [],
+      comments: [],
+      exports: []
+    }
+    
+    const updatedTimeline = {
+      ...timeline,
+      audioTracks: [...(timeline.audioTracks || []), track]
+    }
+    
+    const updatedProject = {
+      ...state.currentProject,
+      updatedAt: new Date(),
+      timeline: updatedTimeline
+    }
+    
+    if (state.isAuthenticated && state.user?.id) {
+      queueAutoSave(updatedProject, state.user.id)
+    }
+    
+    return {
+      currentProject: updatedProject,
+      projects: state.projects.map(p => 
+        p.id === state.currentProject!.id ? updatedProject : p
+      )
+    }
+  }),
+
+  updateAudioTrack: (trackId, updates) => set((state) => {
+    if (!state.currentProject || !state.currentProject.timeline) return state
+    
+    const updatedTimeline = {
+      ...state.currentProject.timeline,
+      audioTracks: state.currentProject.timeline.audioTracks.map(t =>
+        t.id === trackId ? { ...t, ...updates } : t
+      )
+    }
+    
+    const updatedProject = {
+      ...state.currentProject,
+      updatedAt: new Date(),
+      timeline: updatedTimeline
+    }
+    
+    if (state.isAuthenticated && state.user?.id) {
+      queueAutoSave(updatedProject, state.user.id)
+    }
+    
+    return {
+      currentProject: updatedProject,
+      projects: state.projects.map(p => 
+        p.id === state.currentProject!.id ? updatedProject : p
+      )
+    }
+  }),
+
+  deleteAudioTrack: (trackId) => set((state) => {
+    if (!state.currentProject || !state.currentProject.timeline) return state
+    
+    const updatedTimeline = {
+      ...state.currentProject.timeline,
+      audioTracks: state.currentProject.timeline.audioTracks.filter(t => t.id !== trackId)
+    }
+    
+    const updatedProject = {
+      ...state.currentProject,
+      updatedAt: new Date(),
+      timeline: updatedTimeline
+    }
+    
+    if (state.isAuthenticated && state.user?.id) {
+      queueAutoSave(updatedProject, state.user.id)
+    }
+    
+    return {
+      currentProject: updatedProject,
+      projects: state.projects.map(p => 
+        p.id === state.currentProject!.id ? updatedProject : p
+      )
+    }
+  }),
+
+  addAudioClip: (trackId, clip) => set((state) => {
+    if (!state.currentProject || !state.currentProject.timeline) return state
+    
+    const updatedTimeline = {
+      ...state.currentProject.timeline,
+      audioTracks: state.currentProject.timeline.audioTracks.map(t =>
+        t.id === trackId 
+          ? { ...t, clips: [...t.clips, clip] }
+          : t
+      )
+    }
+    
+    const updatedProject = {
+      ...state.currentProject,
+      updatedAt: new Date(),
+      timeline: updatedTimeline
+    }
+    
+    if (state.isAuthenticated && state.user?.id) {
+      queueAutoSave(updatedProject, state.user.id)
+    }
+    
+    return {
+      currentProject: updatedProject,
+      projects: state.projects.map(p => 
+        p.id === state.currentProject!.id ? updatedProject : p
+      )
+    }
+  }),
+
+  updateAudioClip: (trackId, clipId, updates) => set((state) => {
+    if (!state.currentProject || !state.currentProject.timeline) return state
+    
+    const updatedTimeline = {
+      ...state.currentProject.timeline,
+      audioTracks: state.currentProject.timeline.audioTracks.map(t =>
+        t.id === trackId
+          ? {
+              ...t,
+              clips: t.clips.map(c =>
+                c.id === clipId ? { ...c, ...updates } : c
+              )
+            }
+          : t
+      )
+    }
+    
+    const updatedProject = {
+      ...state.currentProject,
+      updatedAt: new Date(),
+      timeline: updatedTimeline
+    }
+    
+    if (state.isAuthenticated && state.user?.id) {
+      queueAutoSave(updatedProject, state.user.id)
+    }
+    
+    return {
+      currentProject: updatedProject,
+      projects: state.projects.map(p => 
+        p.id === state.currentProject!.id ? updatedProject : p
+      )
+    }
+  }),
+
+  deleteAudioClip: (trackId, clipId) => set((state) => {
+    if (!state.currentProject || !state.currentProject.timeline) return state
+    
+    const updatedTimeline = {
+      ...state.currentProject.timeline,
+      audioTracks: state.currentProject.timeline.audioTracks.map(t =>
+        t.id === trackId
+          ? {
+              ...t,
+              clips: t.clips.filter(c => c.id !== clipId)
+            }
+          : t
+      )
+    }
+    
+    const updatedProject = {
+      ...state.currentProject,
+      updatedAt: new Date(),
+      timeline: updatedTimeline
+    }
+    
+    if (state.isAuthenticated && state.user?.id) {
+      queueAutoSave(updatedProject, state.user.id)
+    }
+    
+    return {
+      currentProject: updatedProject,
+      projects: state.projects.map(p => 
+        p.id === state.currentProject!.id ? updatedProject : p
+      )
+    }
+  }),
   
   // Analysis actions
   setIdeaAnalysis: (analysis) => set({ ideaAnalysis: analysis }),
@@ -462,8 +702,13 @@ export const useAppStore = create<AppState>((set, get) => ({
   // UI actions
   setActiveTab: (tab) => set({ activeTab: tab }),
   setSelectedClip: (clip) => set({ selectedClip: clip }),
-  setDrawerOpen: (open) => set({ isDrawerOpen: open }),
+  setDrawerOpen: (open, mode) => set({ isDrawerOpen: open, drawerMode: mode || null }),
   setProjectManagerOpen: (open) => set({ isProjectManagerOpen: open }),
+  setAudioDrawerOpen: (open, trackId, time) => set({ 
+    isAudioDrawerOpen: open,
+    activeAudioTrackId: trackId || null,
+    activeAudioTime: time !== undefined ? time : null
+  }),
   setShowAuthModal: (open) => set({ showAuthModal: open }),
   setShowProfileSettingsModal: (open) => set({ showProfileSettingsModal: open }),
   setPendingIdea: (idea) => set({ pendingIdea: idea }),

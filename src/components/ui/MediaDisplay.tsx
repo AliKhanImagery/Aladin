@@ -93,7 +93,8 @@ export function MediaDisplay({
           onError={handleError}
           onLoadedData={handleLoad}
           controls
-          preload="metadata"
+          preload="auto"
+          playsInline
         >
           Your browser does not support the video tag.
         </video>

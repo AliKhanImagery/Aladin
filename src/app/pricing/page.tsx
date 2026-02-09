@@ -129,7 +129,7 @@ export default function PricingPage() {
                 <span className="font-mono text-brand-emerald">{CREDIT_COSTS.VIDEO_GENERATION}c</span>
               </div>
               <div className="flex items-center justify-between p-3 bg-white/5 rounded-lg">
-                <span className="text-white/80">Nano Banana (Fast)</span>
+                <span className="text-white/80">Nano Banana (Pro / Fast)</span>
                 <span className="font-mono text-brand-emerald">{CREDIT_COSTS.NANO_BANANA}c</span>
               </div>
               <div className="flex items-center justify-between p-3 bg-white/5 rounded-lg">
