@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { fal } from '@fal-ai/client'
 
-// Initialize Fal client
-fal.config({
-  credentials: process.env.NEXT_PUBLIC_FAL_KEY, // Use server-side key if available, or client key
-})
+// Server-side only: do not use NEXT_PUBLIC_* for API keys
+if (process.env.FAL_KEY) {
+  fal.config({ credentials: process.env.FAL_KEY })
+}
 
 export async function POST(req: NextRequest) {
   try {

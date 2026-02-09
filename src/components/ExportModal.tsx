@@ -180,7 +180,8 @@ export default function ExportModal({ isOpen, onClose, project, clips }: ExportM
           'output.mp4'
         ])
         const mp4Data = await ffmpeg.readFile('output.mp4') as Uint8Array
-        finalBlob = new Blob([mp4Data], { type: 'video/mp4' })
+        // Copy into a Blob-friendly buffer (avoids SharedArrayBuffer/ArrayBuffer type mismatch)
+        finalBlob = new Blob([mp4Data.slice()], { type: 'video/mp4' })
         extension = 'mp4'
       } catch (encodeErr) {
         console.warn('MP4 encode failed:', encodeErr)
