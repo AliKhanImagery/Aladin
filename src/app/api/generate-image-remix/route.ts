@@ -130,12 +130,21 @@ export async function POST(request: NextRequest) {
       seed,
       project_id,
       clip_id,
-      imageModel = 'flux-2-pro' // New parameter for multi-model dispatching
+      imageModel = 'flux-2-pro', // New parameter for multi-model dispatching
+      image_url // Legacy support / singular input
     } = requestBody
     
     mode = requestMode
 
-    // Step 2: Quick Storage Check (warning only, don't block generation)
+    // Normalize reference images: combine reference_image_urls and image_url
+    let rawReferenceUrls = Array.isArray(reference_image_urls) ? reference_image_urls : []
+    if (image_url && typeof image_url === 'string' && !rawReferenceUrls.includes(image_url)) {
+      rawReferenceUrls = [image_url, ...rawReferenceUrls]
+    }
+
+    const sanitizedReferenceUrls = rawReferenceUrls
+      .filter((url: any) => typeof url === 'string' && url.trim().length > 0)
+      .map((url: any) => url.trim())
     const storageReady = await quickStorageCheck(userId)
     if (!storageReady) {
       console.warn('⚠️ Image generation API: Storage check failed, but proceeding with generation.')
@@ -165,18 +174,11 @@ export async function POST(request: NextRequest) {
     // Use cleaned prompt, fallback to sanitized if cleaning removes everything
     const finalPrompt = cleanedPrompt.length > 10 ? cleanedPrompt : sanitizedPrompt
     
-    const sanitizedReferenceUrls = Array.isArray(reference_image_urls)
-      ? reference_image_urls
-          .filter((url) => typeof url === 'string' && url.trim().length > 0)
-          .map((url) => url.trim())
-      : []
-    
     console.log(`🔍 [generate-image-remix] Request received:`, {
       mode: requestMode,
       imageModel,
-      hasReferenceUrls: reference_image_urls?.length > 0,
-      referenceUrlCount: reference_image_urls?.length || 0,
-      sanitizedCount: sanitizedReferenceUrls.length,
+      hasReferenceUrls: sanitizedReferenceUrls.length > 0,
+      referenceUrlCount: sanitizedReferenceUrls.length,
       validUrls: sanitizedReferenceUrls.filter((url) => url.startsWith('http')).length
     })
 
@@ -187,9 +189,29 @@ export async function POST(request: NextRequest) {
         ? aspect_ratio
         : '16:9'
 
+    // Convert aspect_ratio to explicit width/height (multiples of 16, required by Fal.ai)
+    let width: number, height: number
+    switch (aspectRatioFormatted) {
+      case '16:9':
+        width = 1920   // 1920x1080 = 2.07MP
+        height = 1080
+        break
+      case '9:16':
+        width = 1080   // 1080x1920 = 2.07MP
+        height = 1920
+        break
+      case '1:1':
+        width = 1024   // 1024x1024 = 1.05MP
+        height = 1024
+        break
+      default:
+        width = 1920
+        height = 1080
+    }
+
     // Build Fal AI input object based on mode and model
     let falInput: any = {
-      aspect_ratio: aspectRatioFormatted,
+      // Common parameters
     }
     
     let endpoint = ''
@@ -199,6 +221,7 @@ export async function POST(request: NextRequest) {
       // Nano Banana Pro: fal-ai/nano-banana
       endpoint = 'fal-ai/nano-banana'
       falInput.prompt = finalPrompt
+      falInput.aspect_ratio = aspectRatioFormatted
       if (mode === 'remix' || mode === 'edit') {
         falInput.image_url = sanitizedReferenceUrls[0]
       }
@@ -207,12 +230,14 @@ export async function POST(request: NextRequest) {
       const isEdit = (mode === 'remix' || mode === 'edit') && sanitizedReferenceUrls.length > 0
       endpoint = isEdit ? 'fal-ai/gemini-25-flash-image/edit' : 'fal-ai/gemini-25-flash-image'
       falInput.prompt = finalPrompt
+      // Gemini Flash Image doesn't strictly accept aspect_ratio enum in all versions, but let's pass it
+      // It handles dimensions automatically or via aspect_ratio param
       if (isEdit) {
         falInput.image_urls = sanitizedReferenceUrls
       }
     } else if (imageModel === 'reeve') {
       // Reeve Strategy: Naturalistic, story-driven
-      endpoint = 'fal-ai/reve/text-to-image' // Defaulting to Reve for Reeve artistic style
+      endpoint = 'fal-ai/reve/text-to-image' 
       
       if (mode === 'remix') {
         endpoint = 'fal-ai/reve/remix'
@@ -223,6 +248,7 @@ export async function POST(request: NextRequest) {
       }
       
       falInput.prompt = finalPrompt
+      falInput.aspect_ratio = aspectRatioFormatted
     } else {
       // Default / FLUX.2 Pro Strategy
       // FIX: If mode is edit/remix but no reference images, fallback to text-to-image
@@ -233,31 +259,13 @@ export async function POST(request: NextRequest) {
       if (effectiveMode === 'text-to-image') {
         endpoint = 'fal-ai/flux-2-pro'
         falInput.prompt = finalPrompt
+        // FIX: Flux Pro Text-to-Image needs explicit image_size to respect aspect ratio correctly
+        // otherwise it defaults to square/small
+        falInput.image_size = { width, height }
       } else {
       // Use flux-2-pro/edit for remix and edit modes for best instruction following
       endpoint = 'fal-ai/flux-2-pro/edit'
       falInput.prompt = finalPrompt
-      
-      // Convert aspect_ratio to explicit width/height (multiples of 16, required by Fal.ai)
-      // Flux 2 Pro Edit requires explicit dimensions; if omitted, defaults to input image size (often low-res)
-      let width: number, height: number
-      switch (aspectRatioFormatted) {
-        case '16:9':
-          width = 1920   // 1920x1080 = 2.07MP (within 2MP recommendation, multiples of 16)
-          height = 1080
-          break
-        case '9:16':
-          width = 1080   // 1080x1920 = 2.07MP (portrait)
-          height = 1920
-          break
-        case '1:1':
-          width = 1024   // 1024x1024 = 1.05MP (square)
-          height = 1024
-          break
-        default:
-          width = 1920
-          height = 1080
-      }
       
       if (sanitizedReferenceUrls.length > 0) {
         // FIX: flux-2-pro/edit expects image_urls (plural array) as required field
@@ -269,19 +277,14 @@ export async function POST(request: NextRequest) {
         falInput.height = height
         
         // Warn if multiple images may exceed Fal.ai's 9 megapixel limit
-        // Fal.ai limit: First image ~4MP, additional images ~1MP each, output ~4MP = 9MP total
-        // With multiple images, user may need to reduce count if generation fails
         if (sanitizedReferenceUrls.length > 1) {
-          console.warn(`⚠️ Using ${sanitizedReferenceUrls.length} reference images. Fal.ai has a 9 megapixel limit (first image ~4MP, additional ~1MP each, output ~4MP). If generation fails with "Requested area too large", try reducing to 1-2 images.`)
+          console.warn(`⚠️ Using ${sanitizedReferenceUrls.length} reference images.`)
         }
       } else {
         // Safety: This shouldn't happen due to effectiveMode check, but add fallback
         console.warn('⚠️ flux-2-pro/edit mode requested but no reference images - this should not happen')
         endpoint = 'fal-ai/flux-2-pro' // Fallback to text-to-image endpoint
-        
-        // Remove width/height for text-to-image endpoint (doesn't accept these parameters)
-        delete falInput.width
-        delete falInput.height
+        falInput.image_size = { width, height }
       }
       }
       
