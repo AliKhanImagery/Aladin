@@ -134,6 +134,14 @@ export async function POST(request: NextRequest) {
       image_url // Legacy support / singular input
     } = requestBody
     
+    console.log(`[API generate-image-remix] Received request:`, {
+        mode: requestMode,
+        aspect_ratio,
+        reference_image_urls_count: reference_image_urls?.length,
+        image_url: !!image_url,
+        imageModel
+    });
+
     mode = requestMode
 
     // Normalize reference images: combine reference_image_urls and image_url
@@ -179,7 +187,8 @@ export async function POST(request: NextRequest) {
       imageModel,
       hasReferenceUrls: sanitizedReferenceUrls.length > 0,
       referenceUrlCount: sanitizedReferenceUrls.length,
-      validUrls: sanitizedReferenceUrls.filter((url) => url.startsWith('http')).length
+      validUrls: sanitizedReferenceUrls.filter((url) => url.startsWith('http')).length,
+      promptPreview: (typeof finalPrompt === 'string' ? finalPrompt : '').substring(0, 200)
     })
 
     // Validate aspect ratio
@@ -270,7 +279,7 @@ export async function POST(request: NextRequest) {
       if (sanitizedReferenceUrls.length > 0) {
         // FIX: flux-2-pro/edit expects image_urls (plural array) as required field
         falInput.image_urls = sanitizedReferenceUrls.slice(0, 8) // Support up to 8 reference images
-        falInput.strength = 0.85 // Maintain high consistency
+        falInput.strength = 0.92 // Higher = stricter adherence to reference images (0.85–0.95 recommended)
         
         // Set width/height only for edit mode (flux-2-pro/edit requires explicit dimensions)
         falInput.width = width
