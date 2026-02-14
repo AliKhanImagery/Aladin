@@ -37,9 +37,10 @@ export async function POST(request: NextRequest) {
     const aspectRatioFormatted = typeof aspect_ratio === 'string' ? aspect_ratio : '16:9'
     
     const useFlash = variant === 'flash'
+    const isEdit = mode !== 'text-to-image' && input_images.length > 0
     const endpoint = useFlash
-      ? (mode === 'text-to-image' ? 'fal-ai/gemini-25-flash-image' : 'fal-ai/gemini-25-flash-image/edit')
-      : 'fal-ai/nano-banana'
+      ? (isEdit ? 'fal-ai/gemini-25-flash-image/edit' : 'fal-ai/gemini-25-flash-image')
+      : (isEdit ? 'fal-ai/nano-banana/edit' : 'fal-ai/nano-banana')
     console.log(`🍌 Generating image with ${useFlash ? 'Nano Banana (Fast)' : 'Nano Banana Pro'}:`, {
       endpoint,
       mode,
@@ -72,9 +73,12 @@ export async function POST(request: NextRequest) {
           { status: 400 }
         )
       }
-      const input: Record<string, unknown> = useFlash
-        ? { prompt, image_urls: input_images, aspect_ratio: aspectRatioFormatted, ...(seed && { seed }) }
-        : { prompt, input_images: input_images, aspect_ratio: aspectRatioFormatted, ...(seed && { seed }) }
+      const input: Record<string, unknown> = {
+        prompt,
+        image_urls: input_images,
+        aspect_ratio: aspectRatioFormatted,
+        ...(seed && { seed }),
+      }
       result = await fal.subscribe(endpoint as any, {
         input,
         logs: true,

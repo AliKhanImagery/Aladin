@@ -227,12 +227,16 @@ export async function POST(request: NextRequest) {
 
     // Model-Specific Dispatching Logic
     if (imageModel === 'nano-banana') {
-      // Nano Banana Pro: fal-ai/nano-banana
-      endpoint = 'fal-ai/nano-banana'
-      falInput.prompt = finalPrompt
-      falInput.aspect_ratio = aspectRatioFormatted
-      if (mode === 'remix' || mode === 'edit') {
-        falInput.image_url = sanitizedReferenceUrls[0]
+      // Nano Banana Pro: fal-ai/nano-banana (edit expects image_urls array)
+      if ((mode === 'remix' || mode === 'edit') && sanitizedReferenceUrls.length > 0) {
+        endpoint = 'fal-ai/nano-banana/edit'
+        falInput.prompt = finalPrompt
+        falInput.aspect_ratio = aspectRatioFormatted
+        falInput.image_urls = sanitizedReferenceUrls
+      } else {
+        endpoint = 'fal-ai/nano-banana'
+        falInput.prompt = finalPrompt
+        falInput.aspect_ratio = aspectRatioFormatted
       }
     } else if (imageModel === 'nano-banana-flash') {
       // Nano Banana (Fast): fal-ai/gemini-25-flash-image
@@ -246,11 +250,11 @@ export async function POST(request: NextRequest) {
       }
     } else if (imageModel === 'reeve') {
       // Reeve Strategy: Naturalistic, story-driven
-      endpoint = 'fal-ai/reve/text-to-image' 
+      endpoint = 'fal-ai/reve/text-to-image'
       
       if (mode === 'remix') {
         endpoint = 'fal-ai/reve/remix'
-        falInput.image_url = sanitizedReferenceUrls[0]
+        falInput.image_urls = sanitizedReferenceUrls
       } else if (mode === 'edit') {
         endpoint = 'fal-ai/reve/edit'
         falInput.image_url = sanitizedReferenceUrls[0]

@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
     ` : ''}
 
     1. DYNAMIC PACING & ENGINE LOGIC:
-    You must allocate clips with varied durations to create "Visual Pacing." 
+    You must allocate clips/cinematic shots with varied durations to create "Visual Pacing." 
     - Total duration of all clips MUST equal exactly ${targetRuntime} seconds.
     - Video Engine Selection:
         * "kling": Use for narrative, character acting, and wide establishing shots. (Duration: 3-5 seconds).

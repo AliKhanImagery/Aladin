@@ -36,14 +36,15 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Build character reference list
+    // Build character reference list (include visualDna for prompt consistency)
     const characterList = assetContext?.characters?.map((char: any) => ({
       id: char.id,
       name: char.name,
       role: char.role,
       description: char.description,
       appearanceDetails: char.appearanceDetails || char.description,
-      assetUrl: char.assetUrl
+      assetUrl: char.assetUrl,
+      visualDna: char.visualDna
     })) || []
 
     if (characterList.length === 0) {

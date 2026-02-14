@@ -37,11 +37,12 @@ import AssetLibraryModal from './AssetLibraryModal'
 
 interface IdeaAnalysisScreenProps {
   analysis: IdeaAnalysis
+  aspectRatio?: '16:9' | '9:16' | '1:1'
   onContinue: (assetContext: AssetContext) => void
   onBack: () => void
 }
 
-export default function IdeaAnalysisScreen({ analysis, onContinue, onBack }: IdeaAnalysisScreenProps) {
+export default function IdeaAnalysisScreen({ analysis, aspectRatio = '16:9', onContinue, onBack }: IdeaAnalysisScreenProps) {
   const { user, updateAnalysisSettings, updateAssetAction } = useAppStore()
   
   const [tone, setTone] = useState<string[]>(analysis.analysis.recommendedTone || [])
@@ -252,7 +253,7 @@ export default function IdeaAnalysisScreen({ analysis, onContinue, onBack }: Ide
         body: JSON.stringify({
           mode: 'text-to-image',
           prompt: `Professional production asset: ${asset.prompt}. Studio quality, photorealistic, 8k resolution.`,
-          aspect_ratio: '16:9',
+          aspect_ratio: aspectRatio,
         }),
       })
 
@@ -305,10 +306,8 @@ export default function IdeaAnalysisScreen({ analysis, onContinue, onBack }: Ide
       return
     }
 
-    // Get base image - prefer uploaded file, then result image, then base image
-    const baseImageUrl = asset.uploadedFile 
-      ? URL.createObjectURL(asset.uploadedFile)
-      : asset.resultImageUrl || asset.baseImageUrl
+    // Get base image - prefer result image (public URL), then base image
+    const baseImageUrl = asset.resultImageUrl || asset.baseImageUrl
 
     if (!baseImageUrl) {
       toast.error('Please upload or generate an image first to remix')
@@ -332,7 +331,7 @@ export default function IdeaAnalysisScreen({ analysis, onContinue, onBack }: Ide
         body: JSON.stringify({
           mode: 'remix',
           prompt: `Remix this asset: ${asset.prompt}. Maintain visual consistency while applying new style. Professional studio quality, 8k resolution.`,
-          aspect_ratio: '16:9',
+          aspect_ratio: aspectRatio,
           image_url: baseImageUrl, // Reve Remix uses singular image_url
         }),
       })
@@ -457,7 +456,10 @@ export default function IdeaAnalysisScreen({ analysis, onContinue, onBack }: Ide
           })
           const data = await res.json().catch(() => ({}))
           const dna = data?.dna
-          if (dna) dnaByAssetId[asset.assetId] = dna
+          if (dna) {
+             console.log(`🧬 Visual DNA Extracted for ${asset.name}:`, dna)
+             dnaByAssetId[asset.assetId] = dna
+          }
         } catch (err) {
           console.warn('Vision DNA extraction failed for asset', asset.assetId, err)
         }

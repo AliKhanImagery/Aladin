@@ -5,9 +5,9 @@ const GEMINI_VISION_MODEL = 'gemini-1.5-flash'
 type AssetType = 'character' | 'product' | 'object'
 
 const PROMPTS: Record<AssetType, string> = {
-  character: `Look at this person. In ONE short sentence, describe their appearance only: face (e.g. clean shaved, beard), hair (length, color), skin, and clothing. Be concise and visual. Example: "Clean shaved with medium length black hair, wearing black coat and white shalwar kamiz." Reply with only that sentence, no quotes or preamble.`,
-  product: `Look at this product or object. In ONE short sentence, describe its key visual details: shape, color, material, and distinctive features. Be concise. Reply with only that sentence, no quotes or preamble.`,
-  object: `Look at this object. In ONE short sentence, describe its key visual details: shape, color, material, and distinctive features. Be concise. Reply with only that sentence, no quotes or preamble.`,
+  character: `Look at this person. In ONE ultra-short sentence (max 25 characters), summarize only the most vital visual details: face/hair/clothing. Example: "Man in black coat". Reply with only that sentence, no quotes or preamble.`,
+  product: `Look at this product. In ONE ultra-short sentence (max 25 characters), summarize its key visual details. Example: "Red soda can". Reply with only that sentence, no quotes or preamble.`,
+  object: `Look at this object. In ONE ultra-short sentence (max 25 characters), summarize its key visual details. Example: "Silver wristwatch". Reply with only that sentence, no quotes or preamble.`,
 }
 
 /**
@@ -87,7 +87,12 @@ export async function POST(request: NextRequest) {
 
     const result = await response.json()
     const text = result?.candidates?.[0]?.content?.parts?.[0]?.text
-    const dna = typeof text === 'string' ? text.trim() : ''
+    let dna = typeof text === 'string' ? text.trim() : ''
+
+    // Enforce strict 25 character limit manually if model exceeds it
+    if (dna.length > 25) {
+      dna = dna.slice(0, 25).trim()
+    }
 
     return NextResponse.json({ dna: dna || '' })
   } catch (e: any) {

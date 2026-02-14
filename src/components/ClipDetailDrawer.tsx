@@ -4,12 +4,10 @@ import { useState, useEffect, useRef } from 'react'
 import { useAppStore } from '@/lib/store'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
-import { Input } from '@/components/ui/input'
-import { X, Play, Settings, Image, Video, Zap, Loader2, Plus, Info, Maximize2, Sparkles, Palette, Trash2, Upload, ChevronRight, Wand2, Clock, History, Mic, Music } from 'lucide-react'
-import { FileUpload } from '@/components/ui/fileUpload'
+import { X, Play, Image, Video, Loader2, Plus, Maximize2, Sparkles, Upload, History, Mic, Music, Eye } from 'lucide-react'
 import ImageModal from './ImageModal'
 import AssetLibraryModal from './AssetLibraryModal'
-import { saveUserImage, saveUserVideo, saveUserAsset, getUserImages } from '@/lib/userMedia'
+import { saveUserVideo, saveUserAsset, getUserImages } from '@/lib/userMedia'
 
 interface ReferenceAsset {
   url: string;
@@ -142,6 +140,13 @@ export default function ClipDetailDrawer() {
 
       // Fetch generation history for this clip
       fetchHistory()
+      
+      // Auto-populate reference with generated image if available (User Request)
+      if (selectedClip.generatedImage) {
+        setReferenceAssets([{ url: selectedClip.generatedImage }])
+      } else {
+        setReferenceAssets([{ url: '' }])
+      }
     }
   }, [selectedClip?.id, isDrawerOpen, drawerMode])
 
@@ -190,9 +195,9 @@ export default function ClipDetailDrawer() {
   // Auto-scroll to latest item in history strip when history updates
   useEffect(() => {
     if (historyStripRef.current && generationHistory.length > 0) {
-      // Scroll to the rightmost (latest) item
+      // Scroll to the bottom (latest) item
       historyStripRef.current.scrollTo({
-        left: historyStripRef.current.scrollWidth,
+        top: historyStripRef.current.scrollHeight,
         behavior: 'smooth'
       })
     }
@@ -249,6 +254,16 @@ export default function ClipDetailDrawer() {
       imagePrompt: historyItem.prompt || selectedClip.imagePrompt 
     }
     setSelectedClip(updatedClip)
+    
+    // Auto-add to reference assets ONLY if the first slot is empty (User Request)
+    if (historyItem.image_url) {
+      // Only auto-fill the first slot if it's empty. Do not append or overwrite if full.
+      if (referenceAssets.length > 0 && !referenceAssets[0].url) {
+        const newRefs = [...referenceAssets]
+        newRefs[0] = { url: historyItem.image_url }
+        setReferenceAssets(newRefs)
+      }
+    }
     
     // Update prompt text area
     if (historyItem.prompt) {
@@ -599,503 +614,368 @@ export default function ClipDetailDrawer() {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex">
-      {/* Backdrop */}
-      <div className="flex-1 bg-black/50 backdrop-blur-sm" onClick={() => setDrawerOpen(false)} />
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      {/* Backdrop - soft, cinematic */}
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-xl" onClick={() => setDrawerOpen(false)} />
       
-      {/* Omni Drawer */}
-      <div className="w-96 bg-[#1E1F22] border-l border-[#3AAFA9]/20 flex flex-col shadow-2xl">
+      {/* Director Suite - Google Flow / Higgsfield inspired */}
+      <div className="relative w-full max-w-5xl max-h-[90vh] bg-[#0f1114] rounded-2xl border border-white/[0.04] shadow-[0_0_0_1px_rgba(255,255,255,0.03),0_24px_80px_-12px_rgba(0,0,0,0.6)] flex flex-col overflow-hidden">
         
-        {/* 1. THE STAGE (Top) */}
-        <div className="relative bg-[#000000] border-b border-[#3AAFA9]/20 flex flex-col">
-          {/* Main Visual Stage - Fixed Aspect Ratio Container */}
-          <div className="relative w-full aspect-video flex items-center justify-center bg-[#0C0C0C] overflow-hidden group">
-            {activeMode === 'animate' && selectedClip.generatedVideo ? (
-              <video
-                src={selectedClip.generatedVideo}
-                controls
-                preload="auto"
-                playsInline
-                className="w-full h-full object-contain"
-              />
-            ) : selectedClip.generatedImage ? (
-              <>
-              <img 
-                src={selectedClip.generatedImage} 
-                alt={selectedClip.name}
-                  className="w-full h-full object-contain"
-              />
-                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-all flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => {
-                    setModalImageUrl(selectedClip.generatedImage || null)
-                    setIsImageModalOpen(true)
-                  }}
-                    className="bg-black/50 hover:bg-black/70 rounded-full text-white border border-white/20 w-10 h-10"
-                    title="Maximize Preview"
-                >
-                    <Maximize2 className="w-5 h-5" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => handleOpenAssetPicker('clip_media')}
-                    className="bg-black/50 hover:bg-black/70 rounded-full text-white border border-white/20 w-10 h-10"
-                    title="Change Media"
-                >
-                    <Image className="w-5 h-5" />
-                </Button>
-                </div>
-              </>
-            ) : (
-              <div className="flex flex-col items-center justify-center text-gray-600 group cursor-pointer" onClick={() => handleOpenAssetPicker('clip_media')}>
-                {activeMode === 'animate' ? (
-                    <Video className="w-12 h-12 mb-2 opacity-20 group-hover:opacity-40 transition-opacity" />
-                ) : (
-                    <Image className="w-12 h-12 mb-2 opacity-20 group-hover:opacity-40 transition-opacity" />
-                )}
-                <p className="text-xs uppercase tracking-widest font-bold opacity-50 group-hover:opacity-80 transition-opacity mb-2">Empty Canvas</p>
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  className="opacity-0 group-hover:opacity-100 transition-opacity text-xs h-8 border-white/20 text-gray-400 hover:text-white hover:bg-white/5"
-                >
-                  <Upload className="w-3 h-3 mr-1.5" /> Select Media
-                </Button>
-                </div>
-              )}
+        {/* Header - minimal */}
+        <div className="flex items-center justify-between px-6 py-4 shrink-0">
+          <span className="text-sm font-medium text-white/90 truncate">{selectedClip.name}</span>
+          <Button variant="ghost" size="icon" onClick={() => setDrawerOpen(false)} className="h-9 w-9 text-white/50 hover:text-white hover:bg-white/5 rounded-full transition-colors">
+            <X className="w-4 h-4" />
+          </Button>
+        </div>
 
-            {/* Header / Close (Overlay) */}
-            <div className="absolute top-0 left-0 right-0 p-3 flex justify-between items-start bg-gradient-to-b from-black/80 to-transparent pointer-events-none">
-                <span className="text-xs font-bold text-white/80 uppercase tracking-wider drop-shadow-md px-1">{selectedClip.name}</span>
-                <Button variant="ghost" size="icon" onClick={() => setDrawerOpen(false)} className="h-6 w-6 text-white/80 hover:bg-white/10 pointer-events-auto">
-                    <X className="w-4 h-4" />
-                  </Button>
-                </div>
-              </div>
-
-           {/* GENERATIONS STRIP (History) */}
-           {activeMode === 'visualize' && generationHistory.length > 0 && (
-            <div 
-              ref={historyStripRef}
-              className="w-full h-16 bg-[#151619] border-t border-[#3AAFA9]/10 flex items-center gap-2 px-3 overflow-x-auto no-scrollbar"
-            >
-                <div className="flex-shrink-0 text-[10px] uppercase font-bold text-gray-500 mr-2 flex flex-col items-center">
-                    <History className="w-3 h-3 mb-1" />
-                    <span>History</span>
-                </div>
-                {generationHistory.map((historyItem) => (
-                    <button
-                        key={historyItem.id}
-                        onClick={() => handleRestoreHistory(historyItem)}
-                        className={`relative h-12 aspect-square rounded-md overflow-hidden border transition-all flex-shrink-0 ${
-                            selectedClip.generatedImage === historyItem.image_url 
-                                ? 'border-[#00FFF0] ring-1 ring-[#00FFF0]/50' 
-                                : 'border-[#3AAFA9]/20 hover:border-[#00FFF0]/50 opacity-60 hover:opacity-100'
-                        }`}
-                        title={historyItem.prompt}
-                    >
-                        <img src={historyItem.image_url} className="w-full h-full object-cover" />
-                    </button>
-                ))}
-                    </div>
-                  )}
-                    </div>
-
-        {/* 2. MODE SWITCHER */}
-        <div className="flex p-2 gap-2 border-b border-[#3AAFA9]/10 bg-[#151619]">
+        {/* Mode Tabs - underline style, Higgsfield-like */}
+        <div className="flex px-6 gap-6 border-b border-white/[0.04] shrink-0">
           <button
             onClick={() => setActiveMode('visualize')}
-            className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${
+            className={`flex items-center gap-2 py-3.5 text-sm font-medium transition-colors border-b-2 -mb-[1px] ${
               activeMode === 'visualize' 
-                ? 'bg-[#00FFF0] text-black shadow-lg shadow-[#00FFF0]/20' 
-                : 'bg-[#1E1F22] text-gray-400 hover:bg-white/5 hover:text-white'
+                ? 'text-brand-emerald border-brand-emerald' 
+                : 'text-white/40 border-transparent hover:text-white/70'
             }`}
           >
-            <Image className="w-3.5 h-3.5" />
+            <Image className="w-4 h-4" />
             Visualize
           </button>
           <button
             onClick={() => setActiveMode('animate')}
-            className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${
+            className={`flex items-center gap-2 py-3.5 text-sm font-medium transition-colors border-b-2 -mb-[1px] ${
               activeMode === 'animate' 
-                ? 'bg-[#00FFF0] text-black shadow-lg shadow-[#00FFF0]/20' 
-                : 'bg-[#1E1F22] text-gray-400 hover:bg-white/5 hover:text-white'
+                ? 'text-brand-emerald border-brand-emerald' 
+                : 'text-white/40 border-transparent hover:text-white/70'
             }`}
           >
-            <Video className="w-3.5 h-3.5" />
+            <Video className="w-4 h-4" />
             Animate
           </button>
           <button
             onClick={() => setActiveMode('dub')}
-            className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${
+            className={`flex items-center gap-2 py-3.5 text-sm font-medium transition-colors border-b-2 -mb-[1px] ${
               activeMode === 'dub' 
-                ? 'bg-[#00FFF0] text-black shadow-lg shadow-[#00FFF0]/20' 
-                : 'bg-[#1E1F22] text-gray-400 hover:bg-white/5 hover:text-white'
+                ? 'text-brand-emerald border-brand-emerald' 
+                : 'text-white/40 border-transparent hover:text-white/70'
             }`}
           >
-            <Mic className="w-3.5 h-3.5" />
+            <Mic className="w-4 h-4" />
             Lip Sync
           </button>
-                  </div>
+        </div>
+        
+        {/* Stage - cinematic output area */}
+        <div className="relative flex-1 min-h-0 flex flex-col bg-[#08090b]">
+          {/* Main Preview Area */}
+          <div className="relative flex-1 flex flex-col min-h-0">
+             {/* Output Header */}
+             <div className="absolute top-4 left-6 z-10 pointer-events-none">
+                <span className="px-2 py-1 rounded bg-black/40 text-[10px] font-medium text-white/40 uppercase tracking-wider border border-white/5 backdrop-blur-sm">
+                  {activeMode === 'visualize' ? 'Result Preview' : 'Video Output'}
+                </span>
+             </div>
 
-        {/* 3. INSPECTOR (Scrollable Controls) */}
-        <div className="flex-1 overflow-y-auto p-5 space-y-6 custom-scrollbar">
-          
-          {/* --- VISUALIZE MODE CONTROLS --- */}
-          {activeMode === 'visualize' && (
-            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
-              
-              {/* Prompt Section */}
-              <div className="space-y-2">
-                <label className="text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-2">
-                   <Wand2 className="w-3 h-3 text-[#00FFF0]" />
-                   The Director (Prompt)
-                </label>
-                <Textarea
-                    value={localImagePrompt}
-                    onChange={(e) => handleImagePromptChange(e.target.value)}
-                  placeholder="Describe what you want to see..."
-                  className="bg-[#0C0C0C] border-[#3AAFA9]/20 focus:border-[#00FFF0] min-h-[100px] text-sm resize-none"
-                />
-              </div>
+             <div className="w-full flex-1 flex items-center justify-center overflow-hidden group p-4">
+               <div className="w-full max-w-4xl mx-auto aspect-video max-h-full bg-black/40 rounded-lg overflow-hidden flex items-center justify-center ring-1 ring-white/[0.08] shadow-2xl relative">
+               {activeMode === 'animate' && selectedClip.generatedVideo ? (
+                 <video
+                   src={selectedClip.generatedVideo}
+                   controls
+                   preload="auto"
+                   playsInline
+                   className="w-full h-full object-contain"
+                 />
+               ) : selectedClip.generatedImage ? (
+                 <>
+                 <img 
+                   src={selectedClip.generatedImage} 
+                   alt={selectedClip.name}
+                     className="w-full h-full object-contain"
+                 />
+                   <div className="absolute inset-0 bg-black/0 group-hover:bg-black/50 transition-all flex items-center justify-center gap-3 opacity-0 group-hover:opacity-100">
+                   <Button
+                     variant="ghost"
+                     size="icon"
+                     className="h-10 w-10 rounded-full bg-black/60 text-white hover:bg-brand-emerald hover:text-black transition-all"
+                     onClick={() => window.open(selectedClip.generatedImage!, '_blank')}
+                     title="View full size"
+                   >
+                     <Eye className="w-5 h-5" />
+                   </Button>
+                   </div>
+                 </>
+               ) : (
+                   <div className="flex flex-col items-center justify-center text-center p-6 w-full h-full bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-white/[0.03] to-transparent">
+                     <div className="w-16 h-16 rounded-2xl bg-white/[0.03] flex items-center justify-center mb-4 ring-1 ring-white/[0.05]">
+                       <Image className="w-6 h-6 text-white/20" />
+                     </div>
+                   <p className="text-sm font-medium text-white/40 mb-1">Canvas Empty</p>
+                   <span className="text-xs text-white/20">Enter a prompt below to generate</span>
+                   </div>
+                 )}
+               </div>
+             </div>
+          </div>
 
-              {/* Influences Section (Assets) */}
-              <div className="space-y-3">
-                 <label className="text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-2">
-                   <Sparkles className="w-3 h-3 text-[#00FFF0]" />
-                   Influences (Reference Assets)
-                  </label>
-                
-                <div className="grid grid-cols-3 gap-2">
-                    {referenceAssets.map((asset, idx) => (
-                        <div key={idx} className="relative aspect-square bg-[#0C0C0C] rounded-lg border border-[#3AAFA9]/20 overflow-hidden group">
-                            {asset.url ? (
-                                <>
-                                    <img src={asset.url} className="w-full h-full object-cover" />
-                                    {asset.name && (
-                                      <div className="absolute bottom-0 left-0 right-0 bg-black/70 backdrop-blur-sm px-2 py-1">
-                                        <p className="text-[9px] font-medium text-white truncate text-center">{asset.name}</p>
-                      </div>
-                    )}
-                                    <button 
-                                        onClick={() => removeReferenceAsset(idx)}
-                                        className="absolute top-1 right-1 bg-black/50 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500"
-                                    >
-                                        <X className="w-3 h-3" />
-                                    </button>
-                                </>
-                            ) : (
-                                <button 
-                                    onClick={() => handleOpenAssetPicker('image_reference', idx)}
-                                    className="w-full h-full flex items-center justify-center text-gray-600 hover:text-[#00FFF0] hover:bg-[#00FFF0]/5 transition-colors"
-                                >
-                                    <Plus className="w-5 h-5" />
-                                </button>
-                        )}
-                      </div>
-                    ))}
-                    {referenceAssets.length < 3 && (
-                        <button 
-                            onClick={addReferenceAsset}
-                            className="aspect-square rounded-lg border border-dashed border-[#3AAFA9]/20 flex items-center justify-center text-gray-600 hover:text-[#00FFF0] hover:border-[#00FFF0]/50 transition-colors"
+           {/* History strip - Bottom of Stage */}
+           {activeMode === 'visualize' && generationHistory.length > 0 && (
+            <div 
+              ref={historyStripRef}
+              className="w-full px-6 py-2 flex items-center gap-2 overflow-x-auto no-scrollbar shrink-0 border-t border-white/[0.04] bg-[#0f1114] opacity-75 hover:opacity-100 transition-opacity"
+            >
+                <span className="text-[10px] font-medium text-white/30 shrink-0 flex items-center gap-1">
+                  <History className="w-3 h-3" />
+                  History
+                </span>
+                {generationHistory.map((historyItem) => (
+                    <div key={historyItem.id} className="relative group/history">
+                        <button
+                            onClick={() => handleRestoreHistory(historyItem)}
+                            className={`relative h-8 w-8 rounded-md overflow-hidden flex-shrink-0 transition-all ${
+                                selectedClip.generatedImage === historyItem.image_url 
+                                    ? 'ring-1 ring-brand-emerald ring-offset-1 ring-offset-[#0f1114]' 
+                                    : 'opacity-60 hover:opacity-100 hover:ring-1 hover:ring-white/20'
+                            }`}
+                            title={historyItem.prompt}
                         >
-                            <Plus className="w-4 h-4" />
+                            <img src={historyItem.image_url} className="w-full h-full object-cover" />
                         </button>
-                    )}
+                        {/* Quick-Seed Interaction */}
+                        <div className="absolute -top-1 -right-1 opacity-0 group-hover/history:opacity-100 transition-opacity z-10 pointer-events-none">
+                            <div className="bg-brand-emerald text-brand-obsidian rounded-full p-[1px] shadow-sm border border-white/10">
+                                <Plus className="w-2 h-2" />
+                            </div>
+                        </div>
                     </div>
-                </div>
+                ))}
+            </div>
+          )}
+        </div>
 
-              {/* Engine Settings (Collapsed/Simplified) */}
-              <div className="pt-4 border-t border-[#3AAFA9]/10">
-                <div className="flex items-center justify-between mb-3">
-                    <label className="text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-2">
-                        <Settings className="w-3 h-3 text-[#00FFF0]" />
-                        Engine Settings
-                  </label>
-                          </div>
+        {/* Secondary controls - Model Selector Only */}
+        <div className="px-6 py-2 border-t border-white/[0.06] bg-[#141516] shrink-0 flex items-center justify-end min-h-[40px]">
+          {activeMode === 'visualize' && (
+              <div className="flex items-center gap-3 bg-black/20 rounded-lg p-1 pr-3 border border-white/5">
+                <select 
+                  value={imageModel}
+                  onChange={(e: any) => setImageModel(e.target.value)}
+                  className="bg-transparent text-xs text-white/80 border-0 rounded px-2 py-1 outline-none focus:ring-0 cursor-pointer font-medium hover:text-white"
+                >
+                  <option value="flux-2-pro">Flux 2 Pro</option>
+                  <option value="nano-banana">Nano Pro</option>
+                  <option value="nano-banana-flash">Nano Fast</option>
+                  <option value="reeve">Reeve</option>
+                </select>
+                <div className="w-px h-3 bg-white/10" />
+                <span className="text-[10px] font-medium text-white/40 tracking-wider">{aspectRatio}</span>
                 
-                <div className="grid grid-cols-2 gap-2">
-                    <select 
-                        value={imageModel}
-                        onChange={(e: any) => setImageModel(e.target.value)}
-                        className="bg-[#0C0C0C] text-xs text-white border border-[#3AAFA9]/20 rounded-md p-2 outline-none focus:border-[#00FFF0]"
-                    >
-                        <option value="flux-2-pro">Flux 2 Pro (Premium)</option>
-                        <option value="nano-banana">Nano Banana Pro</option>
-                        <option value="nano-banana-flash">Nano Banana (Fast)</option>
-                        <option value="reeve">Reeve (Artistic)</option>
-                    </select>
-                    
-                    <select 
-                        disabled // Aspect ratio locked to project for now
-                        className="bg-[#0C0C0C] text-xs text-gray-400 border border-[#3AAFA9]/10 rounded-md p-2 outline-none cursor-not-allowed"
-                    >
-                        <option>{aspectRatio} (Locked)</option>
-                    </select>
-                  </div>
-
-                {/* Sub-modes for Reeve */}
                 {imageModel === 'reeve' && (
-                  <div className="mt-2 space-y-2">
-                    <div className="flex gap-1">
+                  <>
+                    <div className="w-px h-3 bg-white/10 mx-1" />
+                    <div className="flex gap-0.5 bg-white/5 rounded p-0.5">
                       {(['text-to-image', 'edit', 'remix'] as const).map((m) => (
                         <button
                           key={m}
                           onClick={() => setRemixMode(m)}
-                          className={`flex-1 py-1.5 text-[10px] uppercase font-bold rounded transition-all ${
-                            remixMode === m
-                              ? 'bg-[#00FFF0]/20 text-[#00FFF0] border border-[#00FFF0]/50'
-                              : 'bg-[#0C0C0C] text-gray-500 border border-[#3AAFA9]/10 hover:text-gray-300'
+                          className={`px-2 py-0.5 text-[9px] uppercase font-bold rounded-sm transition-all ${
+                            remixMode === m ? 'bg-brand-emerald text-brand-obsidian' : 'text-white/40 hover:text-white/60'
                           }`}
                         >
-                          {m === 'text-to-image' ? 'Create New' : m === 'edit' ? 'Edit Image' : 'Remix Style'}
+                          {m === 'text-to-image' ? 'New' : m}
                         </button>
                       ))}
                     </div>
-                    <p className="text-[10px] text-gray-500 px-1">
-                      {remixMode === 'text-to-image' && 'Generates a new image from scratch using your prompt.'}
-                      {remixMode === 'edit' && 'Modifies the reference image based on your prompt instructions.'}
-                      {remixMode === 'remix' && 'Blends the reference image structure with new styles.'}
-                    </p>
+                  </>
+                )}
+              </div>
+          )}
+
+          {activeMode === 'dub' && (
+            <div className="w-full flex justify-center">
+              <p className="text-xs font-medium text-white/40 bg-white/5 px-3 py-1.5 rounded-full">
+                Audio &gt; Video (≤10s) extends video automatically
+              </p>
+            </div>
+          )}
+
+          {activeMode === 'animate' && (
+            <div className="flex items-center justify-between w-full animate-in fade-in duration-200">
+              <div className="flex items-center gap-3">
+                <span className="text-[11px] font-medium text-white/40 uppercase tracking-wider">Start</span>
+                <div 
+                  className="w-14 h-9 rounded-md overflow-hidden bg-white/5 cursor-pointer ring-1 ring-white/10 hover:ring-brand-emerald/50 transition-all flex items-center justify-center group"
+                  onClick={() => handleOpenAssetPicker('video_start')}
+                >
+                  {(videoStartImageUrl || selectedClip.generatedImage) ? (
+                    <img src={videoStartImageUrl || selectedClip.generatedImage || ''} className="w-full h-full object-cover" />
+                  ) : (
+                    <Image className="w-3.5 h-3.5 text-white/20 group-hover:text-white/40 transition-colors" />
+                  )}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3 bg-black/20 rounded-lg p-1 border border-white/5">
+                <div className="flex gap-0.5 bg-white/5 rounded p-0.5">
+                  {['kling', 'ltx'].map((m) => (
+                    <button
+                      key={m}
+                      onClick={(e) => { e.preventDefault(); setVideoModel(m as any) }}
+                      className={`px-3 py-1 rounded-sm text-[10px] font-bold uppercase transition-all ${
+                        videoModel === m ? 'bg-brand-emerald text-brand-obsidian shadow-sm' : 'text-white/40 hover:text-white/60'
+                      }`}
+                    >
+                      {m === 'kling' ? 'Kling' : 'LTX'}
+                    </button>
+                  ))}
+                </div>
+                
+                <div className="w-px h-3 bg-white/10" />
+                
+                {videoModel === 'ltx' ? (
+                  <div className="flex items-center gap-2 px-2">
+                    <span className="text-[10px] font-medium text-white/40">{selectedClip.duration}s</span>
+                    <input
+                      type="range"
+                      min="1"
+                      max="5"
+                      step="1"
+                      value={selectedClip.duration || 1}
+                      onChange={(e) => handleUpdateClip({ duration: parseInt(e.target.value) })}
+                      className="w-16 h-1 accent-brand-emerald bg-white/10 rounded-full appearance-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-2.5 [&::-webkit-slider-thumb]:h-2.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-brand-emerald"
+                    />
+                  </div>
+                ) : (
+                  <div className="flex gap-0.5 px-1">
+                    {[5, 10].map(sec => (
+                      <button
+                        key={sec}
+                        onClick={(e) => { e.preventDefault(); handleUpdateClip({ duration: sec }) }}
+                        className={`w-6 py-0.5 text-[10px] font-bold rounded-sm transition-all ${
+                          selectedClip.duration === sec ? 'bg-white/10 text-white' : 'text-white/30 hover:text-white/50'
+                        }`}
+                      >
+                        {sec}s
+                      </button>
+                    ))}
                   </div>
                 )}
               </div>
             </div>
           )}
+        </div>
 
-          {/* --- DUBBING MODE CONTROLS --- */}
-          {activeMode === 'dub' && (
-            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
-              <div className="space-y-2">
-                <label className="text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-2">
-                   <Music className="w-3 h-3 text-[#00FFF0]" />
-                   Audio Source
-                </label>
-                
-                {!dubAudioUrl ? (
-                  <button 
-                    onClick={() => handleOpenAssetPicker('dub_audio')}
-                    className="w-full border-2 border-dashed border-[#3AAFA9]/20 rounded-xl p-6 flex flex-col items-center justify-center bg-[#0C0C0C] hover:bg-[#0C0C0C]/50 transition-colors group cursor-pointer"
-                  >
-                      <div className="w-12 h-12 rounded-full bg-[#1E1F22] flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
-                        <Upload className="w-5 h-5 text-gray-400 group-hover:text-[#00FFF0]" />
-                      </div>
-                      <span className="text-sm font-bold text-white mb-1">Select Audio</span>
-                      <span className="text-[10px] text-gray-500">From Library or Upload New</span>
-                  </button>
-                ) : (
-                  <div className="bg-[#0C0C0C] rounded-xl p-4 border border-[#3AAFA9]/20">
-                    <div className="flex items-center justify-between mb-3">
-                      <span className="text-xs font-bold text-white flex items-center gap-2">
-                        <Music className="w-3 h-3 text-[#00FFF0]" />
-                        Audio Track
-                      </span>
-                      <button onClick={() => setDubAudioUrl('')} className="text-gray-500 hover:text-white">
-                        <X className="w-3 h-3" />
-                      </button>
+        {/* Chat bar - Flow/Gemini-style input */}
+        <div className="p-6 pt-2 pb-6 border-t border-white/[0.04] shrink-0 bg-[#141516]">
+          {activeMode === 'visualize' && (
+            <div className="flex flex-col gap-4">
+              <div className="group bg-[#0f1114] border border-white/10 focus-within:border-brand-emerald/50 focus-within:ring-1 focus-within:ring-brand-emerald/50 rounded-2xl transition-all shadow-sm flex flex-col">
+                {/* Reference Images (REF) - Moved inside prompt container */}
+                <div className="flex items-center gap-3 px-4 pt-4">
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-[10px] font-bold text-white/90 uppercase tracking-wider">Ref</span>
                     </div>
-                    <audio src={dubAudioUrl} controls className="w-full h-8 mb-2" />
-                    <div className="flex justify-between text-[10px] text-gray-500 font-mono">
-                      <span>Duration: {dubAudioDuration.toFixed(1)}s</span>
-                      {dubAudioDuration > 10 && (
-                        <span className="text-orange-400">⚠️ Extends {'>'}10s</span>
+                    <div className="flex gap-2 ml-2">
+                      {referenceAssets.map((asset, idx) => (
+                        <div 
+                          key={idx} 
+                          className={`relative w-12 h-12 rounded-lg overflow-hidden group/ref cursor-pointer transition-all ${
+                              asset.url 
+                                  ? 'ring-1 ring-white/10 hover:ring-brand-emerald/50' 
+                                  : 'border border-dashed border-brand-emerald/50 hover:bg-brand-emerald/5'
+                          }`}
+                        >
+                          {asset.url ? (
+                            <>
+                              <img src={asset.url} className="w-full h-full object-cover" />
+                              <button onClick={() => removeReferenceAsset(idx)} className="absolute inset-0 bg-black/60 opacity-0 group-hover/ref:opacity-100 flex items-center justify-center transition-opacity">
+                                <X className="w-4 h-4 text-white" />
+                              </button>
+                            </>
+                          ) : (
+                            <button onClick={() => handleOpenAssetPicker('image_reference', idx)} className="w-full h-full flex items-center justify-center text-white/20 hover:text-brand-emerald transition-colors">
+                              <Plus className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                      {referenceAssets.length < 3 && (
+                        <button onClick={addReferenceAsset} className="w-12 h-12 rounded-lg border border-dashed border-white/10 flex items-center justify-center text-white/20 hover:text-brand-emerald hover:border-brand-emerald/30 transition-colors">
+                          <Plus className="w-4 h-4" />
+                        </button>
                       )}
                     </div>
-                  </div>
-                )}
-              </div>
+                </div>
 
-              <div className="bg-[#1E1F22]/50 p-4 rounded-xl border border-white/5">
-                <h4 className="text-xs font-bold text-white mb-2 flex items-center gap-2">
-                  <Info className="w-3 h-3 text-[#00FFF0]" />
-                  Sync Behavior
-                </h4>
-                <ul className="text-[10px] text-gray-400 space-y-1.5 list-disc pl-4">
-                  <li>If audio is shorter than video, we just sync the lips.</li>
-                  <li>If audio is longer (up to 10s), we <strong>extend</strong> the video first.</li>
-                  <li>Videos longer than 10s are not fully supported yet.</li>
-                </ul>
+                <Textarea
+                  value={localImagePrompt}
+                  onChange={(e) => handleImagePromptChange(e.target.value)}
+                  placeholder="Describe what you want to see..."
+                  className="w-full min-h-[100px] max-h-[300px] bg-transparent border-0 focus:ring-0 rounded-b-2xl px-4 py-3 text-sm resize-none placeholder:text-white/30 custom-scrollbar leading-relaxed mt-1"
+                />
+              </div>
+              <div className="flex justify-end">
+                <Button
+                  onClick={handleGenerateImage}
+                  disabled={isGeneratingImage || clipGeneratingStatus[selectedClip.id] === 'image' || !localImagePrompt.trim()}
+                  className="h-11 px-8 bg-brand-emerald hover:bg-brand-emerald/90 text-white font-medium rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-brand-emerald/20 w-full sm:w-auto"
+                >
+                  {isGeneratingImage ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Sparkles className="w-5 h-5 mr-2" />Generate Visual</>}
+                </Button>
               </div>
             </div>
           )}
-
-          {/* --- ANIMATE MODE CONTROLS --- */}
           {activeMode === 'animate' && (
-            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
-               
-               {/* Motion Prompt */}
-               <div className="space-y-2">
-                <label className="text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-2">
-                   <Wand2 className="w-3 h-3 text-[#00FFF0]" />
-                   The Action (Motion Prompt)
-                </label>
+            <div className="flex flex-col gap-4">
+              <div className="group bg-[#0f1114] border border-white/10 focus-within:border-brand-emerald/50 focus-within:ring-1 focus-within:ring-brand-emerald/50 rounded-2xl transition-all shadow-sm">
                 <Textarea
                   value={localVideoPrompt}
                   onChange={(e) => handleVideoPromptChange(e.target.value)}
                   placeholder="Describe the movement and action..."
-                  className="bg-[#0C0C0C] border-[#3AAFA9]/20 focus:border-[#00FFF0] min-h-[100px] text-sm resize-none"
+                  className="w-full min-h-[120px] max-h-[300px] bg-transparent border-0 focus:ring-0 rounded-2xl px-4 py-4 text-sm resize-none placeholder:text-white/30 custom-scrollbar leading-relaxed"
                 />
               </div>
-              
-              {/* Start Frame */}
-              <div className="space-y-2">
-                 <label className="text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-2">
-                   <Image className="w-3 h-3 text-[#00FFF0]" />
-                   Start Frame
-                  </label>
-                
-                <div className="relative w-full h-24 bg-[#0C0C0C] rounded-lg border border-[#3AAFA9]/20 overflow-hidden flex items-center justify-center">
-                    {(videoStartImageUrl || selectedClip.generatedImage) ? (
-                        <img 
-                            src={videoStartImageUrl || selectedClip.generatedImage || ''} 
-                            className="h-full w-full object-cover opacity-60"
-                        />
-                    ) : (
-                        <p className="text-xs text-gray-600">No image selected</p>
-                    )}
-                    
-                    <button 
-                        onClick={() => handleOpenAssetPicker('video_start')}
-                        className="absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-100 bg-black/40 transition-opacity"
-                    >
-                        <span className="bg-[#1E1F22] text-xs px-3 py-1 rounded-full border border-white/10 text-white">Change Image</span>
-                    </button>
-                          </div>
-                {(!videoStartImageUrl && selectedClip.generatedImage) && (
-                    <p className="text-[10px] text-[#00FFF0]">✓ Using generated image automatically</p>
-                        )}
-                      </div>
-
-              {/* Engine Selection */}
-              <div className="pt-4 border-t border-[#3AAFA9]/10">
-                 <label className="text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-2 mb-3">
-                    <Settings className="w-3 h-3 text-[#00FFF0]" />
-                    Engine & Duration
-                </label>
-                
-                <div className="space-y-3">
-                <div className="grid grid-cols-2 gap-2">
-                         <button
-                            onClick={(e) => {
-                              e.preventDefault()
-                              e.stopPropagation()
-                              setVideoModel('kling')
-                            }}
-                            className={`p-3 rounded-lg border text-left transition-all cursor-pointer ${videoModel === 'kling' ? 'border-[#00FFF0] bg-[#00FFF0]/10' : 'border-[#3AAFA9]/20 bg-[#0C0C0C] hover:border-[#3AAFA9]/50'}`}
-                         >
-                            <p className={`text-xs font-bold ${videoModel === 'kling' ? 'text-[#00FFF0]' : 'text-gray-300'}`}>Kling AI</p>
-                            <p className="text-[10px] text-gray-500 mt-1">Cinematic (5s)</p>
-                         </button>
-
-                         <button
-                            onClick={(e) => {
-                              e.preventDefault()
-                              e.stopPropagation()
-                              setVideoModel('ltx')
-                            }}
-                            className={`p-3 rounded-lg border text-left transition-all cursor-pointer ${videoModel === 'ltx' ? 'border-[#00FFF0] bg-[#00FFF0]/10' : 'border-[#3AAFA9]/20 bg-[#0C0C0C] hover:border-[#3AAFA9]/50'}`}
-                         >
-                            <p className={`text-xs font-bold ${videoModel === 'ltx' ? 'text-[#00FFF0]' : 'text-gray-300'}`}>LTX Studio</p>
-                            <p className="text-[10px] text-gray-500 mt-1">Fast Cuts (1-5s)</p>
-                         </button>
-                  </div>
-
-                    {/* Duration - Slider for LTX (1-5s), Buttons for Kling (5s/10s) */}
-                    {videoModel === 'ltx' && (
-                  <div className="space-y-2">
-                            <div className="flex items-center justify-between text-[10px] text-gray-400">
-                                <span>Duration</span>
-                                <span className="text-[#00FFF0] font-bold">{selectedClip.duration || 1}s</span>
-                    </div>
-                            <input
-                                type="range"
-                                min="1"
-                                max="5"
-                                step="1"
-                                value={selectedClip.duration || 1}
-                                onChange={(e) => {
-                                  const newDuration = parseInt(e.target.value)
-                                  handleUpdateClip({ duration: newDuration })
-                                }}
-                                className="w-full h-2 bg-[#0C0C0C] rounded-lg appearance-none cursor-pointer accent-[#00FFF0]"
-                                style={{
-                                  background: `linear-gradient(to right, #00FFF0 0%, #00FFF0 ${((selectedClip.duration || 1) - 1) / 4 * 100}%, #0C0C0C ${((selectedClip.duration || 1) - 1) / 4 * 100}%, #0C0C0C 100%)`
-                                }}
-                            />
-                            <div className="flex justify-between text-[9px] text-gray-500 px-1">
-                                <span>1s</span>
-                                <span>5s</span>
-                    </div>
-                  </div>
-                    )}
-
-                    {videoModel === 'kling' && (
-                        <div className="flex items-center gap-2 bg-[#0C0C0C] p-1 rounded-lg border border-[#3AAFA9]/10">
-                            {[5, 10].map(sec => (
-                                <button
-                                    key={sec}
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.preventDefault()
-                                      e.stopPropagation()
-                                      handleUpdateClip({ duration: sec })
-                                    }}
-                                    className={`flex-1 py-1.5 text-xs font-medium rounded cursor-pointer transition-all ${selectedClip.duration === sec ? 'bg-[#3AAFA9] text-black' : 'text-gray-500 hover:text-white'}`}
-                                >
-                                    {sec}s
-                                </button>
-                            ))}
-                  </div>
-                    )}
-                  </div>
-                </div>
-
-            </div>
-          )}
-
-              </div>
-              
-        {/* 4. ACTION BAR (Bottom Fixed) */}
-        <div className="p-4 bg-[#1E1F22] border-t border-[#3AAFA9]/20">
+              <div className="flex justify-end">
                 <Button
-            onClick={activeMode === 'visualize' ? handleGenerateImage : activeMode === 'dub' ? handleGenerateDub : handleGenerateVideo}
-            disabled={
-                activeMode === 'visualize' 
-                    ? (isGeneratingImage || clipGeneratingStatus[selectedClip.id] === 'image' || !localImagePrompt.trim())
-                    : activeMode === 'dub'
-                    ? (isDubbing || !dubAudioUrl || !selectedClip.generatedVideo)
-                    : (isGeneratingVideo || clipGeneratingStatus[selectedClip.id] === 'video' || !localVideoPrompt.trim())
-            }
-            className={`w-full h-11 font-bold tracking-wide uppercase transition-all ${
-                activeMode === 'visualize'
-                    ? 'bg-[#00FFF0] text-black hover:bg-[#00FFF0]/80'
-                    : 'bg-[#FF0055] text-white hover:bg-[#FF0055]/80'
-            }`}
-          >
-            {activeMode === 'visualize' ? (
-                isGeneratingImage ? (
-                    <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Generating Preview...</>
-                ) : (
-                    <><Sparkles className="w-4 h-4 mr-2" /> Generate Visual</>
-                )
-            ) : activeMode === 'dub' ? (
-                isDubbing ? (
-                    <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> {dubbingStatus || 'Syncing...'}</>
-                ) : (
-                    <><Mic className="w-4 h-4 mr-2" /> Generate Lip Sync</>
-                )
-            ) : (
-                isGeneratingVideo ? (
-                    <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Rendering Scene...</>
-                ) : (
-                    <><Play className="w-4 h-4 mr-2" /> Animate Scene</>
-                )
-            )}
+                  onClick={handleGenerateVideo}
+                  disabled={isGeneratingVideo || clipGeneratingStatus[selectedClip.id] === 'video' || !localVideoPrompt.trim()}
+                  className="h-11 px-8 bg-brand-emerald hover:bg-brand-emerald/90 text-white font-medium rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-brand-emerald/20 w-full sm:w-auto"
+                >
+                  {isGeneratingVideo ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Play className="w-5 h-5 mr-2" />Generate Animation</>}
                 </Button>
               </div>
+            </div>
+          )}
+          {activeMode === 'dub' && (
+            <div className="flex gap-3 items-center">
+              {!dubAudioUrl ? (
+                <button 
+                  onClick={() => handleOpenAssetPicker('dub_audio')}
+                  className="flex-1 h-[56px] border border-dashed border-white/10 rounded-2xl flex items-center justify-center gap-2 text-white/40 hover:text-white/60 hover:border-white/20 hover:bg-white/[0.02] transition-colors group"
+                >
+                  <Upload className="w-4 h-4 group-hover:scale-110 transition-transform" />
+                  <span className="text-sm font-medium">Select audio file</span>
+                </button>
+              ) : (
+                <div className="flex-1 flex items-center gap-3 bg-[#0f1114] rounded-2xl px-4 py-2 border border-white/10">
+                  <Music className="w-4 h-4 text-brand-emerald" />
+                  <audio src={dubAudioUrl} controls className="flex-1 h-10 max-w-full [&::-webkit-media-controls-panel]:bg-transparent" />
+                  <button onClick={() => setDubAudioUrl('')} className="text-white/40 hover:text-white p-2 rounded-full hover:bg-white/10 transition-colors">
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
+              <Button
+                onClick={handleGenerateDub}
+                disabled={isDubbing || !dubAudioUrl || !selectedClip.generatedVideo}
+                className="h-[56px] px-8 shrink-0 bg-brand-emerald hover:bg-brand-emerald/90 text-white font-bold rounded-2xl transition-all disabled:opacity-50 shadow-lg shadow-brand-emerald/20"
+              >
+                {isDubbing ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Mic className="w-5 h-5 mr-2" />Lip Sync</>}
+              </Button>
+            </div>
+          )}
+        </div>
 
       </div>
       

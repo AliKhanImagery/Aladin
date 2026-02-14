@@ -417,6 +417,19 @@ export default function IdeaTab() {
             confirmedAssetContext,
             sceneClips.map((c: any) => ({ description: c.description, name: c.name }))
           )
+
+          // Enrich matched assets with visualDna from confirmedAssetContext (match API may not return it)
+          const enrichedMatchedAssets = {
+            characters: matchedAssets.characters.map((c: any) => {
+              const full = confirmedAssetContext?.characters?.find((x: any) => x.id === c.id)
+              return { ...c, visualDna: c.visualDna ?? full?.visualDna }
+            }),
+            products: matchedAssets.products.map((p: any) => {
+              const full = confirmedAssetContext?.products?.find((x: any) => x.id === p.id)
+              return { ...p, visualDna: p.visualDna ?? full?.visualDna }
+            }),
+            locations: matchedAssets.locations
+          }
           
           // Extract narrative role from clipData (from story generation)
           const narrativeRole = clipData.narrative_role || 
@@ -439,7 +452,7 @@ export default function IdeaTab() {
                   tone: confirmedAssetContext.settings.tone,
                   brandCues: confirmedAssetContext.settings.brandCues,
                   sceneStyle: scene.style,
-                  assetContext: matchedAssets,
+                  assetContext: enrichedMatchedAssets,
                   imageModel: currentProject?.settings.imageModel || 'flux-2-pro',
                   narrativeRole: narrativeRole,
                   previousClipVelocity: previousClipVelocity
@@ -492,13 +505,13 @@ export default function IdeaTab() {
           
           const referenceImageUrls: string[] = []
           const assetsWithUrls = {
-            characters: matchedAssets.characters.filter((char: any) => char.assetUrl).map((char: any) => ({
-              id: char.id, name: char.name, assetUrl: char.assetUrl!, appearanceDetails: char.appearanceDetails
+            characters: enrichedMatchedAssets.characters.filter((char: any) => char.assetUrl).map((char: any) => ({
+              id: char.id, name: char.name, assetUrl: char.assetUrl!, appearanceDetails: char.appearanceDetails, visualDna: char.visualDna
               })),
-            products: matchedAssets.products.filter((product: any) => product.assetUrl).map((product: any) => ({
-              id: product.id, name: product.name, assetUrl: product.assetUrl!, visualFocus: product.visualFocus
+            products: enrichedMatchedAssets.products.filter((product: any) => product.assetUrl).map((product: any) => ({
+              id: product.id, name: product.name, assetUrl: product.assetUrl!, visualFocus: product.visualFocus, visualDna: product.visualDna
               })),
-            locations: matchedAssets.locations.filter((location: any) => location.assetUrl).map((location: any) => ({
+            locations: enrichedMatchedAssets.locations.filter((location: any) => location.assetUrl).map((location: any) => ({
               id: location.id, name: location.name, assetUrl: location.assetUrl!
               }))
           }
@@ -510,8 +523,8 @@ export default function IdeaTab() {
           if (referenceImageUrls.length > 10) referenceImageUrls.length = 10
           
           const shouldUseRemix = referenceImageUrls.length > 0
-          const characterReferences = matchedAssets.characters.map((char: any) => ({
-            characterId: char.id, role: char.role, faceRefId: undefined, assetUrl: char.assetUrl, appearanceDetails: char.appearanceDetails
+          const characterReferences = enrichedMatchedAssets.characters.map((char: any) => ({
+            characterId: char.id, role: char.role, faceRefId: undefined, assetUrl: char.assetUrl, appearanceDetails: char.appearanceDetails, visualDna: char.visualDna
           }))
           
           // Extract videoEngine and duration from story generation (Aladin Pro Dynamic Pacing)
@@ -699,9 +712,10 @@ export default function IdeaTab() {
                   const assetUrl = findAssetUrl(charName, 'character')
                   if (assetUrl) {
                     const char = findCharacter(charName)
-                    const dnaSuffix = char?.visualDna ? ` Appearance: ${charName}, ${char.visualDna}.` : ''
+                    // Strong consistency: reference image is source of truth; DNA reinforces it
+                    const visualDesc = char?.visualDna ? `${charName} (${char.visualDna}).` : charName
                     consistencyInstructions.push(
-                      `CRITICAL: ${charName.toUpperCase()} MUST match the reference image EXACTLY - same face, same features, same appearance, same build, same skin tone, same hair, same eyes. The reference image is provided and must be followed precisely.${dnaSuffix}`
+                      `CRITICAL: ${visualDesc} MUST match the provided reference image EXACTLY — same face, features, skin tone, hair, build. Reference image is authoritative.`
                     )
                     if (!referenceImageUrls.includes(assetUrl)) {
                       referenceImageUrls.push(assetUrl)
@@ -724,9 +738,10 @@ export default function IdeaTab() {
                   const assetUrl = findAssetUrl(prodName, 'product')
                   if (assetUrl) {
                     const prod = findProduct(prodName)
-                    const dnaSuffix = prod?.visualDna ? ` Appearance: ${prodName}, ${prod.visualDna}.` : ''
+                    // Strong consistency: product must match reference
+                    const visualDesc = prod?.visualDna ? `${prodName} (${prod.visualDna}).` : prodName
                     consistencyInstructions.push(
-                      `PRODUCT: ${prodName.toUpperCase()} must match reference exactly in shape, color, and design.${dnaSuffix}`
+                      `CRITICAL: ${visualDesc} MUST match the provided reference image EXACTLY — same shape, color, design. Reference image is authoritative.`
                     )
                     if (!referenceImageUrls.includes(assetUrl)) {
                       referenceImageUrls.push(assetUrl)
@@ -752,12 +767,18 @@ export default function IdeaTab() {
                 finalMode = 'text-to-image'
               }
               
+              // Debug: trace asset delivery to image model
+              const assetTrace = {
+                characters: metadata?.assetContext?.characters?.filter((c: any) => c.assetUrl).map((c: any) => ({ name: c.name, hasDna: !!c.visualDna, dna: c.visualDna })),
+                products: metadata?.assetContext?.products?.filter((p: any) => p.assetUrl).map((p: any) => ({ name: p.name, hasDna: !!p.visualDna, dna: p.visualDna })),
+              }
               console.log(`🖼️ [${index + 1}/${allClips.length}] Generating image for "${clip.name}"`, {
                 mode: finalMode,
                 hasReferenceImages: validReferenceUrls.length > 0,
                 validReferenceCount: validReferenceUrls.length,
+                assetTrace,
                 promptLength: enhancedPrompt.length,
-                promptPreview: enhancedPrompt.substring(0, 100) + '...'
+                promptPreview: enhancedPrompt.substring(0, 150) + '...'
               })
                 
                 // Determine final image model from user's project settings
@@ -766,12 +787,12 @@ export default function IdeaTab() {
 
                 const requestPayload: any = {
                 mode: finalMode,
-                  prompt: enhancedPrompt,
-                    aspect_ratio: latestProject.story.aspectRatio || '16:9',
-                    project_id: latestProject.id,
-                    clip_id: clipId,
+                prompt: enhancedPrompt,
+                aspect_ratio: latestProject.story.aspectRatio || '16:9',
+                project_id: latestProject.id,
+                clip_id: clipId,
                 imageModel: finalImageModel, // Pass the dynamic model selection
-                }
+              }
                 
               // Add reference images for edit mode (FLUX.2 Pro supports multiple images)
               // Only add if we have valid reference images
@@ -966,6 +987,7 @@ export default function IdeaTab() {
   return (
       <IdeaAnalysisScreen
         analysis={ideaAnalysis}
+        aspectRatio={aspectRatio}
         onContinue={handleContinueFromAnalysis}
         onBack={() => {
           setShowAnalysisScreen(false)
