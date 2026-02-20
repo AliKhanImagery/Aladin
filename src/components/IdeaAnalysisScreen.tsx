@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useAppStore } from '@/lib/store'
+import { getSessionSafe } from '@/lib/auth'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -34,6 +35,7 @@ import { supabase } from '@/lib/supabase'
 import { saveUserAsset } from '@/lib/userMedia'
 import toast from 'react-hot-toast'
 import AssetLibraryModal from './AssetLibraryModal'
+import { CREDIT_PRICING_KEYS, getDisplayCredits } from '@/constants/billing'
 
 interface IdeaAnalysisScreenProps {
   analysis: IdeaAnalysis
@@ -73,6 +75,27 @@ export default function IdeaAnalysisScreen({ analysis, aspectRatio = '16:9', onC
   // New state for asset library picker
   const [isLibraryOpen, setIsLibraryOpen] = useState(false)
   const [activeAssetId, setActiveAssetId] = useState<string | null>(null)
+
+  const [pricing, setPricing] = useState<Record<string, number>>({})
+  const fetchPricing = useCallback(async () => {
+    try {
+      const { data: { session } } = await getSessionSafe()
+      const token = session?.access_token
+      if (!token) return
+      const res = await fetch('/api/user/credits/pricing', { headers: { Authorization: `Bearer ${token}` } })
+      if (res.ok) {
+        const data = await res.json()
+        setPricing(data.pricing || {})
+      }
+    } catch (e) {
+      console.error('Failed to fetch pricing', e)
+    }
+  }, [])
+  useEffect(() => {
+    fetchPricing()
+  }, [fetchPricing])
+  const generateImageDisplayCoins = getDisplayCredits(pricing[CREDIT_PRICING_KEYS.IMAGE_REEVE_TEXT] ?? 0)
+  const remixImageDisplayCoins = getDisplayCredits(pricing[CREDIT_PRICING_KEYS.IMAGE_REEVE_REMIX] ?? 0)
 
   useEffect(() => {
     updateAnalysisSettings({
@@ -785,7 +808,7 @@ export default function IdeaAnalysisScreen({ analysis, aspectRatio = '16:9', onC
                           </>
                         ) : (
                           <>
-                            <Sparkles className="w-3 h-3" /> Generate Image
+                            <Sparkles className="w-3 h-3" /> Generate Image{generateImageDisplayCoins > 0 ? ` (${generateImageDisplayCoins} coins)` : ''}
                           </>
                         )}
                       </button>
@@ -805,7 +828,7 @@ export default function IdeaAnalysisScreen({ analysis, aspectRatio = '16:9', onC
                           </>
                         ) : (
                           <>
-                            <RefreshCw className="w-3 h-3" /> Remix Image
+                            <RefreshCw className="w-3 h-3" /> Remix Image{remixImageDisplayCoins > 0 ? ` (${remixImageDisplayCoins} coins)` : ''}
                           </>
                         )}
                       </button>

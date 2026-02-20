@@ -1,13 +1,15 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useAppStore } from '@/lib/store'
+import { getSessionSafe } from '@/lib/auth'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { X, Play, Image, Video, Loader2, Plus, Maximize2, Sparkles, Upload, History, Mic, Music, Eye } from 'lucide-react'
 import ImageModal from './ImageModal'
 import AssetLibraryModal from './AssetLibraryModal'
 import { saveUserVideo, saveUserAsset, getUserImages } from '@/lib/userMedia'
+import { CREDIT_PRICING_KEYS, getDisplayCredits } from '@/constants/billing'
 
 interface ReferenceAsset {
   url: string;
@@ -67,6 +69,57 @@ export default function ClipDetailDrawer() {
   const [generationHistory, setGenerationHistory] = useState<any[]>([])
   const [isLoadingHistory, setIsLoadingHistory] = useState(false)
   const historyStripRef = useRef<HTMLDivElement>(null)
+
+  // PRICING (2.5x display)
+  const [pricing, setPricing] = useState<Record<string, number>>({})
+  const fetchPricing = useCallback(async () => {
+    try {
+      const { data: { session } } = await getSessionSafe()
+      const token = session?.access_token
+      if (!token) return
+      const res = await fetch('/api/user/credits/pricing', { headers: { Authorization: `Bearer ${token}` } })
+      if (res.ok) {
+        const data = await res.json()
+        setPricing(data.pricing || {})
+      }
+    } catch (e) {
+      console.error('Failed to fetch pricing', e)
+    }
+  }, [])
+  useEffect(() => {
+    if (isDrawerOpen && selectedClip?.id) fetchPricing()
+  }, [isDrawerOpen, selectedClip?.id, fetchPricing])
+
+  const hasImageRefs = referenceAssets.some((a) => a?.url?.trim())
+  const isNanoImage = imageModel === 'nano-banana' || imageModel === 'nano-banana-flash'
+  const imagePricingKey = isNanoImage
+    ? hasImageRefs && (remixMode === 'edit' || remixMode === 'remix')
+      ? CREDIT_PRICING_KEYS.IMAGE_NANO_BANANA_EDIT
+      : CREDIT_PRICING_KEYS.IMAGE_NANO_BANANA_TEXT
+    : imageModel === 'flux-2-pro'
+      ? remixMode === 'edit'
+        ? CREDIT_PRICING_KEYS.IMAGE_FLUX_EDIT
+        : CREDIT_PRICING_KEYS.IMAGE_FLUX_TEXT
+      : remixMode === 'remix'
+        ? CREDIT_PRICING_KEYS.IMAGE_REEVE_REMIX
+        : CREDIT_PRICING_KEYS.IMAGE_REEVE_TEXT
+  const imageCost = pricing[imagePricingKey] ?? 0
+  const imageDisplayCoins = getDisplayCredits(imageCost)
+
+  const videoDuration = selectedClip?.duration ?? 5
+  const videoDurationBucket = typeof videoDuration === 'number' ? (videoDuration <= 5 ? 5 : 10) : 5
+  const videoPricingKey =
+    videoModel === 'ltx'
+      ? CREDIT_PRICING_KEYS.VIDEO_LTX_2S
+      : videoModel === 'kling'
+        ? videoDurationBucket === 10
+          ? CREDIT_PRICING_KEYS.VIDEO_KLING_10S
+          : CREDIT_PRICING_KEYS.VIDEO_KLING_5S
+        : videoDurationBucket === 10
+          ? CREDIT_PRICING_KEYS.VIDEO_VIDU_10S
+          : CREDIT_PRICING_KEYS.VIDEO_VIDU_5S
+  const videoCost = pricing[videoPricingKey] ?? 0
+  const videoDisplayCoins = getDisplayCredits(videoCost)
   
   // ASPECT RATIO PROMPT HELPER
   const injectAspectRatioPrompt = (basePrompt: string) => {
@@ -921,7 +974,7 @@ export default function ClipDetailDrawer() {
                   disabled={isGeneratingImage || clipGeneratingStatus[selectedClip.id] === 'image' || !localImagePrompt.trim()}
                   className="h-11 px-8 bg-brand-emerald hover:bg-brand-emerald/90 text-white font-medium rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-brand-emerald/20 w-full sm:w-auto"
                 >
-                  {isGeneratingImage ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Sparkles className="w-5 h-5 mr-2" />Generate Visual</>}
+                  {isGeneratingImage ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Sparkles className="w-5 h-5 mr-2" />Generate Visual{imageDisplayCoins > 0 ? ` (${imageDisplayCoins} coins)` : ''}</>}
                 </Button>
               </div>
             </div>
@@ -942,7 +995,7 @@ export default function ClipDetailDrawer() {
                   disabled={isGeneratingVideo || clipGeneratingStatus[selectedClip.id] === 'video' || !localVideoPrompt.trim()}
                   className="h-11 px-8 bg-brand-emerald hover:bg-brand-emerald/90 text-white font-medium rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-brand-emerald/20 w-full sm:w-auto"
                 >
-                  {isGeneratingVideo ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Play className="w-5 h-5 mr-2" />Generate Animation</>}
+                  {isGeneratingVideo ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Play className="w-5 h-5 mr-2" />Generate Animation{videoDisplayCoins > 0 ? ` (${videoDisplayCoins} coins)` : ''}</>}
                 </Button>
               </div>
             </div>

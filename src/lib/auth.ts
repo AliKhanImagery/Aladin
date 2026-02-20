@@ -1,4 +1,27 @@
+import type { Session } from '@supabase/supabase-js'
 import { supabase } from './supabase'
+
+/** Returns true if the error is from an aborted lock (e.g. navigation, timeout). */
+function isAbortError(e: any): boolean {
+  return e?.name === 'AbortError' || (typeof e?.message === 'string' && e.message.includes('aborted'))
+}
+
+/**
+ * Call getSession() but catch AbortError (from Supabase's internal navigator.locks)
+ * so we never surface "signal is aborted without reason" as an unhandled runtime error.
+ */
+export async function getSessionSafe(): Promise<{ data: { session: Session | null }; error: any }> {
+  try {
+    const result = await supabase.auth.getSession()
+    return { data: { session: result.data?.session ?? null }, error: result.error }
+  } catch (e: any) {
+    if (isAbortError(e)) {
+      console.warn('⚠️ getSession aborted (lock timeout or navigation)')
+      return { data: { session: null }, error: null }
+    }
+    throw e
+  }
+}
 
 export interface AuthUser {
   id: string
@@ -124,25 +147,17 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
     pendingAuthCall = (async () => {
       try {
         // Industry standard: First check for existing session
-        // Supabase automatically loads session from localStorage if persistSession is true
-        // This is fast and synchronous for localStorage, so no timeout needed
+        // Use getSessionSafe to avoid unhandled AbortError from Supabase's internal locks
         let session, sessionError
-        try {
-          const sessionResult = await supabase.auth.getSession()
-          session = sessionResult.data?.session
-          sessionError = sessionResult.error
-        } catch (abortError: any) {
-          // Handle AbortError from Supabase's internal locks gracefully
-          if (abortError?.name === 'AbortError' || abortError?.message?.includes('aborted')) {
-            console.warn('⚠️ Session check aborted (likely race condition) - retrying...')
-            // Retry once after a short delay
-            await new Promise(resolve => setTimeout(resolve, 100))
-            const retryResult = await supabase.auth.getSession()
-            session = retryResult.data?.session
-            sessionError = retryResult.error
-          } else {
-            throw abortError
-          }
+        const sessionResult = await getSessionSafe()
+        session = sessionResult.data?.session
+        sessionError = sessionResult.error
+        if (!session && !sessionError) {
+          // Possible lock timeout - retry once
+          await new Promise(resolve => setTimeout(resolve, 100))
+          const retryResult = await getSessionSafe()
+          session = retryResult.data?.session
+          sessionError = retryResult.error
         }
         
         if (sessionError) {
@@ -162,15 +177,13 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
           const userResult = await supabase.auth.getUser()
           user = userResult.data?.user
           userError = userResult.error
-        } catch (abortError: any) {
-          // Handle AbortError from Supabase's internal locks gracefully
-          if (abortError?.name === 'AbortError' || abortError?.message?.includes('aborted')) {
-            console.warn('⚠️ User verification aborted (likely race condition) - using session user')
-            // Use the user from the session instead
+        } catch (getUserError: any) {
+          if (isAbortError(getUserError)) {
+            console.warn('⚠️ getUser aborted - using session user')
             user = session.user
             userError = null
           } else {
-            throw abortError
+            throw getUserError
           }
         }
         
@@ -343,17 +356,13 @@ export function onAuthStateChange(callback: (user: AuthUser | null) => void) {
       let finalSession = session
       if (!finalSession?.user) {
         console.warn('⚠️ SIGNED_IN event but no session user in event - fetching session...')
-        try {
-          const { data: { session: fetchedSession }, error: fetchError } = await supabase.auth.getSession()
-          if (fetchError) {
-            console.error('❌ Failed to fetch session:', fetchError.message)
-          }
-          if (fetchedSession?.user) {
-            console.log('✅ Found session on fetch:', fetchedSession.user.email)
-            finalSession = fetchedSession
-          }
-        } catch (fetchErr: any) {
-          console.error('❌ Exception fetching session:', fetchErr.message)
+        const { data: { session: fetchedSession }, error: fetchError } = await getSessionSafe()
+        if (fetchError) {
+          console.error('❌ Failed to fetch session:', fetchError.message)
+        }
+        if (fetchedSession?.user) {
+          console.log('✅ Found session on fetch:', fetchedSession.user.email)
+          finalSession = fetchedSession
         }
       }
       
@@ -420,16 +429,12 @@ export function onAuthStateChange(callback: (user: AuthUser | null) => void) {
         // Instead, wait a bit and try one more time
         console.warn('⚠️ Waiting 500ms and retrying session fetch...')
         await new Promise(resolve => setTimeout(resolve, 500))
-        try {
-          const { data: { session: finalRetrySession } } = await supabase.auth.getSession()
-          if (finalRetrySession?.user) {
-            const authUser = createUserFromSession(finalRetrySession.user)
-            console.log('✅ SIGNED_IN: Found session on final retry, calling callback with user:', authUser.email)
-            callback(authUser)
-            return
-          }
-        } catch (finalRetryError) {
-          console.error('❌ Final retry session check failed:', finalRetryError)
+        const { data: { session: finalRetrySession } } = await getSessionSafe()
+        if (finalRetrySession?.user) {
+          const authUser = createUserFromSession(finalRetrySession.user)
+          console.log('✅ SIGNED_IN: Found session on final retry, calling callback with user:', authUser.email)
+          callback(authUser)
+          return
         }
         // Last resort - still don't call callback(null) - this would cause logout
         console.error('❌ SIGNED_IN event but no session available after all retries - skipping callback to prevent logout')

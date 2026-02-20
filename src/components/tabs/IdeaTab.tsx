@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useAppStore } from '@/lib/store'
+import { getSessionSafe } from '@/lib/auth'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Input } from '@/components/ui/input'
@@ -26,6 +27,7 @@ import {
 import { Scene, Clip, IdeaAnalysis, AssetContext } from '@/types'
 import IdeaAnalysisScreen from '@/components/IdeaAnalysisScreen'
 import toast from 'react-hot-toast'
+import { CREDIT_PRICING_KEYS, getDisplayCredits } from '@/constants/billing'
 
 // Helper function to derive color palette from brand cues (legacy - kept for fallback)
 function deriveColorPalette(brandCues: string[]): string {
@@ -209,6 +211,25 @@ export default function IdeaTab() {
   const [isGenerating, setIsGenerating] = useState(false)
   const [targetRuntime, setTargetRuntime] = useState(currentProject?.story?.targetRuntime || 60)
   const [tone, setTone] = useState(currentProject?.story?.tone || '')
+  const [pricing, setPricing] = useState<Record<string, number>>({})
+  const fetchPricing = useCallback(async () => {
+    try {
+      const { data: { session } } = await getSessionSafe()
+      const token = session?.access_token
+      if (!token) return
+      const res = await fetch('/api/user/credits/pricing', { headers: { Authorization: `Bearer ${token}` } })
+      if (res.ok) {
+        const data = await res.json()
+        setPricing(data.pricing || {})
+      }
+    } catch (e) {
+      console.error('Failed to fetch pricing', e)
+    }
+  }, [])
+  useEffect(() => {
+    fetchPricing()
+  }, [fetchPricing])
+  const perImageDisplayCoins = getDisplayCredits(pricing[CREDIT_PRICING_KEYS.IMAGE_REEVE_TEXT] ?? 0)
   const [brandCues, setBrandCues] = useState(
     Array.isArray(currentProject?.story?.brandCues) 
       ? currentProject.story.brandCues.join(', ') 
@@ -1041,7 +1062,10 @@ export default function IdeaTab() {
           />
                 <label htmlFor="dont-generate-images-idea" className="text-sm font-medium text-gray-400 cursor-pointer">
                   Technical Blueprint Only (No Images)
-          </label>
+                </label>
+                {perImageDisplayCoins > 0 && (
+                  <span className="text-xs text-gray-500">Asset images: ~{perImageDisplayCoins} coins per image</span>
+                )}
         </div>
 
             <Button

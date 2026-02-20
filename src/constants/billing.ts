@@ -60,6 +60,13 @@ export const BILLING_PLANS_V2 = {
   },
 } as const;
 
+/** Display price = cost * CREDIT_DISPLAY_MULTIPLIER (2.5x our cost) */
+export const CREDIT_DISPLAY_MULTIPLIER = 2.5
+
+export function getDisplayCredits(cost: number): number {
+  return Math.round(cost * CREDIT_DISPLAY_MULTIPLIER)
+}
+
 export const CREDIT_COSTS = {
   VIDEO_GENERATION: '25-110', // Range covers LTX (25) to Kling 10s (110)
   NANO_BANANA: '12',          // Nano Pro & Nano Fast: image.nano_banana.text_to_image (12)
@@ -78,4 +85,5 @@ export const CREDIT_PRICING_KEYS = {
   IMAGE_NANO_BANANA_EDIT: 'image.nano_banana.edit',
   IMAGE_FLUX_TEXT: 'image.flux.text_to_image',
   IMAGE_FLUX_EDIT: 'image.flux.edit',
-} as const;
+  AUDIO_WHISPER_TRANSCRIBE: 'audio.whisper.transcribe',
+} as const
