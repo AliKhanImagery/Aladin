@@ -80,6 +80,7 @@ export const CREDIT_PRICING_KEYS = {
   VIDEO_KLING_5S: 'video.kling.5s',
   VIDEO_KLING_10S: 'video.kling.10s',
   IMAGE_REEVE_TEXT: 'image.reeve.text_to_image',
+  IMAGE_REEVE_EDIT: 'image.reeve.edit',
   IMAGE_REEVE_REMIX: 'image.reeve.remix',
   IMAGE_NANO_BANANA_TEXT: 'image.nano_banana.text_to_image',
   IMAGE_NANO_BANANA_EDIT: 'image.nano_banana.edit',

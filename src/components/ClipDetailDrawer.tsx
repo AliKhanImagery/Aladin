@@ -100,8 +100,12 @@ export default function ClipDetailDrawer() {
       ? remixMode === 'edit'
         ? CREDIT_PRICING_KEYS.IMAGE_FLUX_EDIT
         : CREDIT_PRICING_KEYS.IMAGE_FLUX_TEXT
-      : remixMode === 'remix'
-        ? CREDIT_PRICING_KEYS.IMAGE_REEVE_REMIX
+      : imageModel === 'reeve'
+        ? remixMode === 'edit'
+          ? CREDIT_PRICING_KEYS.IMAGE_REEVE_EDIT
+          : remixMode === 'remix'
+            ? CREDIT_PRICING_KEYS.IMAGE_REEVE_REMIX
+            : CREDIT_PRICING_KEYS.IMAGE_REEVE_TEXT
         : CREDIT_PRICING_KEYS.IMAGE_REEVE_TEXT
   const imageCost = pricing[imagePricingKey] ?? 0
   const imageDisplayCoins = getDisplayCredits(imageCost)
