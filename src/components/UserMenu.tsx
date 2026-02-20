@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import { Settings, LogOut, User, Layout, Image, Video, Package, Music2, ChevronDown, Sparkles } from 'lucide-react'
+import { Settings, LogOut, User, Layout, Image, Video, Package, Music2, ChevronDown, Sparkles, Mic } from 'lucide-react'
 import { useAppStore } from '@/lib/store'
 import { signOut } from '@/lib/auth'
 import { useRouter } from 'next/navigation'
@@ -51,6 +51,9 @@ export default function UserMenu({ user }: UserMenuProps) {
         break
       case 'audio':
         router.push('/audio-library')
+        break
+      case 'voices':
+        router.push('/dashboard/voices')
         break
       case 'logout':
         try {
@@ -146,6 +149,11 @@ export default function UserMenu({ user }: UserMenuProps) {
                 onClick={() => handleMenuClick('audio')} 
                 icon={<Music2 className="w-4 h-4" />} 
                 label="Audio Library" 
+              />
+              <MenuAction 
+                onClick={() => handleMenuClick('voices')} 
+                icon={<Mic className="w-4 h-4" />} 
+                label="Voice Lab" 
               />
               <MenuAction 
                 onClick={() => handleMenuClick('projects')} 

@@ -26,6 +26,7 @@ interface AppState {
 
   showAuthModal: boolean
   showProfileSettingsModal: boolean
+  profileModalTab: 'profile' | 'connections'
   pendingIdea: string | null // Store idea when user needs to auth before creating
   
   // Generation state
@@ -66,7 +67,7 @@ interface AppState {
   setAudioDrawerOpen: (open: boolean, trackId?: string, time?: number) => void
 
   setShowAuthModal: (open: boolean) => void
-  setShowProfileSettingsModal: (open: boolean) => void
+  setShowProfileSettingsModal: (open: boolean, tab?: 'profile' | 'connections') => void
   setPendingIdea: (idea: string | null) => void
   setGeneratingStory: (isGenerating: boolean) => void
   setGenerationStatus: (status: string) => void
@@ -146,6 +147,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   activeAudioTime: null,
   showAuthModal: false,
   showProfileSettingsModal: false,
+  profileModalTab: 'profile',
   pendingIdea: null,
   isGeneratingStory: false,
   generationStatus: '',
@@ -710,7 +712,10 @@ export const useAppStore = create<AppState>((set, get) => ({
     activeAudioTime: time !== undefined ? time : null
   }),
   setShowAuthModal: (open) => set({ showAuthModal: open }),
-  setShowProfileSettingsModal: (open) => set({ showProfileSettingsModal: open }),
+  setShowProfileSettingsModal: (open, tab) => set({ 
+    showProfileSettingsModal: open,
+    profileModalTab: tab || 'profile' 
+  }),
   setPendingIdea: (idea) => set({ pendingIdea: idea }),
   setGeneratingStory: (isGenerating) => set({ isGeneratingStory: isGenerating }),
   setGenerationStatus: (status) => set({ generationStatus: status }),

@@ -257,6 +257,9 @@ export interface AudioTrack {
   locked: boolean;
 }
 
+/** How the audio was generated (for Audio Library chip and filtering) */
+export type AudioGenerationMethod = 'voice_changer' | 'tts' | 'sfx' | 'music'
+
 export interface AudioClip {
   id: string;
   trackId: string;
@@ -268,6 +271,8 @@ export interface AudioClip {
   volume: number; // 0 to 1
   /** Shown on the clip while generating or after failure */
   status?: 'generating' | 'completed' | 'failed';
+  /** How this clip was generated (Voice Changer, TTS, SFX, Music) for library display */
+  generationMethod?: AudioGenerationMethod;
 }
 
 export interface TimelineClip {

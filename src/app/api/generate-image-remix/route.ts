@@ -341,9 +341,11 @@ export async function POST(request: NextRequest) {
             ? 'image.flux.edit'
             : endpoint.includes('flux-2-pro')
               ? 'image.flux.text_to_image'
-              : endpoint.includes('reve/remix')
-                ? 'image.reeve.remix'
-                : 'image.reeve.text_to_image'
+              : endpoint.includes('reve/edit')
+                ? 'image.reeve.edit'
+                : endpoint.includes('reve/remix')
+                  ? 'image.reeve.remix'
+                  : 'image.reeve.text_to_image'
       
       pricingKeyForRefund = pricingKey
 

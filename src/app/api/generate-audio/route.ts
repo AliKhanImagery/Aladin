@@ -8,7 +8,7 @@ if (process.env.FAL_KEY) {
 
 export async function POST(req: NextRequest) {
   try {
-    const { prompt, duration, model, projectId } = await req.json()
+    const { prompt, duration, model, projectId, voiceId, ref_audio_url, ref_text, integrationId } = await req.json()
 
     if (!prompt) {
       return NextResponse.json(
@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    console.log('🎵 Starting audio generation:', { model, prompt, duration })
+    console.log('🎵 Starting audio generation:', { model, prompt, duration, voiceId, ref_audio_url: !!ref_audio_url })
 
     let audioUrl: string | undefined
     let result: any
@@ -85,20 +85,48 @@ export async function POST(req: NextRequest) {
         }
 
     } else if (model === 'elevenlabs-tts') {
-        const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY
-        const ELEVENLABS_VOICE_ID =
-          process.env.ELEVENLABS_VOICE_ID || 'EXAVITQu4vr4xnSDxMaL' // default "Rachel" voice id
-
-        if (!ELEVENLABS_API_KEY) {
-            throw new Error('ElevenLabs API key not configured')
+        const targetVoiceId = voiceId;
+        if (!targetVoiceId) {
+             throw new Error('Please select an ElevenLabs voice.')
         }
 
-        // ElevenLabs TTS
-        const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${ELEVENLABS_VOICE_ID}?output_format=mp3_44100_128`, {
+        // Prefer user's BYOA key when available
+        const authHeader = req.headers.get('authorization')
+        let elevenLabsKey = process.env.ELEVENLABS_API_KEY
+        if (authHeader) {
+          const { createClient } = await import('@supabase/supabase-js')
+          const supabase = createClient(
+            process.env.NEXT_PUBLIC_SUPABASE_URL!,
+            process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+          )
+          const token = authHeader.replace('Bearer ', '')
+          const { data: { user } } = await supabase.auth.getUser(token)
+          if (user) {
+            const { getElevenLabsKeyForUser, getIntegrationKeyById } = await import('@/lib/integrations')
+            let userKey: string | null = null
+
+            if (integrationId) {
+                userKey = await getIntegrationKeyById(integrationId, user.id)
+            }
+            
+            if (!userKey) {
+                userKey = await getElevenLabsKeyForUser(user.id)
+            }
+
+            if (userKey) elevenLabsKey = userKey
+          }
+        }
+        if (!elevenLabsKey) {
+          throw new Error('ElevenLabs API key not configured. Connect your key in Settings or ask the app admin to set ELEVENLABS_API_KEY.')
+        }
+
+        console.log(`🗣️ Generating TTS with voice ID: ${targetVoiceId}`)
+
+        const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${targetVoiceId}?output_format=mp3_44100_128`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'xi-api-key': ELEVENLABS_API_KEY,
+                'xi-api-key': elevenLabsKey,
                 'Accept': 'audio/mpeg',
             },
             body: JSON.stringify({
@@ -112,18 +140,25 @@ export async function POST(req: NextRequest) {
         })
 
         if (!response.ok) {
-            // ElevenLabs often returns json errors
-            let message = 'ElevenLabs TTS failed'
-            try {
-                const errorData = await response.json()
-                message = errorData?.detail?.message || errorData?.message || message
-            } catch {
-                // ignore
-            }
-            throw new Error(message)
+             // Check specifically for 404 (Voice not found) or 400 (Bad Request)
+             if (response.status === 404 || response.status === 400) {
+                  throw new Error(`The selected voice (${targetVoiceId}) is invalid or no longer exists. Please choose another character.`)
+             }
+
+             let message = 'ElevenLabs TTS failed'
+             try {
+                 const errorData = await response.json()
+                 message = errorData?.detail?.message || errorData?.message || message
+             } catch {
+                 // ignore
+             }
+             throw new Error(message)
         }
 
         const audioBuffer = await response.arrayBuffer()
+        
+        // ... rest of upload logic ...
+
 
         // Upload to Supabase Storage (same pattern as SFX)
         const { supabase } = await import('@/lib/supabase')
@@ -146,6 +181,58 @@ export async function POST(req: NextRequest) {
                 .from('projects')
                 .getPublicUrl(filename)
             audioUrl = publicUrl
+        }
+
+    } else if (model === 'fal-f5-tts') {
+        const FAL_KEY = process.env.FAL_KEY
+        if (!FAL_KEY) {
+          return NextResponse.json(
+            { error: 'F5-TTS is not configured (missing FAL_KEY)' },
+            { status: 503 }
+          )
+        }
+        if (!ref_audio_url || typeof ref_audio_url !== 'string') {
+          return NextResponse.json(
+            { error: 'ref_audio_url is required for F5-TTS' },
+            { status: 400 }
+          )
+        }
+        const genText = prompt
+        const refTextForF5 = (ref_text && typeof ref_text === 'string' ? ref_text.trim() : '') || ''
+        fal.config({ credentials: FAL_KEY })
+        result = await fal.subscribe('fal-ai/f5-tts', {
+          input: {
+            gen_text: genText,
+            ref_audio_url,
+            ref_text: refTextForF5,
+            model_type: 'F5-TTS',
+            remove_silence: true,
+          },
+          logs: true,
+        })
+        // FAL f5-tts returns audio_url (object with url), not audio
+        const falAudioUrl = result?.data?.audio_url?.url ?? result?.data?.audio?.url
+        if (!falAudioUrl) {
+          throw new Error('F5-TTS did not return an audio URL')
+        }
+        // Re-upload to Supabase for durability (Fal URLs can expire)
+        const { supabase } = await import('@/lib/supabase')
+        const res = await fetch(falAudioUrl)
+        if (!res.ok) {
+          audioUrl = falAudioUrl
+        } else {
+          const audioBuffer = await res.arrayBuffer()
+          const safeProjectId = projectId || 'no-project'
+          const filename = `audio/${safeProjectId}/${Date.now()}_f5tts.mp3`
+          const { error: uploadError } = await supabase.storage
+            .from('projects')
+            .upload(filename, audioBuffer, { contentType: 'audio/mpeg', upsert: false })
+          if (uploadError) {
+            audioUrl = falAudioUrl
+          } else {
+            const { data: { publicUrl } } = supabase.storage.from('projects').getPublicUrl(filename)
+            audioUrl = publicUrl
+          }
         }
 
     } else if (model === 'elevenlabs-music') {

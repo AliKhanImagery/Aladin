@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useAppStore } from '@/lib/store'
-import { getCurrentUser, onAuthStateChange } from '@/lib/auth'
+import { getCurrentUser, getSessionSafe, onAuthStateChange } from '@/lib/auth'
 import AuthModal from './AuthModal'
 import ProfileSettingsModal from './ProfileSettingsModal'
 import { Toaster } from 'react-hot-toast'
@@ -145,9 +145,9 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
         // Wait a short moment for Supabase to process the sign-in internally
         await new Promise(resolve => setTimeout(resolve, 300))
         
-        // Get session directly - this is the most reliable approach
+        // Get session directly (use getSessionSafe to avoid AbortError from Supabase locks)
         console.log('🔐 handleAuthSuccess: Checking session directly...')
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+        const { data: { session }, error: sessionError } = await getSessionSafe()
         
         if (sessionError) {
           console.warn('⚠️ handleAuthSuccess: Session check error:', sessionError.message)
