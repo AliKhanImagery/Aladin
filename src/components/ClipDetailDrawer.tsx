@@ -245,12 +245,11 @@ export default function ClipDetailDrawer() {
     }
   }
 
-  // Auto-scroll to latest item in history strip when history updates
+  // Auto-scroll to latest item in history strip when history updates (horizontal strip)
   useEffect(() => {
     if (historyStripRef.current && generationHistory.length > 0) {
-      // Scroll to the bottom (latest) item
       historyStripRef.current.scrollTo({
-        top: historyStripRef.current.scrollHeight,
+        left: historyStripRef.current.scrollWidth,
         behavior: 'smooth'
       })
     }

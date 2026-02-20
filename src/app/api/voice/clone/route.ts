@@ -35,8 +35,15 @@ export async function POST(req: NextRequest) {
             .from('voice_characters')
             .select('*', { count: 'exact', head: true })
             .eq('user_id', user.id)
-        
-        if ((count || 0) >= 5) {
+
+        if (countError) {
+            console.error('Voice limit check failed:', countError)
+            return NextResponse.json(
+                { error: 'Unable to verify voice limit. Please try again.' },
+                { status: 503 }
+            )
+        }
+        if ((count ?? 0) >= 5) {
             return NextResponse.json({ error: 'Voice limit reached (max 5)' }, { status: 403 })
         }
 
