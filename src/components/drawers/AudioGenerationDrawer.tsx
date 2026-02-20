@@ -304,6 +304,7 @@ export function AudioGenerationDrawer() {
       offset: 0,
       volume: 1,
       status: 'generating',
+      generationMethod: 'voice_changer',
     }
     addAudioClip(activeAudioTrackId, placeholderClip)
     try {
@@ -326,6 +327,7 @@ export function AudioGenerationDrawer() {
           assetUrl: data.audioUrl,
           duration: data.duration ?? 5,
           status: 'completed',
+          generationMethod: 'voice_changer',
         })
       } else {
         const response = await fetch('/api/generate-audio', {
@@ -348,10 +350,11 @@ export function AudioGenerationDrawer() {
           assetUrl: data.audioUrl,
           duration: data.duration ?? 5,
           status: 'completed',
+          generationMethod: 'voice_changer',
         })
       }
       const { saveProjectNow } = useAppStore.getState()
-      if (currentProject) saveProjectNow(currentProject.id)
+      if (currentProject) await saveProjectNow(currentProject.id, true)
       toast.success('Added to timeline', { id: toastId })
       setRecordingBlob(null)
       setVoiceChangerTranscript('')
@@ -395,6 +398,7 @@ export function AudioGenerationDrawer() {
       offset: 0,
       volume: 1,
       status: 'generating',
+      generationMethod: 'voice_changer',
     }
     addAudioClip(activeAudioTrackId, placeholderClip)
 
@@ -431,10 +435,11 @@ export function AudioGenerationDrawer() {
             assetUrl: data.audioUrl,
             duration: data.duration ?? recordingSeconds,
             status: 'completed',
+            generationMethod: 'voice_changer',
         })
         
         const { saveProjectNow } = useAppStore.getState()
-        if (currentProject) saveProjectNow(currentProject.id)
+        if (currentProject) await saveProjectNow(currentProject.id, true)
         
         toast.success('Voice transformed!', { id: toastId })
         setRecordingBlob(null)
@@ -490,6 +495,10 @@ export function AudioGenerationDrawer() {
     const clipId = crypto.randomUUID()
     const startTime = activeAudioTime ?? 0
 
+    const generationMethod = model === 'elevenlabs-tts' || model === 'fal-f5-tts' ? 'tts' as const
+      : model === 'elevenlabs-music' ? 'music' as const
+      : model === 'elevenlabs-sfx' ? 'sfx' as const
+      : undefined
     // Placeholder clip so the user sees "Generating…" on the timeline
     const placeholderClip: AudioClip = {
       id: clipId,
@@ -500,7 +509,8 @@ export function AudioGenerationDrawer() {
       duration,
       offset: 0,
       volume: 1,
-      status: 'generating'
+      status: 'generating',
+      ...(generationMethod && { generationMethod }),
     }
     addAudioClip(activeAudioTrackId, placeholderClip)
 
@@ -541,12 +551,13 @@ export function AudioGenerationDrawer() {
       updateAudioClip(activeAudioTrackId, clipId, {
         assetUrl: data.audioUrl,
         duration: data.duration ?? duration,
-        status: 'completed'
+        status: 'completed',
+        ...(generationMethod && { generationMethod }),
       })
 
       const { saveProjectNow } = useAppStore.getState()
       if (currentProject) {
-        saveProjectNow(currentProject.id)
+        await saveProjectNow(currentProject.id, true)
       }
 
       toast.success('Audio generated successfully!', { id: toastId })

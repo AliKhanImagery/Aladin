@@ -21,6 +21,8 @@ export type AudioLibraryItem = {
   duration: number
   trackType: 'bg_music' | 'sfx' | 'voiceover'
   startTime: number
+  /** How the audio was generated (for chip display) */
+  generationMethod?: 'voice_changer' | 'tts' | 'sfx' | 'music'
 }
 
 function flattenProjectsToAudioList(projects: Project[]): AudioLibraryItem[] {
@@ -40,6 +42,7 @@ function flattenProjectsToAudioList(projects: Project[]): AudioLibraryItem[] {
           duration: clip.duration,
           trackType: track.type,
           startTime: clip.startTime,
+          generationMethod: (clip as { generationMethod?: AudioLibraryItem['generationMethod'] }).generationMethod,
         })
       }
     }
@@ -52,6 +55,18 @@ function flattenProjectsToAudioList(projects: Project[]): AudioLibraryItem[] {
     return a.startTime - b.startTime
   })
   return list
+}
+
+function getMethodLabel(item: AudioLibraryItem): string {
+  if (item.generationMethod === 'voice_changer') return 'Voice Changer'
+  if (item.generationMethod === 'tts') return 'TTS'
+  if (item.generationMethod === 'sfx') return 'SFX'
+  if (item.generationMethod === 'music') return 'Music'
+  // Fallback from track type for legacy clips
+  if (item.trackType === 'voiceover') return 'Voice'
+  if (item.trackType === 'sfx') return 'SFX'
+  if (item.trackType === 'bg_music') return 'Music'
+  return 'Audio'
 }
 
 export default function AudioLibraryPage() {
@@ -199,18 +214,19 @@ export default function AudioLibraryPage() {
         ) : (
           <div className="space-y-2">
             {/* Table-like list header */}
-            <div className="grid grid-cols-[auto_1fr_1fr_100px_80px_100px] gap-4 px-4 py-3 rounded-xl bg-white/[0.02] border border-white/[0.05] text-[10px] font-black uppercase tracking-widest text-white/30">
+            <div className="grid grid-cols-[auto_1fr_1fr_120px_80px_80px_100px] gap-4 px-4 py-3 rounded-xl bg-white/[0.02] border border-white/[0.05] text-[10px] font-black uppercase tracking-widest text-white/30">
               <div className="w-10" />
               <span>Clip name</span>
               <span>Project</span>
-              <span>Track</span>
+              <span>Method</span>
               <span>Duration</span>
+              <span>Track</span>
               <span>Updated</span>
             </div>
             {items.map((item) => (
               <div
                 key={`${item.projectId}-${item.clipId}`}
-                className="group grid grid-cols-[auto_1fr_1fr_100px_80px_100px] gap-4 items-center px-4 py-3 rounded-xl bg-white/[0.01] border border-white/[0.06] hover:border-brand-emerald/20 hover:bg-white/[0.02] transition-all duration-300"
+                className="group grid grid-cols-[auto_1fr_1fr_120px_80px_80px_100px] gap-4 items-center px-4 py-3 rounded-xl bg-white/[0.01] border border-white/[0.06] hover:border-brand-emerald/20 hover:bg-white/[0.02] transition-all duration-300"
               >
                 <button
                   onClick={() => handlePlay(item)}
@@ -239,11 +255,16 @@ export default function AudioLibraryPage() {
                     {item.projectName}
                   </Link>
                 </div>
-                <span className="text-[11px] font-medium text-white/40 capitalize">
-                  {item.trackType.replace('_', ' ')}
+                <span className="inline-flex">
+                  <span className="px-2 py-0.5 rounded-md bg-white/10 border border-white/10 text-[10px] font-semibold uppercase tracking-wide text-white/70">
+                    {getMethodLabel(item)}
+                  </span>
                 </span>
                 <span className="text-[11px] font-medium text-white/50 tabular-nums">
                   {item.duration.toFixed(1)}s
+                </span>
+                <span className="text-[11px] font-medium text-white/40 capitalize">
+                  {item.trackType.replace('_', ' ')}
                 </span>
                 <span className="text-[11px] font-medium text-white/30">
                   {item.projectUpdatedAt.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
