@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { Check, X, Zap, Crown, Sparkles, ArrowRight, HelpCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
-import { BILLING_PLANS_V2, CREDIT_COSTS } from '@/constants/billing'
+import { BILLING_PLANS_V2, CREDIT_COSTS, buildCheckoutUrl } from '@/constants/billing'
 import {
   Tooltip,
   TooltipContent,
@@ -28,17 +28,11 @@ export default function PricingPage() {
       return
     }
 
-    const variantId = isYearly ? plan.variantIdYearly : plan.variantIdMonthly
-    if (!variantId) {
-      toast.error('This plan is not available yet')
-      return
-    }
-
-    // Construct Lemon Squeezy Checkout URL
-    // Pass user_id in custom data so webhook can fulfill credits
-    // Pre-fill email for better UX
-    const checkoutUrl = `https://geniferai.lemonsqueezy.com/checkout/buy/${variantId}?checkout[custom][user_id]=${user.id}&checkout[email]=${user.email}`
-    
+const checkoutUrl = buildCheckoutUrl(plan, isYearly, user.id, user.email)
+if (!checkoutUrl) {
+  toast.error('This plan is not available yet')
+  return
+}    
     window.open(checkoutUrl, '_blank')
   }
 
