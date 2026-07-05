@@ -5,8 +5,7 @@ export const BILLING_PLANS_V2 = {
     coins: 800,
     priceMonthly: 7.99,
     description: '2+ Full Video Productions',
-    // Replace with actual Lemon Squeezy Variant IDs when available
-    variantIdMonthly: '1246457', 
+    variantIdMonthly: '1246457',
     variantIdYearly: '1246388',
     features: [
       '800 Coins / month',
@@ -68,10 +67,39 @@ export function getDisplayCredits(cost: number): number {
 }
 
 export const CREDIT_COSTS = {
-  VIDEO_GENERATION: '25-110', // Range covers LTX (25) to Kling 10s (110)
-  NANO_BANANA: '12',          // Nano Pro & Nano Fast: image.nano_banana.text_to_image (12)
-  EDITS: '15-18',             // Matches image.flux.edit (15) and image.nano_banana.edit (18)
+  VIDEO_GENERATION: '25-110',
+  NANO_BANANA: '12',
+  EDITS: '15-18',
 } as const;
+
+export type PaymentProvider = 'lemonsqueezy' | 'polar'
+
+export function getPaymentProvider(): PaymentProvider {
+  const env = process.env.NEXT_PUBLIC_PAYMENT_PROVIDER || ''
+  if (env === 'polar') return 'polar'
+  return 'lemonsqueezy'
+}
+
+export function buildCheckoutUrl(
+  plan: typeof BILLING_PLANS_V2[keyof typeof BILLING_PLANS_V2],
+  isYearly: boolean,
+  userId: string,
+  userEmail: string
+): string | null {
+  const provider = getPaymentProvider()
+
+  if (provider === 'polar') {
+    const productId = isYearly
+      ? process.env[`NEXT_PUBLIC_POLAR_PRODUCT_${plan.id.toUpperCase()}_YEARLY`]
+      : process.env[`NEXT_PUBLIC_POLAR_PRODUCT_${plan.id.toUpperCase()}_MONTHLY`]
+    if (!productId) return null
+    return `https://polar.sh/checkout/${productId}?metadata[user_id]=${userId}&customer_email=${encodeURIComponent(userEmail)}`
+  }
+
+  const variantId = isYearly ? plan.variantIdYearly : plan.variantIdMonthly
+  if (!variantId) return null
+  return `https://geniferai.lemonsqueezy.com/checkout/buy/${variantId}?checkout[custom][user_id]=${userId}&checkout[email]=${encodeURIComponent(userEmail)}`
+}
 
 export const CREDIT_PRICING_KEYS = {
   VIDEO_VIDU_5S: 'video.vidu.5s',
