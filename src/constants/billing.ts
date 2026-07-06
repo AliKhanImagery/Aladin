@@ -89,9 +89,16 @@ export function buildCheckoutUrl(
   const provider = getPaymentProvider()
 
   if (provider === 'polar') {
-    const productId = isYearly
-      ? process.env[`NEXT_PUBLIC_POLAR_PRODUCT_${plan.id.toUpperCase()}_YEARLY`]
-      : process.env[`NEXT_PUBLIC_POLAR_PRODUCT_${plan.id.toUpperCase()}_MONTHLY`]
+    const productIds: Record<string, string | undefined> = {
+      'starter_monthly': process.env.NEXT_PUBLIC_POLAR_PRODUCT_STARTER_MONTHLY,
+      'starter_yearly': process.env.NEXT_PUBLIC_POLAR_PRODUCT_STARTER_YEARLY,
+      'creator_monthly': process.env.NEXT_PUBLIC_POLAR_PRODUCT_CREATOR_MONTHLY,
+      'creator_yearly': process.env.NEXT_PUBLIC_POLAR_PRODUCT_CREATOR_YEARLY,
+      'studio_monthly': process.env.NEXT_PUBLIC_POLAR_PRODUCT_STUDIO_MONTHLY,
+      'studio_yearly': process.env.NEXT_PUBLIC_POLAR_PRODUCT_STUDIO_YEARLY,
+    }
+    const key = `${plan.id}_${isYearly ? 'yearly' : 'monthly'}`
+    const productId = productIds[key]
     if (!productId) return null
     return `https://polar.sh/checkout/${productId}?metadata[user_id]=${userId}&customer_email=${encodeURIComponent(userEmail)}`
   }
