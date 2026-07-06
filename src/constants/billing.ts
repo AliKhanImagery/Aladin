@@ -100,7 +100,7 @@ export function buildCheckoutUrl(
     const key = `${plan.id}_${isYearly ? 'yearly' : 'monthly'}`
     const productId = productIds[key]
     if (!productId) return null
-    return `https://polar.sh/checkout/${productId}?metadata[user_id]=${userId}&customer_email=${encodeURIComponent(userEmail)}`
+return `https://buy.polar.sh/${productId}?metadata[user_id]=${userId}&customer_email=${encodeURIComponent(userEmail)}`
   }
 
   const variantId = isYearly ? plan.variantIdYearly : plan.variantIdMonthly
