@@ -28,6 +28,8 @@ export interface AuthUser {
   email?: string
   name?: string
   avatar?: string
+  email_confirmed_at?: string | null
+  user_metadata?: { full_name?: string; avatar_url?: string; [key: string]: any } | null
 }
 
 export async function signUp(email: string, password: string, fullName?: string) {
@@ -263,6 +265,8 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
           email: user.email,
           name: profile?.full_name || user.user_metadata?.full_name,
           avatar: profile?.avatar_url || user.user_metadata?.avatar_url,
+          email_confirmed_at: user.email_confirmed_at,
+          user_metadata: user.user_metadata,
         }
       } catch (innerError: any) {
         // Handle AbortError specifically
@@ -340,6 +344,8 @@ export function onAuthStateChange(callback: (user: AuthUser | null) => void) {
       email: sessionUser.email || '',
       name: profile?.full_name || sessionUser.user_metadata?.full_name,
       avatar: profile?.avatar_url || sessionUser.user_metadata?.avatar_url,
+      email_confirmed_at: sessionUser.email_confirmed_at,
+      user_metadata: sessionUser.user_metadata,
     })
     
     // For SIGNED_IN events, ALWAYS try to use session user - NEVER return null
@@ -461,6 +467,8 @@ export function onAuthStateChange(callback: (user: AuthUser | null) => void) {
               email: session.user.email || '',
               name: session.user.user_metadata?.full_name,
               avatar: session.user.user_metadata?.avatar_url,
+              email_confirmed_at: session.user.email_confirmed_at,
+              user_metadata: session.user.user_metadata,
             })
           } else {
             console.log('ℹ️ Other auth event but no session - calling callback with null')
