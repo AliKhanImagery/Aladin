@@ -124,7 +124,7 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
         body: JSON.stringify({
           type: 'welcome',
           to: authUser.email,
-          toName: authUser.user_metadata?.full_name || undefined,
+          toName: (authUser as any).user_metadata?.full_name || undefined,
         }),
       }).catch(() => {})
     }
