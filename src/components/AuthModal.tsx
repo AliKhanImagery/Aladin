@@ -101,16 +101,11 @@ export default function AuthModal({ isOpen, onClose, onSuccess, context = 'gener
             toast.error(error.message)
          } else {
   toast.success('Foundry identity initialized.')
-  // Fire welcome email — non-blocking
-  fetch('/api/email', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      type: 'welcome',
-      to: email,
-      toName: fullName || undefined,
-    }),
-  }).catch(() => {}) // silent fail — never block auth flow
+ } else {
+  toast.success('Foundry identity initialized.')
+  onSuccess()
+  onClose()
+}
   onSuccess()
   onClose()
 }
