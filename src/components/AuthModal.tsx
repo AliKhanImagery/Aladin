@@ -99,16 +99,11 @@ export default function AuthModal({ isOpen, onClose, onSuccess, context = 'gener
           if (error) {
             setError(error.message)
             toast.error(error.message)
-         } else {
-  toast.success('Foundry identity initialized.')
- } else {
-  toast.success('Foundry identity initialized.')
-  onSuccess()
-  onClose()
-}
-  onSuccess()
-  onClose()
-}
+        } else {
+            toast.success('Foundry identity initialized.')
+            onSuccess()
+            onClose()
+          }
         }
       } else if (view === 'signin') {
         const signInPromise = signIn(email, password)
