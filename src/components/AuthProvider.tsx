@@ -114,7 +114,7 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
 
   // Fire welcome email only on first confirmed signup
   // email_confirmed_at is set the moment they click the confirmation link
-  const confirmedAt = authUser.email_confirmed_at
+  const confirmedAt = (authUser as any).email_confirmed_at
   if (confirmedAt) {
     const secondsSinceConfirmed = (Date.now() - new Date(confirmedAt).getTime()) / 1000
     if (secondsSinceConfirmed < 10) {
