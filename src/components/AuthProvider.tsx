@@ -7,6 +7,25 @@ import AuthModal from './AuthModal'
 import ProfileSettingsModal from './ProfileSettingsModal'
 import { Toaster } from 'react-hot-toast'
 
+// Fires the welcome email if this user's email was confirmed in the last 10 seconds.
+// Shared by both the initial session check (catches confirm-link redirects) and
+// the onAuthStateChange listener (catches same-tab confirmations, token refreshes).
+function maybeFireWelcomeEmail(authUser: { email?: string; email_confirmed_at?: string | null; user_metadata?: any } | null) {
+  if (!authUser?.email_confirmed_at) return
+  const secondsSinceConfirmed = (Date.now() - new Date(authUser.email_confirmed_at).getTime()) / 1000
+  if (secondsSinceConfirmed >= 10) return
+
+  fetch('/api/email', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      type: 'welcome',
+      to: authUser.email,
+      toName: authUser.user_metadata?.full_name || undefined,
+    }),
+  }).catch(() => {})
+}
+
 export default function AuthProvider({ children }: { children: React.ReactNode }) {
   const { setUser, setAuthenticated, user, showAuthModal, setShowAuthModal, pendingIdea } = useAppStore()
   const [isCheckingAuth, setIsCheckingAuth] = useState(false) // Start as false - don't block UI
@@ -72,6 +91,11 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
             console.log('✅ Valid session found - user is logged in:', currentUser.email)
             setUser(currentUser)
             setAuthenticated(true)
+
+            // This is the reliable catch point for email-confirmation-link redirects —
+            // onAuthStateChange can fire before this listener subscribes, so we also
+            // check here, right where we know the session was found.
+            maybeFireWelcomeEmail(currentUser)
           } else {
             console.log('ℹ️ No valid session found - user is not logged in')
             setUser(null)
@@ -107,31 +131,15 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
         console.log('🔄 Auth state changed:', authUser ? `User logged in: ${authUser.email}` : 'User logged out')
         
         if (authUser) {
-  console.log('✅ Setting user state:', { id: authUser.id.substring(0, 8), email: authUser.email })
-  setUser(authUser)
-  setAuthenticated(true)
-  console.log('✅ User state updated in store')
+          console.log('✅ Setting user state:', { id: authUser.id.substring(0, 8), email: authUser.email })
+          setUser(authUser)
+          setAuthenticated(true)
+          console.log('✅ User state updated in store')
 
-  // Fire welcome email only on first confirmed signup
-  // email_confirmed_at is set the moment they click the confirmation link
-  const confirmedAt = (authUser as any).email_confirmed_at
-  if (confirmedAt) {
-    const secondsSinceConfirmed = (Date.now() - new Date(confirmedAt).getTime()) / 1000
-    if (secondsSinceConfirmed < 10) {
-      fetch('/api/email', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          type: 'welcome',
-          to: authUser.email,
-          toName: (authUser as any).user_metadata?.full_name || undefined,
-        }),
-      }).catch(() => {})
-    }
-  }
-}
-        
-        else {
+          // Kept as a secondary catch — covers same-tab confirmations and token
+          // refresh events where this listener IS already subscribed in time.
+          maybeFireWelcomeEmail(authUser)
+        } else {
           console.log('ℹ️ Clearing user state')
           setUser(null)
           setAuthenticated(false)
