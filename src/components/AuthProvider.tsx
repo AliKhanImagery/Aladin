@@ -107,11 +107,31 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
         console.log('🔄 Auth state changed:', authUser ? `User logged in: ${authUser.email}` : 'User logged out')
         
         if (authUser) {
-          console.log('✅ Setting user state:', { id: authUser.id.substring(0, 8), email: authUser.email })
-          setUser(authUser)
-          setAuthenticated(true)
-          console.log('✅ User state updated in store')
-        } else {
+  console.log('✅ Setting user state:', { id: authUser.id.substring(0, 8), email: authUser.email })
+  setUser(authUser)
+  setAuthenticated(true)
+  console.log('✅ User state updated in store')
+
+  // Fire welcome email only on first confirmed signup
+  // email_confirmed_at is set the moment they click the confirmation link
+  const confirmedAt = authUser.email_confirmed_at
+  if (confirmedAt) {
+    const secondsSinceConfirmed = (Date.now() - new Date(confirmedAt).getTime()) / 1000
+    if (secondsSinceConfirmed < 10) {
+      fetch('/api/email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'welcome',
+          to: authUser.email,
+          toName: authUser.user_metadata?.full_name || undefined,
+        }),
+      }).catch(() => {})
+    }
+  }
+}
+        
+        else {
           console.log('ℹ️ Clearing user state')
           setUser(null)
           setAuthenticated(false)
