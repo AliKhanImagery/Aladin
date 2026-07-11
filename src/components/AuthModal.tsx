@@ -99,11 +99,21 @@ export default function AuthModal({ isOpen, onClose, onSuccess, context = 'gener
           if (error) {
             setError(error.message)
             toast.error(error.message)
-          } else {
-            toast.success('Foundry identity initialized.')
-            onSuccess()
-            onClose()
-          }
+         } else {
+  toast.success('Foundry identity initialized.')
+  // Fire welcome email — non-blocking
+  fetch('/api/email', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      type: 'welcome',
+      to: email,
+      toName: fullName || undefined,
+    }),
+  }).catch(() => {}) // silent fail — never block auth flow
+  onSuccess()
+  onClose()
+}
         }
       } else if (view === 'signin') {
         const signInPromise = signIn(email, password)
