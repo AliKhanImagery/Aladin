@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Resend } from 'resend';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+function getResendClient() {
+  const key = process.env.RESEND_API_KEY;
+  if (!key) return null;
+  return new Resend(key);
+}
 
 const HERO_IMAGE = 'https://geniferai.com/email/ChatGPT%20Image%20Jul%2012%2C%202026%2C%2004_48_39%20AM.png';
 
@@ -270,6 +274,11 @@ export async function POST(req: NextRequest) {
     const template = templates[type];
     if (!template) {
       return NextResponse.json({ error: 'Unknown template' }, { status: 400 });
+    }
+
+    const resend = getResendClient();
+    if (!resend) {
+      return NextResponse.json({ error: 'RESEND_API_KEY not configured' }, { status: 500 });
     }
 
     const { error } = await resend.emails.send({
